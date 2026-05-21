@@ -5,6 +5,7 @@ import type { SectionEntry } from "./worktree-deck-view-model";
 import {
   buildPersistedSelectionState,
   buildSelectionIndex,
+  resolveControlledListSelectionItemId,
   resolveFallbackSelectionItemId,
   resolveInitialSelectionRestoreApplication,
   resolvePostLoadSelectionRestorePhase,
@@ -361,5 +362,26 @@ describe("worktree-deck-selection", () => {
     } satisfies Parameters<typeof shouldScheduleInitialSelectionUnlock>[0];
 
     expect(shouldScheduleInitialSelectionUnlock(input)).toBe(true);
+  });
+
+  it("初期復元中だけ List の controlled selection を有効にする", () => {
+    expect(
+      resolveControlledListSelectionItemId({
+        phase: "applying-restored-selection",
+        selectedItemId: "worktree:/tmp/worktrees/repo-a~_~feature-a",
+      }),
+    ).toBe("worktree:/tmp/worktrees/repo-a~_~feature-a");
+    expect(
+      resolveControlledListSelectionItemId({
+        phase: "settling-list",
+        selectedItemId: "worktree:/tmp/worktrees/repo-a~_~feature-a",
+      }),
+    ).toBe("worktree:/tmp/worktrees/repo-a~_~feature-a");
+    expect(
+      resolveControlledListSelectionItemId({
+        phase: "ready",
+        selectedItemId: "worktree:/tmp/worktrees/repo-a~_~feature-a",
+      }),
+    ).toBeUndefined();
   });
 });

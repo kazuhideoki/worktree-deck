@@ -266,6 +266,19 @@ export function shouldScheduleInitialSelectionUnlock(args: InitialSelectionUnloc
 }
 
 /**
+ * List を controlled selection として扱う選択 ID を返す
+ */
+export function resolveControlledListSelectionItemId(args: {
+  phase: SelectionRestorePhase;
+  selectedItemId: string | null;
+}): string | undefined {
+  if (args.phase === "ready") {
+    return undefined;
+  }
+  return args.selectedItemId?.trim() || undefined;
+}
+
+/**
  * 2つの選択状態が同一か判定する
  */
 export function isSamePersistedSelectionState(

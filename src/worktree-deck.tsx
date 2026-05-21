@@ -63,6 +63,7 @@ import {
   resolveFallbackSelectionItemId,
   resolveInitialSelectionRestoreApplication,
   resolvePostLoadSelectionRestorePhase,
+  resolveControlledListSelectionItemId,
   resolveSelectionChangeDecision,
   shouldScheduleInitialSelectionUnlock,
   type PersistedSelectionState,
@@ -415,6 +416,14 @@ export default function Command() {
     }
     return null;
   }, [repositoryMappings, selectedItemId, visibleSections]);
+  const controlledListSelectionItemId = useMemo(
+    () =>
+      resolveControlledListSelectionItemId({
+        phase: selectionPhase,
+        selectedItemId,
+      }),
+    [selectedItemId, selectionPhase],
+  );
   useEffect(() => {
     displayCacheRef.current = displayCache;
   }, [displayCache]);
@@ -1542,7 +1551,7 @@ export default function Command() {
       }
       searchText={searchText}
       onSearchTextChange={handleSearchTextChange}
-      selectedItemId={selectedItemId ?? undefined}
+      selectedItemId={controlledListSelectionItemId}
       onSelectionChange={handleSelectionChange}
       filtering={false}
       isShowingDetail
