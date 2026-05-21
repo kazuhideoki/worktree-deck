@@ -1,0 +1,38 @@
+import { describe, expect, it } from "vitest";
+import { buildGlobalActionItems } from "./global-actions";
+
+describe("buildGlobalActionItems", () => {
+  it("グローバル操作の一覧を返す", () => {
+    const items = buildGlobalActionItems();
+    expect(items.map((item) => item.id)).toEqual([
+      "reload-worktrees",
+      "create-worktree",
+      "restore-deleted-worktree",
+      "repository-settings",
+    ]);
+  });
+
+  it("Reload Worktrees は cmd+r のショートカットを持つ", () => {
+    const items = buildGlobalActionItems();
+    const target = items.find((item) => item.id === "reload-worktrees");
+    expect(target?.shortcut).toEqual({ modifiers: ["cmd"], key: "r" });
+  });
+
+  it("Create Worktree は cmd+n のショートカットを持つ", () => {
+    const items = buildGlobalActionItems();
+    const target = items.find((item) => item.id === "create-worktree");
+    expect(target?.shortcut).toEqual({ modifiers: ["cmd"], key: "n" });
+  });
+
+  it("Repository Settings は cmd+shift+, のショートカットを持つ", () => {
+    const items = buildGlobalActionItems();
+    const target = items.find((item) => item.id === "repository-settings");
+    expect(target?.shortcut).toEqual({ modifiers: ["cmd", "shift"], key: "," });
+  });
+
+  it("Restore Deleted Worktree は cmd+shift+r のショートカットを持つ", () => {
+    const items = buildGlobalActionItems();
+    const target = items.find((item) => item.id === "restore-deleted-worktree");
+    expect(target?.shortcut).toEqual({ modifiers: ["cmd", "shift"], key: "r" });
+  });
+});

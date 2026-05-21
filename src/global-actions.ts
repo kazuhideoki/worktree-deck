@@ -1,0 +1,45 @@
+/**
+ * グローバルで使えるアクションの識別子
+ */
+export type GlobalActionId =
+  | "reload-worktrees"
+  | "create-worktree"
+  | "restore-deleted-worktree"
+  | "repository-settings";
+
+/**
+ * グローバルアクションの定義
+ */
+type GlobalActionItem = {
+  id: GlobalActionId;
+  title: string;
+  shortcut: { modifiers: ("cmd" | "shift" | "opt" | "ctrl")[]; key: string };
+};
+
+/**
+ * 一覧内で常に表示するアクション定義を構築する
+ */
+export function buildGlobalActionItems(): GlobalActionItem[] {
+  return [
+    {
+      id: "reload-worktrees",
+      title: "Reload Worktrees",
+      shortcut: { modifiers: ["cmd"], key: "r" },
+    },
+    {
+      id: "create-worktree",
+      title: "Create Worktree",
+      shortcut: { modifiers: ["cmd"], key: "n" },
+    },
+    {
+      id: "restore-deleted-worktree",
+      title: "Restore Deleted Worktree",
+      shortcut: { modifiers: ["cmd", "shift"], key: "r" },
+    },
+    {
+      id: "repository-settings",
+      title: "Repository Settings",
+      shortcut: { modifiers: ["cmd", "shift"], key: "," },
+    },
+  ];
+}

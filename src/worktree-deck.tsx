@@ -1,0 +1,2032 @@
+import {
+  Action,
+  ActionPanel,
+  Color,
+  Icon,
+  List,
+  Toast,
+  closeMainWindow,
+  confirmAlert,
+  environment,
+  showToast,
+  useNavigation,
+} from "@raycast/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCachedState } from "@raycast/utils";
+import { CreateWorktreeForm } from "./components/worktree-create-form";
+import { MergeWorktreeForm } from "./components/worktree-merge-form";
+import { CreatePullRequestForm } from "./components/worktree-pull-request-form";
+import { RenameWorktreeForm } from "./components/worktree-rename-form";
+import { RestoreDeletedWorktreeView } from "./components/worktree-restore-deleted-view";
+import { type RepositoryMapping } from "./domain/repository-mapping.service";
+import { parseSearchTerms } from "./search-utils";
+import { RemoveWorktreeForm } from "./components/worktree-remove-form";
+import { SessionDetailView } from "./components/session-detail-view";
+import {
+  buildCodexSessionEntries,
+  CodexSessionSelectView,
+  SELECT_CODEX_SESSION_ACTION_TITLE,
+  resolveCodexSessionOpenPlan,
+} from "./components/codex-session-select-view";
+import { RepositoryMappingManager } from "./components/repository-mapping-manager";
+import {
+  buildWorktreeDeckDisplayCache,
+  hasWorktreeDeckDisplayCacheData,
+  isSameWorktreeDeckDisplayCache,
+  type WorktreeDeckDisplayCache,
+} from "./application/worktree-deck-display-cache";
+import {
+  canPullBranch,
+  formatExecErrorMessage,
+  formatMergeStatusLabel,
+  normalizeWorktreeBranchName,
+} from "./components/worktree-ui-utils";
+import { buildOpenAppAccessory, resolveOpenAppIcon } from "./components/worktree-open-app-icon";
+import {
+  buildDetailMarkdown,
+  buildSectionsWithMappings,
+  buildSortedSectionEntries,
+  filterEntriesBySearchText,
+  formatBranchTitle,
+  hasAnySessionWaitingForUser,
+  parseDisplayMode,
+  resolveEntryItemId,
+  resolveUnresolvedCodexThreadPaths,
+  resolveWorktreeStatus,
+  toggleDisplayMode,
+  type WorktreeDeckDisplayMode,
+} from "./components/worktree-deck-view-model";
+import {
+  buildPersistedSelectionState,
+  buildSelectionIndex,
+  isSamePersistedSelectionState,
+  resolveFallbackSelectionItemId,
+  resolveInitialSelectionRestoreApplication,
+  resolvePostLoadSelectionRestorePhase,
+  resolveSelectionChangeDecision,
+  shouldScheduleInitialSelectionUnlock,
+  type PersistedSelectionState,
+  type SelectionRestorePhase,
+} from "./components/worktree-deck-selection";
+import { worktreeDeckSnapshotUsecase } from "./application/worktree-deck-snapshot.usecase";
+import { deletedWorktreesUsecase } from "./application/deleted-worktrees.usecase";
+import { removeWorktreeUsecase } from "./application/remove-worktree.usecase";
+import { worktreeRenameUsecase } from "./application/worktree-rename.usecase";
+import { worktreeMergeUsecase, type WorktreeMergePlan } from "./application/worktree-merge.usecase";
+import { worktreePullUsecase } from "./application/worktree-pull.usecase";
+import { worktreePullRequestUsecase } from "./application/worktree-pull-request.usecase";
+import { worktreeSessionFileUsecase } from "./application/worktree-session-file.usecase";
+import { worktreeOpenAppUsecase } from "./application/worktree-open-app.usecase";
+import {
+  resolveWorktreeDeckCompositionRoot,
+  type Worktree,
+  type WorktreeMergeStatus,
+  type WorktreePullRequestResult,
+  type WorktreeTitle,
+} from "./composition-root";
+import {
+  worktreeOpenAppService,
+  type WorktreeOpenApp,
+  type WorktreeOpenAppMeta,
+} from "./domain/worktree-open-app.service";
+import { buildGlobalActionItems, type GlobalActionId } from "./global-actions";
+
+export {
+  buildDetailMarkdown,
+  buildSectionsWithMappings,
+  buildSortedSectionEntries,
+  formatTitleEntry,
+  parseDisplayMode,
+  toggleDisplayMode,
+} from "./components/worktree-deck-view-model";
+export type { WorktreeDeckDisplayMode } from "./components/worktree-deck-view-model";
+
+const WORKTREE_DECK_COMPOSITION_ROOT = resolveWorktreeDeckCompositionRoot();
+
+/**
+ * 表示モード選択ドロップダウンの識別子
+ */
+const DISPLAY_MODE_DROPDOWN_ID = "worktree-deck.display-mode";
+
+/**
+ * Codex App セッションアーカイブの保存キー
+ */
+const CODEX_SESSION_ARCHIVE_CACHE_KEY = "worktree-deck.codex-session-archive.thread-ids.v1";
+
+/**
+ * セッション詳細表示アクションのショートカット
+ */
+export const SHOW_DETAILS_SHORTCUT = { modifiers: ["cmd", "shift"], key: "enter" } as const;
+
+/**
+ * 保存済みアプリと逆側で開くアクションを Raycast の secondary action 位置に置くための添字
+ *
+ * Raycast の List では 2 番目の Action が自動的に Cmd+Enter になる。
+ * `shortcut={{ modifiers: ["cmd"], key: "enter" }}` を明示すると予約済み警告が出て削除されるため、
+ * shortcut prop ではなく ActionPanel 直下の並び順で切り替え起動を表現する。
+ */
+export const OPEN_ALTERNATE_APP_ACTION_INDEX = 1;
+
+/**
+ * Open アクションの意図
+ */
+export type OpenActionIntent = "configured" | "switch-preference";
+
+/**
+ * Open アクションの描画計画
+ */
+export type OpenActionPlan = {
+  openApp: WorktreeOpenApp;
+  intent: OpenActionIntent;
+  threadId: string | null;
+};
+
+/**
+ * Open アクションに割り当てるショートカットを返す
+ *
+ * Cmd+Enter は Raycast の secondary action 予約ショートカットとして使うため、ここでは明示しない。
+ */
+export function resolveOpenActionShortcut(intent: OpenActionIntent): undefined {
+  void intent;
+  return undefined;
+}
+
+/**
+ * 保存済みアプリとは逆の起動アプリを返す
+ */
+export function resolveAlternateOpenApp(openApp: WorktreeOpenApp): WorktreeOpenApp {
+  return openApp === "codex-app" ? "zed" : "codex-app";
+}
+
+/**
+ * Open アクションの ActionPanel 直下での並び順を返す
+ */
+export function buildOpenActionPlans(args: {
+  openApp: WorktreeOpenApp;
+  threadId: string | null;
+}): readonly [OpenActionPlan, OpenActionPlan] {
+  const alternateOpenApp = resolveAlternateOpenApp(args.openApp);
+  const plans = [
+    {
+      openApp: args.openApp,
+      intent: "configured",
+      threadId: args.threadId,
+    },
+    {
+      openApp: alternateOpenApp,
+      intent: "switch-preference",
+      threadId: resolveOpenActionThreadId({
+        openApp: alternateOpenApp,
+        intent: "switch-preference",
+        threadId: args.threadId,
+      }),
+    },
+  ] as const;
+  return plans;
+}
+
+/**
+ * CA 起動時にセッション選択を挟むか判定する
+ */
+export function shouldSelectCodexSessionForOpenAction(args: {
+  openApp: WorktreeOpenApp;
+  intent: OpenActionIntent;
+}): boolean {
+  void args.intent;
+  return args.openApp === "codex-app";
+}
+
+/**
+ * Open アクションへ渡す Codex thread id を返す
+ */
+export function resolveOpenActionThreadId(args: {
+  openApp: WorktreeOpenApp;
+  intent: OpenActionIntent;
+  threadId: string | null;
+}): string | null {
+  void args.intent;
+  if (args.openApp !== "codex-app") {
+    return null;
+  }
+  return args.threadId;
+}
+
+/**
+ * 起動アプリに合わせたアクション名を返す
+ */
+export function formatOpenActionTitle(openApp: WorktreeOpenApp): string {
+  return openApp === "codex-app" ? "Open in CA" : "Open in Zed";
+}
+
+/**
+ * Codex App のセッション選択アクション名を返す
+ */
+function formatCodexSessionSelectActionTitle(): string {
+  return SELECT_CODEX_SESSION_ACTION_TITLE;
+}
+
+/**
+ * ワークツリー一覧の取得・表示・操作を行うメイン画面
+ */
+export default function Command() {
+  const { push } = useNavigation();
+  /**
+   * 計測ログを常に出力するか
+   */
+  const FORCE_TIMING_LOG = true;
+  /**
+   * 計測ログの有効状態を一度だけ通知する
+   */
+  useEffect(() => {
+    console.info(`[worktree-deck][timing] enabled=${FORCE_TIMING_LOG}`);
+  }, []);
+  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isTitlesLoading, setIsTitlesLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [basePath, setBasePath] = useState<string | null>(null);
+  const [worktreeNameDelimiter, setWorktreeNameDelimiter] = useState("~_~");
+  const [titlesByPath, setTitlesByPath] = useState<Map<string, WorktreeTitle[]>>(new Map());
+  const [repositoryMappings, setRepositoryMappings] = useState<RepositoryMapping[]>([]);
+  const [hiddenWorktreePaths, setHiddenWorktreePaths] = useState<Set<string>>(new Set());
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [persistedSelection, setPersistedSelection] = useState<PersistedSelectionState | null>(null);
+  const [selectionPhase, setSelectionPhase] = useState<SelectionRestorePhase>("loading-storage");
+  const [originLastCommitByPath, setOriginLastCommitByPath] = useState<Map<string, string | null>>(new Map());
+  const [originBranchByPath, setOriginBranchByPath] = useState<Map<string, string | null>>(new Map());
+  const [openAppMetaByPath, setOpenAppMetaByPath] = useState<Map<string, WorktreeOpenAppMeta>>(new Map());
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [displayMode, setDisplayMode] = useCachedState<WorktreeDeckDisplayMode>(
+    "worktree-deck.displayMode",
+    "show-all",
+  );
+  const [displayCache, setDisplayCache] = useCachedState<WorktreeDeckDisplayCache | null>(
+    "worktree-deck.display-cache",
+    null,
+  );
+  const [archivedCodexSessionThreadIds, setArchivedCodexSessionThreadIds] = useCachedState<string[]>(
+    CODEX_SESSION_ARCHIVE_CACHE_KEY,
+    [],
+  );
+  const shouldRefreshOnPop = useRef(false);
+  const displayCacheRef = useRef<WorktreeDeckDisplayCache | null>(displayCache);
+  const titlesRequestIdRef = useRef(0);
+  const selectionSettlingSignatureRef = useRef<string | null>(null);
+  /**
+   * 詳細読み込みの競合を防ぐための識別子
+   */
+  const detailsRequestIdRef = useRef(0);
+  /**
+   * 計測ログを有効にするか判定する
+   */
+  const shouldLogTiming = useCallback((): boolean => {
+    return FORCE_TIMING_LOG;
+  }, []);
+  /**
+   * 計測ログを出力する
+   */
+  const logTiming = useCallback(
+    (label: string, elapsedMs: number): void => {
+      if (!shouldLogTiming()) {
+        return;
+      }
+      const msText = Number.isFinite(elapsedMs) ? elapsedMs.toFixed(1) : "0.0";
+      console.info(`[worktree-deck][timing] ${label}: ${msText}ms`);
+    },
+    [shouldLogTiming],
+  );
+  /**
+   * worktree 名の一覧ログを出力する
+   */
+  const logWorktreeNames = useCallback(
+    (items: Worktree[]): void => {
+      if (!shouldLogTiming()) {
+        return;
+      }
+      const names = items.map((item) => `${item.repo}:${item.branch ?? "root"}`);
+      console.info(`[worktree-deck][timing] worktrees=${names.length} ${names.join(", ")}`);
+    },
+    [shouldLogTiming],
+  );
+  /**
+   * 検索入力の更新をレンダリング外で反映する
+   */
+  const handleSearchTextChange = useCallback(
+    (nextText: string) => {
+      if (nextText === searchText) {
+        return;
+      }
+      void Promise.resolve().then(() => {
+        setSearchText((current) => (current === nextText ? current : nextText));
+      });
+    },
+    [searchText, setSearchText],
+  );
+  const searchTerms = useMemo(() => parseSearchTerms(searchText), [searchText]);
+  const archivedCodexSessionThreadIdSet = useMemo(() => {
+    return new Set(archivedCodexSessionThreadIds.map((threadId) => threadId.trim()).filter(Boolean));
+  }, [archivedCodexSessionThreadIds]);
+  const visibleWorktrees = useMemo(
+    () => filterVisibleWorktrees({ worktrees, hiddenPaths: hiddenWorktreePaths }),
+    [hiddenWorktreePaths, worktrees],
+  );
+  const sections = useMemo(
+    () => buildSectionsWithMappings(visibleWorktrees, repositoryMappings, displayMode, { titlesByPath }),
+    [displayMode, visibleWorktrees, repositoryMappings, titlesByPath],
+  );
+  const visibleSections = useMemo(() => {
+    return sections
+      .map((section) => {
+        const entries = buildSortedSectionEntries({
+          items: section.items,
+          titlesByPath,
+          mappedOrigins: section.mappedOrigins,
+          originLastCommitByPath,
+          originBranchByPath,
+          includeOrigin: displayMode === "show-all",
+        });
+        const filteredEntries = filterEntriesBySearchText(entries, section.repo, searchTerms);
+        return { section, entries: filteredEntries };
+      })
+      .filter((entry) => entry.entries.length > 0);
+  }, [displayMode, originBranchByPath, originLastCommitByPath, searchTerms, sections, titlesByPath]);
+  const selectionIndex = useMemo(() => buildSelectionIndex(visibleSections), [visibleSections]);
+  /**
+   * 表示中の選択 ID を保持し、起動復元完了後だけ永続化する
+   */
+  const handleSelectionChange = useCallback(
+    (nextItemId: string | null): void => {
+      const decision = resolveSelectionChangeDecision({
+        phase: selectionPhase,
+        currentItemId: selectedItemId,
+        nextItemId,
+      });
+      if (decision === "ignore") {
+        return;
+      }
+      const nextSelectedItemId = nextItemId?.trim() ?? null;
+      if (!nextSelectedItemId) {
+        return;
+      }
+      setSelectedItemId(nextSelectedItemId);
+      const nextPersistedSelection = buildPersistedSelectionState({
+        basePath,
+        selectedItemId: nextSelectedItemId,
+        selectionIndex,
+      });
+      if (!nextPersistedSelection || isSamePersistedSelectionState(persistedSelection, nextPersistedSelection)) {
+        return;
+      }
+      setPersistedSelection(nextPersistedSelection);
+      void WORKTREE_DECK_COMPOSITION_ROOT.selectionStore.savePersistedSelection(nextPersistedSelection);
+    },
+    [basePath, persistedSelection, selectedItemId, selectionIndex, selectionPhase],
+  );
+  const globalActionItems = useMemo(() => buildGlobalActionItems(), []);
+  const globalActionById = useMemo(() => {
+    return new Map<GlobalActionId, ReturnType<typeof buildGlobalActionItems>[number]>(
+      globalActionItems.map((item) => [item.id, item]),
+    );
+  }, [globalActionItems]);
+  const reloadWorktreesAction = globalActionById.get("reload-worktrees");
+  const createWorktreeAction = globalActionById.get("create-worktree");
+  const restoreDeletedWorktreeAction = globalActionById.get("restore-deleted-worktree");
+  const repositorySettingsAction = globalActionById.get("repository-settings");
+  const hasVisibleContent = visibleSections.length > 0;
+  const isSelectionPreparing = selectionPhase === "loading-storage" || selectionPhase === "waiting-first-list";
+  const selectedCreateInitialRepoRoot = useMemo(() => {
+    if (!selectedItemId) {
+      return null;
+    }
+    for (const { entries } of visibleSections) {
+      for (const entry of entries) {
+        if (resolveEntryItemId(entry) !== selectedItemId) {
+          continue;
+        }
+        if (entry.kind === "origin") {
+          return entry.originPath;
+        }
+        return resolveInitialRepoRoot({
+          item: entry.item,
+          mappings: repositoryMappings,
+        });
+      }
+    }
+    return null;
+  }, [repositoryMappings, selectedItemId, visibleSections]);
+  useEffect(() => {
+    displayCacheRef.current = displayCache;
+  }, [displayCache]);
+  useEffect(() => {
+    let cancelled = false;
+    void WORKTREE_DECK_COMPOSITION_ROOT.selectionStore.loadPersistedSelection().then((stored) => {
+      if (cancelled) {
+        return;
+      }
+      setPersistedSelection(stored);
+      setSelectionPhase((current) => (current === "loading-storage" ? "waiting-first-list" : current));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    const application = resolveInitialSelectionRestoreApplication({
+      phase: selectionPhase,
+      isLoading,
+      currentBasePath: basePath,
+      persistedSelection,
+      selectionIndex,
+    });
+    if (!application) {
+      return;
+    }
+    setSelectedItemId(application.selectedItemId);
+    setSelectionPhase(application.phase);
+  }, [basePath, isLoading, persistedSelection, selectionIndex, selectionPhase]);
+  useEffect(() => {
+    if (selectionPhase === "loading-storage" || selectionPhase === "waiting-first-list") {
+      return;
+    }
+    const fallbackItemId = resolveFallbackSelectionItemId({
+      selectedItemId,
+      selectionIndex,
+    });
+    if (fallbackItemId === selectedItemId) {
+      return;
+    }
+    setSelectedItemId(fallbackItemId);
+  }, [selectedItemId, selectionIndex, selectionPhase]);
+  useEffect(() => {
+    const nextPhase = resolvePostLoadSelectionRestorePhase({
+      phase: selectionPhase,
+      isLoading,
+      isTitlesLoading,
+      isDetailsLoading,
+    });
+    if (nextPhase === selectionPhase) {
+      return;
+    }
+    setSelectionPhase(nextPhase);
+  }, [isDetailsLoading, isLoading, isTitlesLoading, selectionPhase]);
+  useEffect(() => {
+    const shouldScheduleUnlock = shouldScheduleInitialSelectionUnlock({
+      phase: selectionPhase,
+      isLoading,
+      isTitlesLoading,
+      isDetailsLoading,
+      selectedItemId,
+      availableItemIds: selectionIndex.itemIds,
+    });
+    if (!shouldScheduleUnlock) {
+      selectionSettlingSignatureRef.current = null;
+      return;
+    }
+    const signature = selectionIndex.signature;
+    selectionSettlingSignatureRef.current = signature;
+    const timerId = setTimeout(() => {
+      if (selectionSettlingSignatureRef.current !== signature) {
+        return;
+      }
+      setSelectionPhase((current) => (current === "settling-list" ? "ready" : current));
+    }, 0);
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [
+    isDetailsLoading,
+    isLoading,
+    isTitlesLoading,
+    selectedItemId,
+    selectionIndex.itemIds,
+    selectionIndex.signature,
+    selectionPhase,
+  ]);
+  useEffect(() => {
+    const nextCache = buildWorktreeDeckDisplayCache({
+      worktrees,
+      titlesByPath,
+      originLastCommitByPath,
+      originBranchByPath,
+      openAppMetaByPath,
+    });
+    if (!hasWorktreeDeckDisplayCacheData(nextCache)) {
+      return;
+    }
+    if (isSameWorktreeDeckDisplayCache(displayCache, nextCache)) {
+      return;
+    }
+    setDisplayCache(nextCache);
+  }, [
+    displayCache,
+    openAppMetaByPath,
+    originBranchByPath,
+    originLastCommitByPath,
+    setDisplayCache,
+    titlesByPath,
+    worktrees,
+  ]);
+  const loadTitlesState = useCallback(
+    async (
+      args: {
+        worktrees: Worktree[];
+        mappings: RepositoryMapping[];
+        requestId: number;
+      },
+      guard?: { cancelled: boolean },
+    ) => {
+      const startMs = Date.now();
+      const isCancelled = () => guard?.cancelled ?? false;
+      const isStale = () => args.requestId !== titlesRequestIdRef.current;
+      if (isCancelled() || isStale()) {
+        return;
+      }
+      setIsTitlesLoading(true);
+      try {
+        const snapshot = await worktreeDeckSnapshotUsecase.loadTitlesSnapshot({
+          context: {
+            env: process.env,
+            cwd: process.cwd(),
+            homeDir: process.env.HOME?.trim() ?? null,
+            assetsPath: environment.assetsPath,
+            packageDir: __dirname,
+            packageName: "worktree-deck",
+          },
+          worktrees: args.worktrees,
+          mappings: args.mappings,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckTitlesSnapshotDependencies,
+        });
+        if (isCancelled() || isStale()) {
+          return;
+        }
+        setTitlesByPath(snapshot.titlesByPath);
+        setWorktrees((current) => mergeWorktreeTitlesByPath(current, snapshot.worktrees));
+      } catch {
+        // タイトル取得失敗はUIを壊さない
+      } finally {
+        if (!isCancelled() && !isStale()) {
+          setIsTitlesLoading(false);
+        }
+        logTiming("loadTitlesState", Date.now() - startMs);
+      }
+    },
+    [logTiming],
+  );
+
+  /**
+   * 未解決の Codex thread id をセッションファイルから非同期で補完する
+   */
+  const resolveMissingCodexThreadIds = useCallback(
+    async (paths: string[]): Promise<void> => {
+      const uniquePaths = Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean)));
+      if (uniquePaths.length === 0) {
+        return;
+      }
+      const startMs = Date.now();
+      for (const path of uniquePaths) {
+        try {
+          const resolved = await worktreeSessionFileUsecase.resolveAndSaveCodexThreadId({
+            worktreePath: path,
+            context: {
+              env: process.env,
+              cwd: process.cwd(),
+              homeDir: process.env.HOME?.trim() ?? null,
+              assetsPath: environment.assetsPath,
+              packageDir: __dirname,
+              packageName: "worktree-deck",
+            },
+            dependencies: WORKTREE_DECK_COMPOSITION_ROOT.worktreeSessionFileDependencies,
+          });
+          if (resolved === null) {
+            continue;
+          }
+          setOpenAppMetaByPath((current) => {
+            const currentMeta = current.get(path);
+            if (
+              currentMeta === undefined ||
+              currentMeta.openApp !== "codex-app" ||
+              currentMeta.threadId === resolved.threadId
+            ) {
+              return current;
+            }
+            const next = new Map(current);
+            next.set(path, { ...currentMeta, threadId: resolved.threadId });
+            return next;
+          });
+        } catch {
+          // thread id 解決失敗は次回起動時に再試行する
+        }
+      }
+      logTiming("resolveMissingCodexThreadIds", Date.now() - startMs);
+    },
+    [logTiming],
+  );
+
+  const loadWorktreeDetailsState = useCallback(
+    async (
+      args: {
+        worktrees: Worktree[];
+        mappings: RepositoryMapping[];
+        requestId: number;
+      },
+      guard?: { cancelled: boolean },
+    ) => {
+      const startMs = Date.now();
+      const isCancelled = () => guard?.cancelled ?? false;
+      const isStale = () => args.requestId !== detailsRequestIdRef.current;
+      /**
+       * 詳細取得の各ステップ時間を記録する
+       */
+      const logDetailsStep = (label: string, startedAt: number): void => {
+        logTiming(`loadWorktreeDetailsState:${label}`, Date.now() - startedAt);
+      };
+      if (isCancelled() || isStale()) {
+        return;
+      }
+      setIsDetailsLoading(true);
+      try {
+        const snapshotStartMs = Date.now();
+        const snapshot = await worktreeDeckSnapshotUsecase.loadDetailsSnapshot({
+          worktrees: args.worktrees,
+          mappings: args.mappings,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckDetailsSnapshotDependencies,
+        });
+        logDetailsStep("snapshot", snapshotStartMs);
+        if (isCancelled() || isStale()) {
+          return;
+        }
+        setRepositoryMappings(snapshot.mappings);
+        setOriginLastCommitByPath(snapshot.originLastCommitByPath);
+        setOriginBranchByPath(snapshot.originBranchByPath);
+        setOpenAppMetaByPath(snapshot.openAppMetaByPath);
+        void resolveMissingCodexThreadIds(resolveUnresolvedCodexThreadPaths(snapshot.openAppMetaByPath));
+        setWorktrees((current) => mergeWorktreesByPath(current, snapshot.worktrees));
+      } catch {
+        // 詳細取得失敗はUIを壊さない
+      } finally {
+        if (!isCancelled() && !isStale()) {
+          setIsDetailsLoading(false);
+        }
+        logTiming("loadWorktreeDetailsState", Date.now() - startMs);
+      }
+    },
+    [logTiming, resolveMissingCodexThreadIds],
+  );
+
+  const loadWorktreesState = useCallback(
+    async (guard?: { cancelled: boolean }) => {
+      const startMs = Date.now();
+      const isCancelled = () => guard?.cancelled ?? false;
+      if (isCancelled()) {
+        return;
+      }
+      setIsLoading(true);
+      setIsTitlesLoading(false);
+      setIsDetailsLoading(false);
+      try {
+        const snapshot = await worktreeDeckSnapshotUsecase.loadInitialSnapshot({
+          context: {
+            env: process.env,
+            cwd: process.cwd(),
+            homeDir: process.env.HOME?.trim() ?? null,
+            assetsPath: environment.assetsPath,
+            packageDir: __dirname,
+            packageName: "worktree-deck",
+          },
+          displayCache: displayCacheRef.current,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckInitialSnapshotDependencies,
+        });
+        logWorktreeNames(snapshot.listedWorktrees);
+        if (isCancelled()) {
+          return;
+        }
+        setBasePath(snapshot.basePath);
+        setWorktreeNameDelimiter(snapshot.delimiter);
+        setWorktrees(snapshot.worktrees);
+        setHiddenWorktreePaths((current) => {
+          if (current.size === 0) {
+            return current;
+          }
+          const listedPaths = new Set(snapshot.listedWorktrees.map((item) => item.path));
+          const next = new Set<string>();
+          for (const path of current) {
+            if (listedPaths.has(path)) {
+              next.add(path);
+            }
+          }
+          if (next.size === current.size) {
+            return current;
+          }
+          return next;
+        });
+        setRepositoryMappings(snapshot.mappings);
+        setOriginLastCommitByPath(snapshot.originLastCommitByPath);
+        setOriginBranchByPath(snapshot.originBranchByPath);
+        setOpenAppMetaByPath(snapshot.openAppMetaByPath);
+        setTitlesByPath(snapshot.titlesByPath);
+        setErrorMessage(null);
+        setIsLoading(false);
+        titlesRequestIdRef.current += 1;
+        const requestId = titlesRequestIdRef.current;
+        void loadTitlesState({ worktrees: snapshot.listedWorktrees, mappings: snapshot.mappings, requestId }, guard);
+        detailsRequestIdRef.current += 1;
+        const detailsRequestId = detailsRequestIdRef.current;
+        void loadWorktreeDetailsState(
+          {
+            worktrees: snapshot.listedWorktrees,
+            mappings: snapshot.mappings,
+            requestId: detailsRequestId,
+          },
+          guard,
+        );
+      } catch (error) {
+        if (isCancelled()) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : "Unknown error";
+        setWorktrees([]);
+        setTitlesByPath(new Map());
+        setRepositoryMappings([]);
+        setOriginLastCommitByPath(new Map());
+        setOriginBranchByPath(new Map());
+        setOpenAppMetaByPath(new Map());
+        setErrorMessage(message);
+        setIsDetailsLoading(false);
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to load worktrees",
+          message,
+        });
+      } finally {
+        if (!isCancelled()) {
+          setIsLoading(false);
+        }
+        logTiming("loadWorktreesState", Date.now() - startMs);
+      }
+    },
+    [loadTitlesState, loadWorktreeDetailsState, logTiming, logWorktreeNames],
+  );
+
+  useEffect(() => {
+    const guard = { cancelled: false };
+    void loadWorktreesState(guard);
+    return () => {
+      guard.cancelled = true;
+    };
+  }, [loadWorktreesState]);
+
+  const refreshWorktrees = useCallback(async () => {
+    await loadWorktreesState();
+  }, [loadWorktreesState]);
+
+  /**
+   * ユーザー操作で一覧を最新状態へ更新する
+   */
+  const handleReloadWorktrees = useCallback(() => {
+    void refreshWorktrees();
+  }, [refreshWorktrees]);
+
+  const markRefreshOnPop = useCallback(() => {
+    shouldRefreshOnPop.current = true;
+  }, []);
+
+  const handleCreatePop = useCallback(() => {
+    if (!shouldRefreshOnPop.current) {
+      return;
+    }
+    shouldRefreshOnPop.current = false;
+    void refreshWorktrees();
+  }, [refreshWorktrees]);
+
+  const handleRemoveWorktree = useCallback(
+    async (args: { item: Worktree; deleteBranch: boolean; deleteRemoteBranch: boolean }): Promise<void> => {
+      const repoRoot = args.item.originPath?.trim() || args.item.path;
+      const worktreePath = args.item.path;
+      let toast: Toast | null = null;
+      setHiddenWorktreePaths((current) => new Set(current).add(worktreePath));
+      try {
+        toast = await showToast({ style: Toast.Style.Animated, title: "Starting worktree removal" });
+        const result = await removeWorktreeUsecase.startBackgroundRemove({
+          input: {
+            repoRoot,
+            worktreePath: args.item.path,
+            assetsPath: environment.assetsPath,
+            branch: args.item.branch,
+            deleteBranch: args.deleteBranch,
+            deleteRemoteBranch: args.deleteRemoteBranch,
+          },
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.removeWorktreeDependencies,
+        });
+        try {
+          const mapping = repositoryMappings.find((entry) => entry.repoRoot === repoRoot);
+          await deletedWorktreesUsecase.recordDeletedWorktree({
+            input: {
+              repoRoot,
+              repoName: args.item.repo,
+              worktreePath,
+              branch: args.item.branch,
+              baseRef: args.item.baseRef ?? null,
+              mapValue: mapping?.mapValue ?? args.item.repo,
+              openApp: openAppMetaByPath.get(worktreePath)?.openApp ?? "zed",
+              deleteBranch: args.deleteBranch,
+            },
+            dependencies: WORKTREE_DECK_COMPOSITION_ROOT.deletedWorktreeDependencies,
+          });
+        } catch (error) {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Failed to save restore history",
+            message: formatExecErrorMessage(error),
+          });
+        }
+        if (toast) {
+          toast.style = Toast.Style.Success;
+          toast.title = "Worktree removal started";
+          toast.message = result.statePath;
+        }
+        await refreshWorktrees();
+      } catch (error) {
+        setHiddenWorktreePaths((current) => {
+          if (!current.has(worktreePath)) {
+            return current;
+          }
+          const next = new Set(current);
+          next.delete(worktreePath);
+          return next;
+        });
+        const message = formatExecErrorMessage(error);
+        if (toast) {
+          toast.style = Toast.Style.Failure;
+          toast.title = "Failed to remove worktree";
+          toast.message = message;
+          return;
+        }
+        try {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Failed to remove worktree",
+            message,
+          });
+        } catch {
+          // 何もしない
+        }
+      }
+    },
+    [openAppMetaByPath, refreshWorktrees, repositoryMappings],
+  );
+
+  /**
+   * worktree ブランチ名を変更する
+   */
+  const handleRenameWorktreeBranch = useCallback(
+    async (args: { item: Worktree; newBranch: string; renameRemoteBranch: boolean }): Promise<void> => {
+      const repoRoot = args.item.originPath?.trim() || args.item.path;
+      const oldBranch = normalizeWorktreeBranchName(args.item.branch);
+      if (!oldBranch) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to rename branch",
+          message: "Current branch is not available.",
+        });
+        return;
+      }
+      const toast = await showToast({ style: Toast.Style.Animated, title: "Renaming branch" });
+      try {
+        const result = await worktreeRenameUsecase.rename({
+          input: {
+            repoRoot,
+            oldBranch,
+            newBranch: args.newBranch,
+            renameRemoteBranch: args.renameRemoteBranch,
+          },
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.renameWorktreeBranchDependencies,
+        });
+        toast.style = Toast.Style.Success;
+        toast.title = "Branch renamed";
+        toast.message = result.renamedRemoteBranch
+          ? `${result.oldBranch} -> ${result.newBranch} (${result.remoteName})`
+          : `${result.oldBranch} -> ${result.newBranch}`;
+        await refreshWorktrees();
+      } catch (error) {
+        toast.style = Toast.Style.Failure;
+        toast.title = "Failed to rename branch";
+        toast.message = formatExecErrorMessage(error);
+      }
+    },
+    [refreshWorktrees],
+  );
+
+  /**
+   * worktree ブランチを元ブランチへマージする
+   */
+  const handleMergeWorktree = useCallback(
+    async (args: { item: Worktree; targetRef: string }): Promise<boolean> => {
+      const repoRoot = args.item.originPath?.trim() || args.item.path;
+      let mergePlan: WorktreeMergePlan;
+      try {
+        mergePlan = await worktreeMergeUsecase.buildPlan({
+          repoRoot,
+          worktreePath: args.item.path,
+          targetRef: args.targetRef,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.buildWorktreeMergePlanDependencies,
+        });
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to build merge plan",
+          message,
+        });
+        return false;
+      }
+
+      const defaultBaseRef =
+        await WORKTREE_DECK_COMPOSITION_ROOT.worktreeMergePreviewDependencies.loadDefaultBaseRef(repoRoot);
+      const targetCounts = await WORKTREE_DECK_COMPOSITION_ROOT.worktreeMergePreviewDependencies.loadAheadBehindCounts({
+        worktreePath: args.item.path,
+        baseRef: mergePlan.targetRef,
+      });
+
+      const confirmed = await confirmAlert({
+        title: `Merge into ${mergePlan.targetBranch}`,
+        message: buildMergeConfirmationMessage({
+          repo: args.item.repo,
+          worktreePath: args.item.path,
+          repoRoot,
+          sourceBranch: mergePlan.sourceBranch,
+          targetBranch: mergePlan.targetBranch,
+          needsTrackingBranch: mergePlan.needsTrackingBranch,
+          mergeStatus: args.item.mergeStatus ?? null,
+          defaultBaseRef,
+          behindCount: targetCounts?.behindCount ?? args.item.behindCount ?? null,
+        }),
+        primaryAction: { title: "Merge" },
+        dismissAction: { title: "Cancel" },
+      });
+      if (!confirmed) {
+        return false;
+      }
+
+      const toast = await showToast({ style: Toast.Style.Animated, title: "Merging worktree" });
+      try {
+        const result = await worktreeMergeUsecase.mergeIntoBase({
+          plan: mergePlan,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.mergeWorktreeIntoBaseDependencies,
+        });
+        toast.style = Toast.Style.Success;
+        toast.title = "Merge completed";
+        toast.message = `${result.sourceBranch} -> ${result.targetBranch}`;
+        await refreshWorktrees();
+        return true;
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        toast.style = Toast.Style.Failure;
+        toast.title = "Failed to merge worktree";
+        toast.message = message;
+        return false;
+      }
+    },
+    [refreshWorktrees],
+  );
+
+  /**
+   * worktree ブランチの PR を作成する
+   */
+  const handleCreatePullRequest = useCallback(
+    async (args: {
+      item: Worktree;
+      headBranch?: string | null;
+      baseRef: string;
+      title: string;
+      description: string;
+      draft: boolean;
+      pushBeforeCreate: boolean;
+    }): Promise<boolean> => {
+      const repoRoot = args.item.originPath?.trim() || args.item.path;
+      const headBranch = args.headBranch?.trim() || normalizeWorktreeBranchName(args.item.branch);
+      let plan: Awaited<ReturnType<typeof worktreePullRequestUsecase.buildPlan>>;
+      try {
+        plan = await worktreePullRequestUsecase.buildPlan({
+          repoRoot,
+          worktreePath: args.item.path,
+          baseRef: args.baseRef,
+          headBranch,
+          title: args.title,
+          description: args.description,
+          draft: args.draft,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.buildWorktreePullRequestPlanDependencies,
+        });
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to prepare pull request",
+          message,
+        });
+        return false;
+      }
+
+      const createPrDependencies = WORKTREE_DECK_COMPOSITION_ROOT.createWorktreePullRequestDependencies;
+      let commitCount: number;
+      try {
+        commitCount = await createPrDependencies.countCommitsBetween({
+          repoRoot: plan.repoRoot,
+          baseRef: plan.baseRef,
+          headRef: plan.headBranch,
+        });
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to compare commits",
+          message,
+        });
+        return false;
+      }
+      if (commitCount === 0) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "No commits between branches",
+          message: `${plan.baseBranch} -> ${plan.headBranch}`,
+        });
+        return false;
+      }
+
+      const remoteName = plan.remoteName ?? (await createPrDependencies.resolvePreferredRemoteName(plan.repoRoot));
+      if (!remoteName) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Remote is required",
+        });
+        return false;
+      }
+      const remoteExists = await createPrDependencies.checkRemoteBranchExists({
+        repoRoot: plan.repoRoot,
+        remoteName,
+        branch: plan.headBranch,
+      });
+      if (!remoteExists) {
+        if (!args.pushBeforeCreate) {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Head branch is not on remote",
+            message: plan.headBranch,
+          });
+          return false;
+        }
+        const pushToast = await showToast({ style: Toast.Style.Animated, title: "Pushing head branch" });
+        try {
+          await createPrDependencies.pushRemoteBranch({ repoRoot: plan.repoRoot, remoteName, branch: plan.headBranch });
+          pushToast.style = Toast.Style.Success;
+          pushToast.title = "Head branch pushed";
+          pushToast.message = `${remoteName}/${plan.headBranch}`;
+        } catch (error) {
+          const message = formatExecErrorMessage(error);
+          pushToast.style = Toast.Style.Failure;
+          pushToast.title = "Failed to push head branch";
+          pushToast.message = message;
+          return false;
+        }
+      }
+
+      const toast = await showToast({ style: Toast.Style.Animated, title: "Creating pull request" });
+      try {
+        const result = await createPrDependencies.createWorktreePullRequest(plan);
+        toast.style = Toast.Style.Success;
+        toast.title = "Pull request created";
+        toast.message = formatPullRequestToastMessage(result, `${plan.headBranch} -> ${plan.baseBranch}`);
+        return true;
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        toast.style = Toast.Style.Failure;
+        toast.title = "Failed to create pull request";
+        toast.message = message;
+        return false;
+      }
+    },
+    [],
+  );
+
+  /**
+   * worktree ブランチを pull する
+   */
+  const handlePullWorktree = useCallback(
+    async (args: { worktreePath: string; branch?: string | null }): Promise<boolean> => {
+      const expectedBranch = normalizeWorktreeBranchName(args.branch);
+      if (!expectedBranch) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Branch is not available",
+        });
+        return false;
+      }
+      let plan: Awaited<ReturnType<typeof worktreePullUsecase.buildPlan>>;
+      try {
+        plan = await worktreePullUsecase.buildPlan({
+          worktreePath: args.worktreePath,
+          expectedBranch,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.buildWorktreePullPlanDependencies,
+        });
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to prepare pull",
+          message,
+        });
+        return false;
+      }
+      const toast = await showToast({ style: Toast.Style.Animated, title: "Pulling worktree" });
+      try {
+        const result = await worktreePullUsecase.pull({
+          plan,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.pullWorktreeDependencies,
+        });
+        toast.style = Toast.Style.Success;
+        toast.title = "Worktree updated";
+        toast.message = `${result.branch} <- ${result.upstreamRef}`;
+        await refreshWorktrees();
+        return true;
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        toast.style = Toast.Style.Failure;
+        toast.title = "Failed to pull worktree";
+        toast.message = message;
+        return false;
+      }
+    },
+    [refreshWorktrees],
+  );
+
+  /**
+   * PR作成フォームを開く前にヘッドブランチを解決する
+   */
+  const handleOpenCreatePullRequest = useCallback(
+    async (item: Worktree): Promise<void> => {
+      try {
+        const headBranch = await worktreePullRequestUsecase.resolveHeadBranch({
+          worktreePath: item.path,
+          headBranch: item.branch,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.resolvePullRequestHeadBranchDependencies,
+        });
+        if (!headBranch) {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Head branch is not available",
+          });
+          return;
+        }
+        push(<CreatePullRequestForm item={item} sourceBranch={headBranch} onCreate={handleCreatePullRequest} />);
+      } catch (error) {
+        const message = formatExecErrorMessage(error);
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to resolve head branch",
+          message,
+        });
+      }
+    },
+    [handleCreatePullRequest, push],
+  );
+
+  /**
+   * 指定パスの最新セッションファイルを Zed で開く
+   */
+  const openLatestSessionForPath = useCallback(async (path: string): Promise<void> => {
+    const trimmedPath = path.trim();
+    if (!trimmedPath) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to open session file",
+        message: "Path is empty.",
+      });
+      return;
+    }
+    try {
+      const result = await worktreeSessionFileUsecase.openLatestSessionFile({
+        worktreePath: trimmedPath,
+        context: {
+          env: process.env,
+          cwd: process.cwd(),
+          homeDir: process.env.HOME?.trim() ?? null,
+          assetsPath: environment.assetsPath,
+          packageDir: __dirname,
+          packageName: "worktree-deck",
+        },
+        dependencies: WORKTREE_DECK_COMPOSITION_ROOT.worktreeSessionFileDependencies,
+      });
+      if (result.status === "not-found") {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "No session file found",
+          message: "No session file found for this worktree.",
+        });
+        return;
+      }
+    } catch (error) {
+      const message = formatExecErrorMessage(error);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to open session file",
+        message,
+      });
+    }
+  }, []);
+
+  /**
+   * 保存済みの固定アプリで指定パスを開く
+   */
+  const openPathInConfiguredApp = useCallback(
+    async (path: string, openApp: WorktreeOpenApp, threadId?: string | null): Promise<void> => {
+      const label = worktreeOpenAppService.formatMetaLabel(openApp);
+      const toast = await showToast({ style: Toast.Style.Animated, title: `Opening in ${label}` });
+      try {
+        const result = await worktreeOpenAppUsecase.openPreferred({
+          command: { worktreePath: path, openApp, threadId },
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.openWorktreeInPreferredAppDependencies,
+        });
+        if (result.savedMeta !== null) {
+          setOpenAppMetaByPath((current) => {
+            const next = new Map(current);
+            next.set(path.trim(), result.savedMeta as WorktreeOpenAppMeta);
+            return next;
+          });
+        }
+        toast.style = Toast.Style.Success;
+        toast.title = `Opened in ${label}`;
+        toast.message = result.preferenceSaved ? path.trim() : "Open preference could not be saved.";
+        await closeMainWindow();
+      } catch (error) {
+        toast.style = Toast.Style.Failure;
+        toast.title = "Failed to open worktree";
+        toast.message = formatExecErrorMessage(error);
+      }
+    },
+    [],
+  );
+
+  /**
+   * 保存済みの固定アプリを解決する
+   */
+  const resolveOpenAppForPath = useCallback(
+    (path: string): WorktreeOpenApp => {
+      return openAppMetaByPath.get(path)?.openApp ?? "zed";
+    },
+    [openAppMetaByPath],
+  );
+
+  /**
+   * 保存済みの Codex thread id を解決する
+   */
+  const resolveThreadIdForPath = useCallback(
+    (path: string): string | null => {
+      return openAppMetaByPath.get(path)?.threadId ?? null;
+    },
+    [openAppMetaByPath],
+  );
+
+  /**
+   * Codex App セッションを選択候補からアーカイブする
+   */
+  const archiveCodexSession = useCallback(
+    async (threadId: string): Promise<void> => {
+      const normalizedThreadId = worktreeOpenAppService.normalizeThreadId(threadId);
+      if (!normalizedThreadId) {
+        throw new Error("Invalid thread id.");
+      }
+      setArchivedCodexSessionThreadIds((current) => {
+        const next = new Set(current.map((value) => value.trim()).filter(Boolean));
+        next.add(normalizedThreadId);
+        return Array.from(next).sort();
+      });
+      await showToast({ style: Toast.Style.Success, title: "Session archived" });
+    },
+    [setArchivedCodexSessionThreadIds],
+  );
+
+  /**
+   * Codex App セッションをアーカイブ候補から復元する
+   */
+  const unarchiveCodexSession = useCallback(
+    async (threadId: string): Promise<void> => {
+      const normalizedThreadId = worktreeOpenAppService.normalizeThreadId(threadId);
+      if (!normalizedThreadId) {
+        throw new Error("Invalid thread id.");
+      }
+      setArchivedCodexSessionThreadIds((current) => {
+        return current.map((value) => value.trim()).filter((value) => value && value !== normalizedThreadId);
+      });
+      await showToast({ style: Toast.Style.Success, title: "Session restored" });
+    },
+    [setArchivedCodexSessionThreadIds],
+  );
+
+  /**
+   * 指定された起動アプリとセッション数に応じた Open アクションを構築する
+   */
+  const renderOpenActionItem = useCallback(
+    (args: {
+      path: string;
+      openApp: WorktreeOpenApp;
+      threadId: string | null;
+      sessions: WorktreeTitle[];
+      title: string;
+      intent: OpenActionIntent;
+    }) => {
+      if (!shouldSelectCodexSessionForOpenAction({ openApp: args.openApp, intent: args.intent })) {
+        return (
+          <Action
+            title={formatOpenActionTitle(args.openApp)}
+            icon={resolveOpenAppIcon(args.openApp)}
+            shortcut={resolveOpenActionShortcut(args.intent)}
+            onAction={() => void openPathInConfiguredApp(args.path, args.openApp, args.threadId)}
+          />
+        );
+      }
+
+      const plan = resolveCodexSessionOpenPlan({
+        sessions: args.sessions,
+        storedThreadId: args.threadId,
+        archivedThreadIds: archivedCodexSessionThreadIdSet,
+      });
+      if (plan.kind === "select") {
+        const archivedEntries = buildCodexSessionEntries(args.sessions, {
+          archivedThreadIds: archivedCodexSessionThreadIdSet,
+          visibility: "archived",
+        });
+        return (
+          <Action.Push
+            title={formatCodexSessionSelectActionTitle()}
+            icon={resolveOpenAppIcon("codex-app")}
+            target={
+              <CodexSessionSelectView
+                title={args.title}
+                worktreePath={args.path}
+                entries={plan.entries}
+                archivedEntries={archivedEntries}
+                onArchiveSession={archiveCodexSession}
+                onUnarchiveSession={unarchiveCodexSession}
+                onOpenSession={(threadId) => openPathInConfiguredApp(args.path, "codex-app", threadId)}
+                onOpenWorktreeInZed={() => openPathInConfiguredApp(args.path, "zed", null)}
+              />
+            }
+          />
+        );
+      }
+
+      const resolvedThreadId = plan.kind === "open-thread" ? plan.threadId : null;
+      return (
+        <Action
+          title={formatOpenActionTitle(args.openApp)}
+          icon={resolveOpenAppIcon(args.openApp)}
+          shortcut={resolveOpenActionShortcut(args.intent)}
+          onAction={() => void openPathInConfiguredApp(args.path, args.openApp, resolvedThreadId)}
+        />
+      );
+    },
+    [archiveCodexSession, archivedCodexSessionThreadIdSet, openPathInConfiguredApp, unarchiveCodexSession],
+  );
+
+  /**
+   * 保存済みアプリと逆側アプリの Open アクションを構築する
+   */
+  const renderOpenActions = useCallback(
+    (args: {
+      path: string;
+      openApp: WorktreeOpenApp;
+      threadId: string | null;
+      sessions: WorktreeTitle[];
+      title: string;
+    }) => {
+      const plans = buildOpenActionPlans({ openApp: args.openApp, threadId: args.threadId });
+      const configuredPlan = plans[0];
+      const alternatePlan = plans[OPEN_ALTERNATE_APP_ACTION_INDEX];
+      return (
+        <>
+          {renderOpenActionItem({
+            ...args,
+            openApp: configuredPlan.openApp,
+            threadId: configuredPlan.threadId,
+            intent: configuredPlan.intent,
+          })}
+          {renderOpenActionItem({
+            ...args,
+            openApp: alternatePlan.openApp,
+            threadId: alternatePlan.threadId,
+            intent: alternatePlan.intent,
+          })}
+        </>
+      );
+    },
+    [renderOpenActionItem],
+  );
+
+  /**
+   * Create Worktree フォームを現在の repository 初期値付きで開く Action を返す
+   */
+  const renderCreateWorktreeAction = useCallback(
+    (args: { initialRepoRoot?: string | null }) => {
+      if (!createWorktreeAction) {
+        return null;
+      }
+      const initialRepoRoot = args.initialRepoRoot?.trim() || null;
+      return (
+        <Action
+          title={createWorktreeAction.title}
+          icon={Icon.PlusCircle}
+          shortcut={createWorktreeAction.shortcut}
+          onAction={() => {
+            push(
+              <CreateWorktreeForm
+                initialRepoRoot={initialRepoRoot}
+                onComplete={refreshWorktrees}
+                worktreeNameDelimiter={worktreeNameDelimiter}
+              />,
+            );
+          }}
+        />
+      );
+    },
+    [createWorktreeAction, push, refreshWorktrees, worktreeNameDelimiter],
+  );
+
+  /**
+   * 一覧内で常に表示するアクション群
+   */
+  const renderGlobalActions = useCallback(
+    (args: { initialRepoRoot?: string | null; includeCreateWorktree?: boolean } = {}) => {
+      const includeCreateWorktree = args.includeCreateWorktree ?? true;
+      return (
+        <>
+          <Action
+            title="Toggle Display Mode"
+            shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
+            onAction={() => setDisplayMode((current) => toggleDisplayMode(current))}
+          />
+          {reloadWorktreesAction ? (
+            <Action
+              title={reloadWorktreesAction.title}
+              icon={Icon.ArrowClockwise}
+              shortcut={reloadWorktreesAction.shortcut}
+              onAction={handleReloadWorktrees}
+            />
+          ) : null}
+          {!createWorktreeAction || !restoreDeletedWorktreeAction || !repositorySettingsAction ? null : (
+            <>
+              {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
+              <Action.Push
+                title={restoreDeletedWorktreeAction.title}
+                icon={Icon.ArrowClockwise}
+                shortcut={restoreDeletedWorktreeAction.shortcut}
+                target={<RestoreDeletedWorktreeView onComplete={refreshWorktrees} />}
+                onPop={handleCreatePop}
+              />
+              <Action.Push
+                title={repositorySettingsAction.title}
+                icon={Icon.Gear}
+                shortcut={repositorySettingsAction.shortcut}
+                target={<RepositoryMappingManager onChange={markRefreshOnPop} />}
+                onPop={handleCreatePop}
+              />
+            </>
+          )}
+        </>
+      );
+    },
+    [
+      createWorktreeAction,
+      handleCreatePop,
+      handleReloadWorktrees,
+      markRefreshOnPop,
+      refreshWorktrees,
+      reloadWorktreesAction,
+      repositorySettingsAction,
+      renderCreateWorktreeAction,
+      restoreDeletedWorktreeAction,
+      setDisplayMode,
+    ],
+  );
+
+  return (
+    <List
+      isLoading={isLoading || isTitlesLoading || isDetailsLoading || isSelectionPreparing}
+      searchBarPlaceholder="Search worktrees"
+      searchBarAccessory={
+        <List.Dropdown
+          id={DISPLAY_MODE_DROPDOWN_ID}
+          tooltip="Display Mode"
+          value={displayMode}
+          onChange={(newValue) => {
+            setDisplayMode(parseDisplayMode(newValue));
+          }}
+        >
+          <List.Dropdown.Item title="Show All" value="show-all" />
+          <List.Dropdown.Item title="Worktrees Only" value="worktrees-only" />
+        </List.Dropdown>
+      }
+      searchText={searchText}
+      onSearchTextChange={handleSearchTextChange}
+      selectedItemId={selectedItemId ?? undefined}
+      onSelectionChange={handleSelectionChange}
+      filtering={false}
+      isShowingDetail
+    >
+      {isSelectionPreparing ? null : errorMessage ? (
+        <List.Section title="Status">
+          <List.Item
+            title="Failed to load worktrees"
+            subtitle={errorMessage}
+            icon={Icon.Warning}
+            actions={
+              <ActionPanel>{renderGlobalActions({ initialRepoRoot: selectedCreateInitialRepoRoot })}</ActionPanel>
+            }
+          />
+        </List.Section>
+      ) : !hasVisibleContent ? (
+        <List.Section title="Status">
+          <List.Item
+            title={searchText.trim() ? "No matching worktrees" : "No worktrees"}
+            subtitle={
+              searchText.trim()
+                ? "No worktrees matched your search."
+                : basePath
+                  ? `No worktrees were found under ${basePath}.`
+                  : "No worktrees were found."
+            }
+            icon={Icon.Folder}
+            actions={
+              <ActionPanel>{renderGlobalActions({ initialRepoRoot: selectedCreateInitialRepoRoot })}</ActionPanel>
+            }
+          />
+        </List.Section>
+      ) : (
+        visibleSections.map(({ section, entries }) => {
+          return (
+            <List.Section key={section.repo} title={section.repo}>
+              {entries.map((entry) => {
+                if (entry.kind === "origin") {
+                  const openApp = resolveOpenAppForPath(entry.originPath);
+                  const threadId = resolveThreadIdForPath(entry.originPath);
+                  const status = resolveWorktreeStatus(entry.titles);
+                  const statusTint = resolveStatusTint({ status, titles: entry.titles });
+                  const originBranch = formatBranchTitle({ branch: entry.branch ?? "origin", titles: entry.titles });
+                  const detailMarkdown = buildDetailMarkdown({
+                    title: originBranch,
+                    titles: entry.titles,
+                    isTitlesLoading,
+                    mergeStatus: "unknown",
+                    lastCommitAt: entry.lastCommitAt,
+                    openApp,
+                    useLastCommitSeparator: false,
+                  });
+                  return (
+                    <List.Item
+                      key={resolveEntryItemId(entry)}
+                      id={resolveEntryItemId(entry)}
+                      title={originBranch}
+                      keywords={buildSearchKeywords({
+                        repo: section.repo,
+                        originPath: entry.originPath,
+                        branch: entry.branch,
+                      })}
+                      icon={{ source: Icon.House, tintColor: statusTint }}
+                      accessories={buildOpenAppAccessory(openApp)}
+                      detail={<List.Item.Detail markdown={detailMarkdown} />}
+                      actions={
+                        <ActionPanel>
+                          {renderOpenActions({
+                            path: entry.originPath,
+                            openApp,
+                            threadId,
+                            sessions: entry.titles,
+                            title: originBranch,
+                          })}
+                          {renderCreateWorktreeAction({ initialRepoRoot: entry.originPath })}
+                          <Action.Push
+                            title="Show Details"
+                            icon={Icon.Eye}
+                            shortcut={SHOW_DETAILS_SHORTCUT}
+                            target={
+                              <SessionDetailView
+                                title={originBranch}
+                                sessions={entry.titles}
+                                homeDir={process.env.HOME?.trim() ?? null}
+                              />
+                            }
+                          />
+                          <Action
+                            title="Create Pull Request"
+                            icon={Icon.Upload}
+                            shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+                            onAction={() =>
+                              void handleOpenCreatePullRequest({
+                                repo: section.repo,
+                                path: entry.originPath,
+                                branch: entry.branch ?? undefined,
+                              })
+                            }
+                          />
+                          {canPullBranch(entry.branch) ? (
+                            <Action
+                              title="Pull Worktree"
+                              icon={Icon.Download}
+                              onAction={() =>
+                                void handlePullWorktree({ worktreePath: entry.originPath, branch: entry.branch })
+                              }
+                            />
+                          ) : null}
+                          <Action
+                            title="Open Latest Session File"
+                            icon={Icon.Clock}
+                            shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
+                            onAction={() => void openLatestSessionForPath(entry.originPath)}
+                          />
+                          <Action.ShowInFinder path={entry.originPath} icon={Icon.Folder} />
+                          <Action.CopyToClipboard
+                            title="Copy Origin Path"
+                            icon={Icon.Clipboard}
+                            content={entry.originPath}
+                          />
+                          {renderGlobalActions({
+                            initialRepoRoot: entry.originPath,
+                            includeCreateWorktree: false,
+                          })}
+                        </ActionPanel>
+                      }
+                    />
+                  );
+                }
+
+                const item = entry.item;
+                const openApp = resolveOpenAppForPath(item.path);
+                const threadId = resolveThreadIdForPath(item.path);
+                const titles = item.titleEntries ?? [];
+                const branchTitle = formatBranchTitle({ branch: item.branch, titles });
+                const detailMarkdown = buildDetailMarkdown({
+                  title: branchTitle,
+                  titles,
+                  isTitlesLoading,
+                  mergeStatus: item.mergeStatus,
+                  lastCommitAt: item.lastCommitAt ?? null,
+                  mergeStatusError: item.mergeStatusError ?? null,
+                  baseRef: item.baseRef ?? null,
+                  aheadCount: item.aheadCount ?? null,
+                  behindCount: item.behindCount ?? null,
+                  openApp,
+                });
+                const canRemoveWorktree = canRemoveWorktreeItem(item);
+                const canMergeWorktree = item.originPath ? item.originPath !== item.path : false;
+                const canRenameBranch = normalizeWorktreeBranchName(item.branch) !== null;
+                const canCreatePullRequest = Boolean(item.branch?.trim());
+                const canPullWorktree = canPullBranch(item.branch);
+                const status = resolveWorktreeStatus(titles);
+                const statusTint = resolveStatusTint({ status, titles });
+                return (
+                  <List.Item
+                    key={resolveEntryItemId(entry)}
+                    id={resolveEntryItemId(entry)}
+                    title={branchTitle}
+                    keywords={buildSearchKeywords({
+                      repo: item.repo,
+                      originPath: item.originPath,
+                      branch: item.branch,
+                    })}
+                    icon={{ source: Icon.Folder, tintColor: statusTint }}
+                    accessories={buildOpenAppAccessory(openApp)}
+                    detail={<List.Item.Detail markdown={detailMarkdown} />}
+                    actions={
+                      <ActionPanel>
+                        {renderOpenActions({
+                          path: item.path,
+                          openApp,
+                          threadId,
+                          sessions: titles,
+                          title: branchTitle,
+                        })}
+                        {renderCreateWorktreeAction({
+                          initialRepoRoot: resolveInitialRepoRoot({ item, mappings: repositoryMappings }),
+                        })}
+                        <Action.Push
+                          title="Show Details"
+                          icon={Icon.Eye}
+                          shortcut={SHOW_DETAILS_SHORTCUT}
+                          target={
+                            <SessionDetailView
+                              title={branchTitle}
+                              sessions={titles}
+                              homeDir={process.env.HOME?.trim() ?? null}
+                            />
+                          }
+                        />
+                        {canPullWorktree ? (
+                          <Action
+                            title="Pull Worktree"
+                            icon={Icon.Download}
+                            onAction={() => void handlePullWorktree({ worktreePath: item.path, branch: item.branch })}
+                          />
+                        ) : null}
+                        <Action
+                          title="Open Latest Session File"
+                          icon={Icon.Clock}
+                          shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
+                          onAction={() => void openLatestSessionForPath(item.path)}
+                        />
+                        <Action.ShowInFinder path={item.path} icon={Icon.Folder} />
+                        <Action.CopyToClipboard title="Copy Path" icon={Icon.Clipboard} content={item.path} />
+                        <Action.CopyToClipboard title="Copy Repository" icon={Icon.Clipboard} content={item.repo} />
+                        {item.originPath ? (
+                          <Action.CopyToClipboard
+                            title="Copy Origin Path"
+                            icon={Icon.Clipboard}
+                            content={item.originPath}
+                          />
+                        ) : null}
+                        {item.branch ? (
+                          <Action.CopyToClipboard title="Copy Branch" icon={Icon.Clipboard} content={item.branch} />
+                        ) : null}
+                        {canCreatePullRequest ? (
+                          <Action
+                            title="Create Pull Request"
+                            icon={Icon.Upload}
+                            shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+                            onAction={() => void handleOpenCreatePullRequest(item)}
+                          />
+                        ) : null}
+                        {canMergeWorktree ? (
+                          <Action
+                            title="Merge into Base Branch"
+                            icon={Icon.ArrowRightCircle}
+                            shortcut={{ modifiers: ["cmd"], key: "m" }}
+                            onAction={() => push(<MergeWorktreeForm item={item} onMerge={handleMergeWorktree} />)}
+                          />
+                        ) : null}
+                        {canRenameBranch ? (
+                          <Action
+                            title="Rename Branch"
+                            icon={Icon.Pencil}
+                            onAction={() =>
+                              push(<RenameWorktreeForm item={item} onRename={handleRenameWorktreeBranch} />)
+                            }
+                          />
+                        ) : null}
+                        {canRemoveWorktree ? (
+                          <Action
+                            title="Remove Worktree"
+                            icon={Icon.Trash}
+                            style={Action.Style.Destructive}
+                            shortcut={{ modifiers: ["cmd"], key: "d" }}
+                            onAction={() => push(<RemoveWorktreeForm item={item} onRemove={handleRemoveWorktree} />)}
+                          />
+                        ) : null}
+                        {renderGlobalActions({
+                          initialRepoRoot: resolveInitialRepoRoot({ item, mappings: repositoryMappings }),
+                          includeCreateWorktree: false,
+                        })}
+                      </ActionPanel>
+                    }
+                  />
+                );
+              })}
+            </List.Section>
+          );
+        })
+      )}
+    </List>
+  );
+}
+
+/**
+ * worktree の追加情報をパス単位で統合する
+ */
+function mergeWorktreesByPath(current: Worktree[], updates: Worktree[]): Worktree[] {
+  const currentMap = new Map(current.map((item) => [item.path, item]));
+  return updates.map((item) => {
+    const existing = currentMap.get(item.path);
+    if (!existing) {
+      return item;
+    }
+    return {
+      ...existing,
+      ...item,
+      titleEntries: item.titleEntries ?? existing.titleEntries,
+      mergeStatus: item.mergeStatus ?? existing.mergeStatus,
+      lastCommitAt: item.lastCommitAt ?? existing.lastCommitAt,
+      baseRef: item.baseRef ?? existing.baseRef,
+      aheadCount: item.aheadCount ?? existing.aheadCount,
+      behindCount: item.behindCount ?? existing.behindCount,
+    };
+  });
+}
+
+/**
+ * worktree のタイトル情報をパス単位で統合する
+ */
+function mergeWorktreeTitlesByPath(current: Worktree[], updates: Worktree[]): Worktree[] {
+  const currentMap = new Map(current.map((item) => [item.path, item]));
+  const titlesByPath = new Map(updates.map((item) => [item.path, item.titleEntries]));
+  const merged = current.map((item) => {
+    const titles = titlesByPath.get(item.path);
+    if (!titles) {
+      return item;
+    }
+    return { ...item, titleEntries: titles };
+  });
+  for (const update of updates) {
+    if (!currentMap.has(update.path)) {
+      merged.push(update);
+    }
+  }
+  return merged;
+}
+
+/**
+ * 非表示対象を除いた worktree 一覧を返す
+ */
+export function filterVisibleWorktrees(args: { worktrees: Worktree[]; hiddenPaths: Set<string> }): Worktree[] {
+  if (args.hiddenPaths.size === 0) {
+    return args.worktrees;
+  }
+  return args.worktrees.filter((item) => !args.hiddenPaths.has(item.path));
+}
+
+/**
+ * 削除対象として扱える worktree か判定する
+ */
+export function canRemoveWorktreeItem(item: Worktree): boolean {
+  const originPath = item.originPath?.trim();
+  if (!originPath) {
+    return true;
+  }
+  return originPath !== item.path;
+}
+
+/**
+ * worktree 作成フォームへ渡す初期 repository root を解決する
+ */
+export function resolveInitialRepoRoot(args: { item: Worktree; mappings: RepositoryMapping[] }): string {
+  const originPath = args.item.originPath?.trim();
+  if (originPath) {
+    return originPath;
+  }
+  const mapped = args.mappings.find((mapping) => {
+    const mapValue = mapping.mapValue?.trim();
+    if (mapValue && mapValue === args.item.repo) {
+      return true;
+    }
+    return resolvePathBasename(mapping.repoRoot) === args.item.repo;
+  });
+  return mapped?.repoRoot ?? args.item.path;
+}
+
+/**
+ * ステータスに応じた tint を返す
+ */
+export function resolveStatusTint(args: {
+  status: WorktreeTitle["status"];
+  titles: WorktreeTitle[];
+}): Color | undefined {
+  if (hasAnySessionWaitingForUser(args.titles)) {
+    return Color.Yellow;
+  }
+  if (!args.status) {
+    return undefined;
+  }
+  return resolveStatusColor(args.status);
+}
+
+/**
+ * ステータス名を色に変換する
+ */
+function resolveStatusColor(status: string): Color {
+  switch (status) {
+    case "working":
+      return Color.Green;
+    case "done":
+      return Color.Blue;
+    default:
+      return Color.SecondaryText;
+  }
+}
+
+/**
+ * 検索対象のキーワードを列挙する
+ */
+function buildSearchKeywords({
+  repo,
+  originPath,
+  branch,
+}: {
+  repo: string;
+  originPath?: string | null;
+  branch?: string | null;
+}): string[] {
+  const keywords = [repo];
+  if (branch) {
+    keywords.push(branch);
+  }
+  if (originPath) {
+    keywords.push(originPath);
+  }
+  // Raycastの検索対象を明示的に増やす
+  return keywords;
+}
+
+/**
+ * パス末尾の名前を返す
+ */
+function resolvePathBasename(path: string): string {
+  const normalized = path.trim().replace(/\/+$/, "");
+  const segments = normalized.split("/");
+  return segments.at(-1) ?? normalized;
+}
+
+/**
+ * PR作成結果の表示メッセージを組み立てる
+ */
+function formatPullRequestToastMessage(result: WorktreePullRequestResult, fallback: string): string {
+  const url = result.url?.trim();
+  if (url) {
+    return url;
+  }
+  const stdout = result.stdout.trim();
+  if (stdout) {
+    const lines = stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const lastLine = lines.length > 0 ? lines[lines.length - 1] : "";
+    if (lastLine) {
+      return lastLine;
+    }
+  }
+  const stderr = result.stderr.trim();
+  if (stderr) {
+    return stderr;
+  }
+  return fallback;
+}
+
+/**
+ * 参照名からブランチ名を抽出する
+ */
+function extractBranchNameFromRef(ref?: string | null): string | null {
+  const trimmed = ref?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const headsPrefix = "refs/heads/";
+  if (trimmed.startsWith(headsPrefix)) {
+    const branch = trimmed.slice(headsPrefix.length).trim();
+    return branch || null;
+  }
+  const remotesPrefix = "refs/remotes/";
+  if (trimmed.startsWith(remotesPrefix)) {
+    const rest = trimmed.slice(remotesPrefix.length);
+    const splitIndex = rest.indexOf("/");
+    const branch = splitIndex === -1 ? rest : rest.slice(splitIndex + 1);
+    return branch.trim() || null;
+  }
+  if (trimmed.startsWith("origin/")) {
+    const branch = trimmed.slice("origin/".length).trim();
+    return branch || null;
+  }
+  return trimmed;
+}
+
+/**
+ * マージ確認ダイアログ用の文面を組み立てる
+ */
+function buildMergeConfirmationMessage(args: {
+  repo: string;
+  worktreePath: string;
+  repoRoot: string;
+  sourceBranch: string;
+  targetBranch: string;
+  needsTrackingBranch: boolean;
+  mergeStatus: WorktreeMergeStatus | null;
+  defaultBaseRef: string | null;
+  behindCount: number | null;
+}): string {
+  const statusLabel = formatMergeStatusLabel(args.mergeStatus ?? "unknown");
+  const statusPrefix = args.mergeStatus === "dirty" ? "⚠️ " : "";
+  const statusHints: string[] = [];
+  if (args.behindCount != null && args.behindCount > 0) {
+    statusHints.push(`base +${args.behindCount}`);
+  }
+  const defaultBaseBranch = extractBranchNameFromRef(args.defaultBaseRef);
+  if (defaultBaseBranch && defaultBaseBranch !== args.targetBranch) {
+    statusHints.push(`not base (${defaultBaseBranch})`);
+  }
+  if (args.needsTrackingBranch) {
+    statusHints.push("tracking create");
+  }
+  const statusSuffix = statusHints.length > 0 ? ` (⚠️ ${statusHints.join(" / ")})` : "";
+  const lines = [
+    `Repository: ${args.repo}`,
+    `Source: ${args.sourceBranch}`,
+    `Target: ${args.targetBranch}`,
+    `Status: ${statusPrefix}${statusLabel}${statusSuffix}`,
+  ];
+  return lines.join("\n");
+}

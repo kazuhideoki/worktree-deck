@@ -1,0 +1,55 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "worktree-deck",
+  "version": "0.1.0",
+  "title": "Worktree Deck",
+  "description": "git worktree と Codex セッションを一覧する",
+  "icon": "worktree-deck-icon.png",
+  "author": "kazuhide",
+  "platforms": [
+    "macOS"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "worktree-deck",
+      "title": "Worktree Deck",
+      "description": "List git worktrees and Codex sessions",
+      "mode": "view"
+    },
+    {
+      "name": "worktree-status-menu-bar",
+      "title": "Worktree Status",
+      "description": "Show worktree session status counts in the menu bar",
+      "mode": "menu-bar",
+      "interval": "10s"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.104.1",
+    "@raycast/utils": "^2.2.4"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.0.4",
+    "@types/node": "22.13.10",
+    "@types/react": "19.0.10",
+    "eslint": "^9.22.0",
+    "knip": "^5.70.1",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "vitest": "^2.1.9"
+  },
+  "scripts": {
+    "sync-env": "node scripts/sync-env-asset.mjs",
+    "build": "npm run sync-env && ray build",
+    "dev": "npm run sync-env && RAY_Target=x ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "unused": "knip",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "check:all": "npm run build && npm run unused && npm run lint && npm run test:run",
+    "prepublishOnly": "echo \"\\n\\nIt seems like you are trying to publish the Raycast extension to npm.\\n\\nIf you did intend to publish it to npm, remove the \\`prepublishOnly\\` script and rerun \\`npm publish\\` again.\\nIf you wanted to publish it to the Raycast Store instead, use \\`npm run publish\\` instead.\\n\\n\" && exit 1",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
