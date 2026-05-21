@@ -951,9 +951,6 @@ export default function Command() {
       const confirmed = await confirmAlert({
         title: `Merge into ${mergePlan.targetBranch}`,
         message: buildMergeConfirmationMessage({
-          repo: args.item.repo,
-          worktreePath: args.item.path,
-          repoRoot,
           sourceBranch: mergePlan.sourceBranch,
           targetBranch: mergePlan.targetBranch,
           needsTrackingBranch: mergePlan.needsTrackingBranch,
@@ -1157,6 +1154,24 @@ export default function Command() {
       }
     },
     [refreshWorktrees],
+  );
+
+  /**
+   * マージフォームを開く前に同期済み worktree を止める
+   */
+  const handleOpenMergeWorktree = useCallback(
+    async (item: Worktree): Promise<void> => {
+      if (shouldBlockMergeFormForSyncedWorktree(item)) {
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Already synced",
+          message: item.branch?.trim() || item.path,
+        });
+        return;
+      }
+      push(<MergeWorktreeForm item={item} onMerge={handleMergeWorktree} />);
+    },
+    [handleMergeWorktree, push],
   );
 
   /**
@@ -1757,7 +1772,7 @@ export default function Command() {
                             title="Merge into Base Branch"
                             icon={Icon.ArrowRightCircle}
                             shortcut={{ modifiers: ["cmd"], key: "m" }}
-                            onAction={() => push(<MergeWorktreeForm item={item} onMerge={handleMergeWorktree} />)}
+                            onAction={() => void handleOpenMergeWorktree(item)}
                           />
                         ) : null}
                         {canRenameBranch ? (
@@ -1858,6 +1873,13 @@ export function canRemoveWorktreeItem(item: Worktree): boolean {
     return true;
   }
   return originPath !== item.path;
+}
+
+/**
+ * 同期済み worktree のマージフォーム起動を止めるか判定する
+ */
+export function shouldBlockMergeFormForSyncedWorktree(item: Worktree): boolean {
+  return item.mergeStatus === "synced";
 }
 
 /**
@@ -1996,10 +2018,7 @@ function extractBranchNameFromRef(ref?: string | null): string | null {
 /**
  * マージ確認ダイアログ用の文面を組み立てる
  */
-function buildMergeConfirmationMessage(args: {
-  repo: string;
-  worktreePath: string;
-  repoRoot: string;
+export function buildMergeConfirmationMessage(args: {
   sourceBranch: string;
   targetBranch: string;
   needsTrackingBranch: boolean;
@@ -2007,8 +2026,6 @@ function buildMergeConfirmationMessage(args: {
   defaultBaseRef: string | null;
   behindCount: number | null;
 }): string {
-  const statusLabel = formatMergeStatusLabel(args.mergeStatus ?? "unknown");
-  const statusPrefix = args.mergeStatus === "dirty" ? "⚠️ " : "";
   const statusHints: string[] = [];
   if (args.behindCount != null && args.behindCount > 0) {
     statusHints.push(`base +${args.behindCount}`);
@@ -2020,12 +2037,19 @@ function buildMergeConfirmationMessage(args: {
   if (args.needsTrackingBranch) {
     statusHints.push("tracking create");
   }
-  const statusSuffix = statusHints.length > 0 ? ` (⚠️ ${statusHints.join(" / ")})` : "";
-  const lines = [
-    `Repository: ${args.repo}`,
-    `Source: ${args.sourceBranch}`,
-    `Target: ${args.targetBranch}`,
-    `Status: ${statusPrefix}${statusLabel}${statusSuffix}`,
-  ];
+  const lines = [`Source: ${args.sourceBranch}`];
+  if (shouldShowMergeConfirmationGitStatus(args.mergeStatus)) {
+    const statusLabel = formatMergeStatusLabel(args.mergeStatus ?? "unknown");
+    const statusPrefix = args.mergeStatus === "dirty" ? "⚠️ " : "";
+    const statusSuffix = statusHints.length > 0 ? ` (⚠️ ${statusHints.join(" / ")})` : "";
+    lines.push("", "Git status:", `Status: ${statusPrefix}${statusLabel}${statusSuffix}`);
+  }
   return lines.join("\n");
+}
+
+/**
+ * 通常の not synced 以外で git 状態を確認表示に出すか判定する
+ */
+function shouldShowMergeConfirmationGitStatus(mergeStatus: WorktreeMergeStatus | null): boolean {
+  return mergeStatus != null && mergeStatus !== "unmerged" && mergeStatus !== "synced";
 }

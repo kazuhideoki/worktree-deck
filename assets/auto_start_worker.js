@@ -336,6 +336,21 @@ async function saveSessionTitle(payload, worktreePath, threadId, title) {
 }
 
 /**
+ * Codex App/CLI 側の thread 表示名を設定する
+ */
+async function setCodexThreadName(client, threadId, title) {
+  const normalizedThreadId = normalizeThreadId(threadId);
+  const normalizedTitle = normalizeSessionTitle(title);
+  if (!normalizedThreadId || !normalizedTitle) {
+    return;
+  }
+  await client.request("thread/name/set", {
+    threadId: normalizedThreadId,
+    name: normalizedTitle,
+  });
+}
+
+/**
  * git config 用に branch 名をエスケープする
  */
 function buildBaseRefConfigKey(branch) {
@@ -889,7 +904,7 @@ async function startCodexSession(payload, worktreePath, onThreadStarted) {
       throw new Error("Codex app-server did not return a thread id.");
     }
     if (onThreadStarted) {
-      await onThreadStarted(threadId);
+      await onThreadStarted(threadId, client);
     }
     await client.request("turn/start", {
       threadId,
@@ -967,12 +982,15 @@ async function main() {
       saveOpenApp(payload, worktreePath, payload.openApp),
     );
     await writeJobState(payload, { status: "starting-codex", branch, worktreePath, warnings });
-    const threadId = await startCodexSession(payload, worktreePath, async (startedThreadId) => {
+    const threadId = await startCodexSession(payload, worktreePath, async (startedThreadId, client) => {
       await runWarningStep(warnings, "Failed to save Codex thread", () =>
         saveOpenApp(payload, worktreePath, payload.openApp, payload.openApp === "codex-app" ? startedThreadId : null),
       );
       await runWarningStep(warnings, "Failed to save session title", () =>
         saveSessionTitle(payload, worktreePath, startedThreadId, sessionTitle),
+      );
+      await runWarningStep(warnings, "Failed to set Codex thread title", () =>
+        setCodexThreadName(client, startedThreadId, sessionTitle),
       );
       await writeJobState(payload, {
         status: "starting-turn",

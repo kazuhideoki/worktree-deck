@@ -22,4 +22,12 @@ describe("auto_start_worker.js", () => {
 
     expect(source.match(/serviceTier: payload\.metadata\.serviceTier \|\| "default"/g)).toHaveLength(2);
   });
+
+  it("生成タイトルを Codex thread の表示名へ反映する", async () => {
+    const source = await readAutoStartWorkerAsset();
+
+    expect(source).toContain('client.request("thread/name/set"');
+    expect(source).toContain("name: normalizedTitle");
+    expect(source).toContain('"Failed to set Codex thread title"');
+  });
 });

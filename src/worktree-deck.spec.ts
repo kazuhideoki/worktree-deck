@@ -12,6 +12,8 @@ import {
   toggleDisplayMode,
   resolveStatusTint,
   canRemoveWorktreeItem,
+  shouldBlockMergeFormForSyncedWorktree,
+  buildMergeConfirmationMessage,
   buildOpenActionPlans,
   formatOpenActionTitle,
   OPEN_ALTERNATE_APP_ACTION_INDEX,
@@ -307,6 +309,75 @@ describe("formatTitleEntry", () => {
     const message = messageLine.replace(/^- /, "");
 
     expect(message.length).toBe(210);
+  });
+});
+
+describe("buildMergeConfirmationMessage", () => {
+  it("通常の not synced では source だけを表示する", () => {
+    const result = buildMergeConfirmationMessage({
+      sourceBranch: "feature/final-dialog",
+      targetBranch: "main",
+      needsTrackingBranch: false,
+      mergeStatus: "unmerged",
+      defaultBaseRef: "main",
+      behindCount: 0,
+    });
+
+    expect(result).toBe("Source: feature/final-dialog");
+    expect(result).not.toContain("Repository:");
+    expect(result).not.toContain("Target:");
+    expect(result).not.toContain("Git status:");
+  });
+
+  it("not synced 以外では git status を表示する", () => {
+    const result = buildMergeConfirmationMessage({
+      sourceBranch: "feature/final-dialog",
+      targetBranch: "main",
+      needsTrackingBranch: false,
+      mergeStatus: "dirty",
+      defaultBaseRef: "main",
+      behindCount: 0,
+    });
+
+    expect(result).toBe(["Source: feature/final-dialog", "", "Git status:", "Status: ⚠️ dirty"].join("\n"));
+  });
+
+  it("not synced では追加確認が必要な場合も git status を表示しない", () => {
+    const result = buildMergeConfirmationMessage({
+      sourceBranch: "feature/final-dialog",
+      targetBranch: "release",
+      needsTrackingBranch: true,
+      mergeStatus: "unmerged",
+      defaultBaseRef: "main",
+      behindCount: 2,
+    });
+
+    expect(result).toBe("Source: feature/final-dialog");
+  });
+});
+
+describe("shouldBlockMergeFormForSyncedWorktree", () => {
+  it("sync済みならマージフォーム起動を止める", () => {
+    expect(
+      shouldBlockMergeFormForSyncedWorktree({
+        ...buildWorktree({ repo: "repo-a", path: "/worktrees/repo-a~_~feature", branch: "feature" }),
+        mergeStatus: "synced",
+      }),
+    ).toBe(true);
+  });
+
+  it("not synced や未取得ならマージフォーム起動を許可する", () => {
+    expect(
+      shouldBlockMergeFormForSyncedWorktree({
+        ...buildWorktree({ repo: "repo-a", path: "/worktrees/repo-a~_~feature", branch: "feature" }),
+        mergeStatus: "unmerged",
+      }),
+    ).toBe(false);
+    expect(
+      shouldBlockMergeFormForSyncedWorktree(
+        buildWorktree({ repo: "repo-a", path: "/worktrees/repo-a~_~feature", branch: "feature" }),
+      ),
+    ).toBe(false);
   });
 });
 
