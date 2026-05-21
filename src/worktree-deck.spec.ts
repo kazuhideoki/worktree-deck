@@ -268,16 +268,17 @@ describe("buildDetailMarkdown", () => {
     expect(result).not.toContain("🕒");
   });
 
-  it("origin でも状態だけを1行で表示する", () => {
+  it("origin では unknown 状態ではなく commit 情報を表示する", () => {
     const result = buildDetailMarkdown({
       title: "main",
       titles: [],
       isTitlesLoading: false,
-      mergeStatus: "unknown",
       lastCommitAt: "2026-02-19 14:03",
+      useLastCommitSeparator: false,
     });
 
-    expect(result).toContain("❔ unknown");
+    expect(result).toContain("Commit: 2026-02-19 14:03");
+    expect(result).not.toContain("❔ unknown");
     expect(result).not.toContain("🕒");
   });
 

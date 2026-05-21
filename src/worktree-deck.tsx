@@ -1575,7 +1575,6 @@ export default function Command() {
                     title: originBranch,
                     titles: entry.titles,
                     isTitlesLoading,
-                    mergeStatus: "unknown",
                     lastCommitAt: entry.lastCommitAt,
                     openApp,
                     useLastCommitSeparator: false,
