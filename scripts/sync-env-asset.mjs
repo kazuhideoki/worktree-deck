@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,14 +10,23 @@ function resolvePackageRoot() {
 }
 
 /**
- * Raycast がコピーできる env ファイルの存在を確認する
+ * Raycast がコピーできる env ファイルを用意する
  */
-function syncEnvAsset() {
-  const packageRoot = resolvePackageRoot();
+export function syncEnvAsset(packageRoot = resolvePackageRoot()) {
   const envPath = join(packageRoot, "assets", ".env");
-  if (!existsSync(envPath)) {
-    throw new Error("assets/.env was not found.");
+  if (existsSync(envPath)) {
+    return envPath;
   }
+
+  const examplePath = join(packageRoot, "assets", ".env.example");
+  if (!existsSync(examplePath)) {
+    throw new Error("assets/.env and assets/.env.example were not found.");
+  }
+
+  copyFileSync(examplePath, envPath);
+  return envPath;
 }
 
-syncEnvAsset();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  syncEnvAsset();
+}
