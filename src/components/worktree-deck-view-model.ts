@@ -41,6 +41,14 @@ const SESSION_STATUS_PRIORITY: Record<NonNullable<WorktreeTitle["status"]>, numb
 };
 
 /**
+ * スキル使用履歴の集計結果
+ */
+type SkillUsageSummary = {
+  name: string;
+  count: number;
+};
+
+/**
  * タイトル一覧にユーザー指示待ちが含まれるか判定する
  */
 export function hasAnySessionWaitingForUser(titles: WorktreeTitle[]): boolean {
@@ -351,7 +359,59 @@ export function buildSortedSectionEntries(args: {
 export function formatTitleEntry(entry: WorktreeTitle): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
   const singleLineMessage = latestMessage.replace(/[\r\n]+/g, " ");
-  return `## 「${entry.title}」\n${singleLineMessage}`;
+  const skillUsageMarkdown = formatSkillUsageSummary(entry.skillUsages ?? []);
+  const titleMarkdown = `## 「${entry.title}」\n${singleLineMessage}`;
+  return skillUsageMarkdown ? `${skillUsageMarkdown}\n\n${titleMarkdown}` : titleMarkdown;
+}
+
+/**
+ * スキル名の集計キーを作る
+ */
+function buildSkillUsageKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * スキル使用履歴を同名ごとに集計する
+ */
+function summarizeSkillUsages(skillUsages: NonNullable<WorktreeTitle["skillUsages"]>): SkillUsageSummary[] {
+  const summaries = new Map<string, SkillUsageSummary>();
+  for (const usage of skillUsages) {
+    const name = usage.name.trim();
+    if (!name) {
+      continue;
+    }
+    const key = buildSkillUsageKey(name) || name;
+    const existing = summaries.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      summaries.set(key, { name, count: 1 });
+    }
+  }
+  return Array.from(summaries.values());
+}
+
+/**
+ * Markdown 内のインラインコード用に文字列を整形する
+ */
+function formatInlineCode(value: string): string {
+  return `\`${value.replace(/`/g, "")}\``;
+}
+
+/**
+ * トップ画面詳細向けのスキル使用履歴 Markdown を作る
+ */
+function formatSkillUsageSummary(skillUsages: NonNullable<WorktreeTitle["skillUsages"]>): string | null {
+  const summaries = summarizeSkillUsages(skillUsages);
+  if (summaries.length === 0) {
+    return null;
+  }
+  const items = summaries.map((summary) => {
+    const count = summary.count > 1 ? ` x${summary.count}` : "";
+    return `- ${formatInlineCode(summary.name)}${count}`;
+  });
+  return `## Skill Usage\n${items.join("\n")}`;
 }
 
 /**

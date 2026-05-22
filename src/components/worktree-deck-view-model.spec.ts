@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Worktree } from "../application/worktree.entity";
 import type { WorktreeTitle } from "../application/worktree-title.entity";
 import {
+  buildDetailMarkdown,
   buildSectionsWithMappings,
   buildSortedSectionEntries,
   formatBranchTitle,
@@ -22,6 +23,7 @@ function buildTitleEntry(args: {
   status?: "working" | "done" | null;
   sessionKind?: WorktreeTitle["sessionKind"];
   isWaitingForUser?: boolean;
+  skillUsages?: WorktreeTitle["skillUsages"];
 }): WorktreeTitle {
   return {
     title: args.title,
@@ -30,6 +32,7 @@ function buildTitleEntry(args: {
     status: args.status ?? null,
     sessionKind: args.sessionKind ?? "main",
     isWaitingForUser: args.isWaitingForUser,
+    skillUsages: args.skillUsages,
   };
 }
 
@@ -81,6 +84,27 @@ describe("worktree-deck-view-model", () => {
     });
 
     expect(title).toBe("⚠️ feature-a");
+  });
+
+  it("トップ詳細にスキル使用履歴を同名集計して表示する", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [
+        buildTitleEntry({
+          title: "Implement feature",
+          latestMessage: "Done",
+          updatedAt: 100,
+          skillUsages: [
+            { name: "github:yeet", timestamp: "2026-05-03T10:00:00.000Z" },
+            { name: "GitHub Yeet", timestamp: "2026-05-03T10:01:00.000Z" },
+            { name: "imagegen", timestamp: null },
+          ],
+        }),
+      ],
+    });
+
+    expect(markdown).toContain("## Skill Usage\n- `github:yeet` x2\n- `imagegen`\n\n## 「Implement feature」");
   });
 
   it("Worktrees Only モードでは repo ごとのセクションを返して origin だけの mapping は含めない", () => {
