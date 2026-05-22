@@ -356,12 +356,16 @@ export function buildSortedSectionEntries(args: {
 /**
  * セッションタイトル表示用の Markdown を整形する
  */
-export function formatTitleEntry(entry: WorktreeTitle): string {
+export function formatTitleEntry(entry: WorktreeTitle, gitStatus: string | null = null): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
-  const singleLineMessage = latestMessage.replace(/[\r\n]+/g, " ");
-  const skillUsageMarkdown = formatSkillUsageSummary(entry.skillUsages ?? []);
-  const titleMarkdown = `## 「${entry.title}」\n${singleLineMessage}`;
-  return skillUsageMarkdown ? `${skillUsageMarkdown}\n\n${titleMarkdown}` : titleMarkdown;
+  const rows = [
+    ["📝", entry.title],
+    ["🌿", gitStatus ?? "No git status"],
+    ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
+    ["🤖", latestMessage],
+  ];
+  const [headerRow, ...bodyRows] = rows.map(([key, value]) => `| ${key} | ${formatTableValue(value)} |`);
+  return [headerRow, "| --- | --- |", ...bodyRows].join("\n");
 }
 
 /**
@@ -400,18 +404,26 @@ function formatInlineCode(value: string): string {
 }
 
 /**
- * トップ画面詳細向けのスキル使用履歴 Markdown を作る
+ * Markdown テーブル内の値を崩れない文字列へ整形する
+ */
+function formatTableValue(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+}
+
+/**
+ * トップ画面詳細向けのスキル使用履歴テキストを作る
  */
 function formatSkillUsageSummary(skillUsages: NonNullable<WorktreeTitle["skillUsages"]>): string | null {
   const summaries = summarizeSkillUsages(skillUsages);
   if (summaries.length === 0) {
     return null;
   }
-  const items = summaries.map((summary) => {
-    const count = summary.count > 1 ? ` x${summary.count}` : "";
-    return `- ${formatInlineCode(summary.name)}${count}`;
-  });
-  return `## Skill Usage\n${items.join("\n")}`;
+  return summaries
+    .map((summary) => {
+      const count = summary.count > 1 ? ` x${summary.count}` : "";
+      return `${formatInlineCode(summary.name)}${count}`;
+    })
+    .join(", ");
 }
 
 /**
@@ -486,12 +498,8 @@ export function buildDetailMarkdown({
   openApp?: WorktreeOpenApp | null;
   useLastCommitSeparator?: boolean;
 }): string {
-  void title;
   void openApp;
   const pinnedTitle = resolvePinnedTitleEntry(titles);
-  const detailLines = pinnedTitle
-    ? [formatTitleEntry(pinnedTitle)]
-    : [isTitlesLoading ? "Loading session titles..." : "No session titles"];
   const lines: string[] = [];
   if (mergeStatus != null) {
     const metaLine = formatWorktreeMetaLine({
@@ -512,11 +520,20 @@ export function buildDetailMarkdown({
       lines.push(formatLastCommitAt(lastCommitAt, useLastCommitSeparator));
     }
   }
-  if (lines.length > 0) {
-    lines.push("");
+  const gitStatus = lines.length > 0 ? lines.join("\n") : null;
+  if (pinnedTitle) {
+    return formatTitleEntry(pinnedTitle, gitStatus);
   }
-  lines.push("---", detailLines.join("\n\n"));
-  return lines.join("\n");
+  return formatTitleEntry(
+    {
+      title,
+      status: null,
+      latestMessage: isTitlesLoading ? "Loading session titles..." : "No session titles",
+      updatedAt: 0,
+      sessionKind: "main",
+    },
+    gitStatus,
+  );
 }
 
 /**

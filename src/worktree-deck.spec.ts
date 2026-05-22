@@ -133,9 +133,9 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("## 「途中の作業タイトル」");
+    expect(result).toContain("| 📝 | 途中の作業タイトル |");
     expect(result).toContain("middle progress");
-    expect(result).not.toContain("## 「Review: tighten lint rules」");
+    expect(result).not.toContain("| 📝 | Review: tighten lint rules |");
   });
 
   it("最新セッションがレビューでなければそのセッションを表示する", () => {
@@ -156,9 +156,9 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("## 「Latest Session」");
+    expect(result).toContain("| 📝 | Latest Session |");
     expect(result).toContain("Latest message");
-    expect(result).not.toContain("## 「Older Session」");
+    expect(result).not.toContain("| 📝 | Older Session |");
   });
 
   it("レビュー以外が存在しないときは最新セッションを表示する", () => {
@@ -183,9 +183,9 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("## 「Review: latest」");
+    expect(result).toContain("| 📝 | Review: latest |");
     expect(result).toContain("latest review message");
-    expect(result).not.toContain("## 「Review: older」");
+    expect(result).not.toContain("| 📝 | Review: older |");
   });
 
   it("作業フェーズのテキストは詳細に表示しない", () => {
@@ -222,7 +222,7 @@ describe("buildDetailMarkdown", () => {
       lastCommitAt: "2026-02-19 14:03",
     });
 
-    expect(result).toContain("🌿 main (+0 -0)  ⚠️ dirty");
+    expect(result).toContain("| 🌿 | 🌿 main (+0 -0)  ⚠️ dirty |");
     expect(result).not.toContain("🕒");
     expect(result).not.toContain("Base:");
     expect(result).not.toContain("Merged:");
@@ -252,7 +252,7 @@ describe("buildDetailMarkdown", () => {
       lastCommitAt: "2026-02-18 14:03",
     });
 
-    expect(result).toContain("🌿 main (+0 -0)  ⚠️ dirty");
+    expect(result).toContain("| 🌿 | 🌿 main (+0 -0)  ⚠️ dirty |");
     expect(result).not.toContain("🕒");
   });
 
@@ -266,7 +266,7 @@ describe("buildDetailMarkdown", () => {
       lastCommitAt: "2026-02-19 14:03",
     });
 
-    expect(result).toContain("🌿 main (+0 -0)  ⚠️ dirty");
+    expect(result).toContain("| 🌿 | 🌿 main (+0 -0)  ⚠️ dirty |");
     expect(result).not.toContain("🕒");
   });
 
@@ -279,7 +279,7 @@ describe("buildDetailMarkdown", () => {
       useLastCommitSeparator: false,
     });
 
-    expect(result).toContain("Commit: 2026-02-19 14:03");
+    expect(result).toContain("| 🌿 | Commit: 2026-02-19 14:03 |");
     expect(result).not.toContain("❔ unknown");
     expect(result).not.toContain("🕒");
   });
@@ -292,7 +292,7 @@ describe("buildDetailMarkdown", () => {
     });
 
     expect(result).not.toContain("# Sessions");
-    expect(result).toContain("---\nNo session titles");
+    expect(result).toContain("| 🤖 | No session titles |");
   });
 });
 
@@ -305,8 +305,8 @@ describe("formatTitleEntry", () => {
     });
 
     const result = formatTitleEntry(entry);
-    const messageLine = result.split("\n")[1] ?? "";
-    const message = messageLine.replace(/^- /, "");
+    const messageLine = result.split("\n").find((line) => line.startsWith("| 🤖 |")) ?? "";
+    const message = messageLine.replace("| 🤖 | ", "").replace(" |", "");
 
     expect(message.length).toBe(210);
   });

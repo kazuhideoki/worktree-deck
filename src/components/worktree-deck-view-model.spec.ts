@@ -86,14 +86,18 @@ describe("worktree-deck-view-model", () => {
     expect(title).toBe("⚠️ feature-a");
   });
 
-  it("トップ詳細にスキル使用履歴を同名集計して表示する", () => {
+  it("トップ詳細をキーバリュー表で表示する", () => {
     const markdown = buildDetailMarkdown({
       title: "feature-a",
       isTitlesLoading: false,
+      mergeStatus: "dirty",
+      baseRef: "main",
+      aheadCount: 2,
+      behindCount: 1,
       titles: [
         buildTitleEntry({
           title: "Implement feature",
-          latestMessage: "Done",
+          latestMessage: "Done\n\n- changed a | b\n- verified",
           updatedAt: 100,
           skillUsages: [
             { name: "github:yeet", timestamp: "2026-05-03T10:00:00.000Z" },
@@ -104,7 +108,15 @@ describe("worktree-deck-view-model", () => {
       ],
     });
 
-    expect(markdown).toContain("## Skill Usage\n- `github:yeet` x2\n- `imagegen`\n\n## 「Implement feature」");
+    expect(markdown).toBe(
+      [
+        "| 📝 | Implement feature |",
+        "| --- | --- |",
+        "| 🌿 | 🌿 main (+2 -1)  ⚠️ dirty |",
+        "| 🧰 | `github:yeet` x2, `imagegen` |",
+        "| 🤖 | Done<br><br>- changed a \\| b<br>- verified |",
+      ].join("\n"),
+    );
   });
 
   it("Worktrees Only モードでは repo ごとのセクションを返して origin だけの mapping は含めない", () => {
