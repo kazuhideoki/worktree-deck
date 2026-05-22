@@ -18,6 +18,7 @@ type SessionEntry = {
   title: string;
   sessionPath: string | null;
   icon: { source: Icon; tintColor?: Color };
+  skillUsages: NonNullable<WorktreeTitle["skillUsages"]>;
 };
 
 /**
@@ -50,6 +51,7 @@ export function buildSessionEntries(sessions: WorktreeTitle[]): SessionEntry[] {
         source: Icon.Message,
         tintColor: resolveSessionStatusTint(session.status),
       },
+      skillUsages: session.skillUsages ?? [],
     };
   });
 }
@@ -308,19 +310,20 @@ function SessionFullMessagesView({ title, sessionPath, homeDir }: SessionFullMes
 /**
  * セッション詳細の Markdown を組み立てる
  */
-function buildSessionDetailMarkdown(args: {
+export function buildSessionDetailMarkdown(args: {
   entry: SessionEntry;
   messages: SessionMessage[] | null;
   isLoading: boolean;
 }): string {
+  const heading = buildSessionDetailHeading(args.entry);
   if (!args.entry.sessionPath) {
-    return `# ${args.entry.title}\n\nSession file not available.`;
+    return `${heading}\n\nSession file not available.`;
   }
   if (args.isLoading) {
-    return `# ${args.entry.title}\n\nLoading session messages...`;
+    return `${heading}\n\nLoading session messages...`;
   }
   if (!args.messages || args.messages.length === 0) {
-    return `# ${args.entry.title}\n\nNo session messages found.`;
+    return `${heading}\n\nNo session messages found.`;
   }
   const display = sessionDetailUsecase.buildDisplay({
     title: args.entry.title,
@@ -328,10 +331,42 @@ function buildSessionDetailMarkdown(args: {
   });
   if (display.messages.length === 0) {
     const emptyMessage = display.emptyMessage ?? "No session messages found.";
-    return `# ${args.entry.title}\n\n${emptyMessage}`;
+    return `${heading}\n\n${emptyMessage}`;
   }
   const blocks = display.messages.map((message) => formatSessionMessageBlock(message)).join("\n\n");
-  return `# ${args.entry.title}\n\n${blocks}`;
+  return `${heading}\n\n${blocks}`;
+}
+
+/**
+ * セッション詳細の見出しをスキル使用履歴つきで作る
+ */
+function buildSessionDetailHeading(entry: SessionEntry): string {
+  const skillUsageMarkdown = formatSkillUsageHistory(entry.skillUsages);
+  if (!skillUsageMarkdown) {
+    return `# ${entry.title}`;
+  }
+  return `${skillUsageMarkdown}\n\n# ${entry.title}`;
+}
+
+/**
+ * Markdown 内のインラインコード用にスキル名を整形する
+ */
+function formatInlineCode(value: string): string {
+  return `\`${value.replace(/`/g, "")}\``;
+}
+
+/**
+ * スキル使用履歴の Markdown を作る
+ */
+function formatSkillUsageHistory(skillUsages: NonNullable<WorktreeTitle["skillUsages"]>): string | null {
+  if (skillUsages.length === 0) {
+    return null;
+  }
+  const items = skillUsages.map((usage) => {
+    const timestamp = usage.timestamp ? ` (${usage.timestamp})` : "";
+    return `- ${formatInlineCode(usage.name)}${timestamp}`;
+  });
+  return `## Skill Usage\n\n${items.join("\n")}`;
 }
 
 /**

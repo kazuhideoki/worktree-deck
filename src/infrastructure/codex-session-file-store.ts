@@ -38,6 +38,7 @@ type TitlesCacheFileEntry = {
   status: SessionStatus | null;
   cwds: string[];
   sessionKind: SessionKind;
+  skillUsages: ParsedSessionLog["skillUsages"];
   reviewTurnIds: string[];
   titleTurnId: string | null;
   isWaitingForUser: boolean;
@@ -57,7 +58,7 @@ const ENV_SEARCH_DAYS = "WORKTREE_DECK_SEARCH_DAYS";
 /**
  * タイトルキャッシュのキー接頭辞
  */
-const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v10";
+const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v11";
 /**
  * working を done に切り替える経過日数の環境変数名
  */
@@ -497,6 +498,7 @@ function normalizeTitlesCacheStorage(value: unknown): TitlesCacheStorage | null 
     const latestMessage = typeof rawEntry.latestMessage === "string" ? rawEntry.latestMessage : null;
     const status = rawEntry.status === "working" || rawEntry.status === "done" ? rawEntry.status : null;
     const sessionKind = normalizeSessionKind(rawEntry.sessionKind);
+    const skillUsages = normalizeSessionSkillUsages(rawEntry.skillUsages);
     const isWaitingForUser = typeof rawEntry.isWaitingForUser === "boolean" ? rawEntry.isWaitingForUser : false;
     const sessionThreadId = typeof rawEntry.sessionThreadId === "string" ? rawEntry.sessionThreadId : null;
     const parentThreadId = typeof rawEntry.parentThreadId === "string" ? rawEntry.parentThreadId : null;
@@ -519,6 +521,7 @@ function normalizeTitlesCacheStorage(value: unknown): TitlesCacheStorage | null 
       status,
       cwds,
       sessionKind,
+      skillUsages,
       reviewTurnIds,
       titleTurnId,
       isWaitingForUser,
@@ -527,6 +530,30 @@ function normalizeTitlesCacheStorage(value: unknown): TitlesCacheStorage | null 
     };
   }
   return { searchDays, cachedAt, files };
+}
+
+/**
+ * キャッシュ由来のスキル使用履歴を正規化する
+ */
+function normalizeSessionSkillUsages(value: unknown): ParsedSessionLog["skillUsages"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const raw = item as Record<string, unknown>;
+    if (typeof raw.name !== "string" || !raw.name.trim()) {
+      return [];
+    }
+    return [
+      {
+        name: raw.name.trim(),
+        timestamp: typeof raw.timestamp === "string" ? raw.timestamp : null,
+      },
+    ];
+  });
 }
 
 /**
@@ -611,6 +638,7 @@ function buildExplicitOnlyTitles(args: {
             startedAt: parseExplicitTitleTimestamp(entry.createdAt),
             sessionKind: "main" as const,
             isWaitingForUser: false,
+            skillUsages: [],
           };
         })
         .sort((left, right) => {
@@ -692,6 +720,7 @@ export async function loadTitlesForPaths(args: {
           isWaitingForUser: parsed.isWaitingForUser,
           sessionThreadId: parsed.sessionThreadId,
           parentThreadId: parsed.parentThreadId,
+          skillUsages: parsed.skillUsages,
         };
       }
 
@@ -748,6 +777,7 @@ export async function loadTitlesForPaths(args: {
           reviewTurnIds: entry.reviewTurnIds,
           isWaitingForUser: entry.isWaitingForUser,
           sessionThreadId: entry.sessionThreadId,
+          skillUsages: entry.skillUsages,
         };
         const titleKey = `${entry.sessionThreadId ?? resolvedTitle}::${sessionFile.path}`;
         if (existing) {
@@ -784,6 +814,7 @@ export async function loadTitlesForPaths(args: {
         titleTurnId: null,
         reviewTurnIds: [],
         sessionPath: undefined,
+        skillUsages: [],
       };
       const existing = titleEntries.get(path);
       const titleKey = `${explicitTitle.threadId}::explicit`;
@@ -822,6 +853,7 @@ export async function loadTitlesForPaths(args: {
           isWaitingForUser:
             entry.isWaitingForUser ||
             (entry.sessionThreadId ? expandedWaitingForUserThreadIds.has(entry.sessionThreadId) : false),
+          skillUsages: entry.skillUsages,
         })),
     );
   }

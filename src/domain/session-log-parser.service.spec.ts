@@ -184,6 +184,45 @@ describe("sessionLogParserService", () => {
     expect(sessionLogParserService.finalizeParseState(state).isWaitingForUser).toBe(false);
   });
 
+  it("SKILL.md 読み込みと assistant commentary からスキル使用履歴を解析する", () => {
+    const result = parseLines([
+      {
+        timestamp: "2026-05-03T10:00:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: JSON.stringify({
+            cmd: "sed -n '1,220p' /Users/me/.codex/skills/.system/imagegen/SKILL.md",
+          }),
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "agent_message",
+          message: "imagegen スキルで画像を生成します。",
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:05:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Using the Computer Use skill because the app UI must be checked." }],
+          phase: "commentary",
+        },
+      },
+    ]);
+
+    expect(result.skillUsages).toEqual([
+      { name: "imagegen", timestamp: "2026-05-03T10:00:00.000Z" },
+      { name: "Computer Use", timestamp: "2026-05-03T10:05:00.000Z" },
+    ]);
+  });
+
   it.each([
     {
       name: "cli",

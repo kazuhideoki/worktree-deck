@@ -5,6 +5,7 @@ import {
   PRIMARY_SESSION_ACTION_TITLE,
   PRIMARY_SESSION_ACTION_SHORTCUT,
   SECONDARY_SESSION_ACTION_TITLE,
+  buildSessionDetailMarkdown,
   buildSessionEntries,
   resolveSessionOpenTargets,
   resolveSessionStatusTint,
@@ -75,6 +76,41 @@ describe("buildSessionEntries", () => {
     expect(entries[0]?.icon).toEqual({ source: "message", tintColor: Color.Green });
     expect(entries[1]?.icon).toEqual({ source: "message", tintColor: Color.Blue });
     expect(entries[2]?.icon).toEqual({ source: "message", tintColor: undefined });
+  });
+
+  it("セッション一覧の表示データにスキル使用履歴を含める", () => {
+    const sessions: WorktreeTitle[] = [
+      {
+        ...buildSession({ title: "session", updatedAt: 1, status: "done", sessionPath: "/tmp/a.jsonl" }),
+        skillUsages: [{ name: "imagegen", timestamp: "2026-05-03T10:00:00.000Z" }],
+      },
+    ];
+
+    expect(buildSessionEntries(sessions)[0]?.skillUsages).toEqual([
+      { name: "imagegen", timestamp: "2026-05-03T10:00:00.000Z" },
+    ]);
+  });
+});
+
+describe("buildSessionDetailMarkdown", () => {
+  it("タイトルの上にスキル使用履歴を表示する", () => {
+    const [entry] = buildSessionEntries([
+      {
+        ...buildSession({ title: "Implement feature", updatedAt: 1, status: "done", sessionPath: "/tmp/a.jsonl" }),
+        skillUsages: [
+          { name: "imagegen", timestamp: "2026-05-03T10:00:00.000Z" },
+          { name: "Computer Use", timestamp: null },
+        ],
+      },
+    ]);
+
+    expect(buildSessionDetailMarkdown({ entry: entry!, messages: [], isLoading: false })).toBe(
+      "## Skill Usage\n\n" +
+        "- `imagegen` (2026-05-03T10:00:00.000Z)\n" +
+        "- `Computer Use`\n\n" +
+        "# Implement feature\n\n" +
+        "No session messages found.",
+    );
   });
 });
 

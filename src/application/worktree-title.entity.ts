@@ -1,4 +1,4 @@
-import type { SessionKind } from "../domain/session-log-parser.service";
+import type { SessionKind, SessionSkillUsage } from "../domain/session-log-parser.service";
 
 /**
  * worktree に紐づくセッションタイトル表示情報
@@ -12,4 +12,5 @@ export type WorktreeTitle = {
   sessionPath?: string;
   sessionKind: SessionKind;
   isWaitingForUser?: boolean;
+  skillUsages?: SessionSkillUsage[];
 };

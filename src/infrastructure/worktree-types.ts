@@ -2,11 +2,13 @@ import type {
   SessionKind as ParserSessionKind,
   SessionMessage as ParserSessionMessage,
   SessionMessageRole as ParserSessionMessageRole,
+  SessionSkillUsage as ParserSessionSkillUsage,
   SessionStatus as ParserSessionStatus,
 } from "../domain/session-log-parser.service";
 
 export type SessionKind = ParserSessionKind;
 type SessionStatus = ParserSessionStatus;
+export type SessionSkillUsage = ParserSessionSkillUsage;
 
 export type WorktreeTitle = {
   title: string;
@@ -17,6 +19,7 @@ export type WorktreeTitle = {
   sessionPath?: string;
   sessionKind: SessionKind;
   isWaitingForUser?: boolean;
+  skillUsages?: SessionSkillUsage[];
 };
 
 /**

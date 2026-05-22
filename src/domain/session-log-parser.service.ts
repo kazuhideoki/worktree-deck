@@ -33,6 +33,14 @@ export type SessionMessage = {
 };
 
 /**
+ * セッション内で検出したスキル使用
+ */
+export type SessionSkillUsage = {
+  name: string;
+  timestamp: string | null;
+};
+
+/**
  * セッションログ解析の途中状態
  */
 export type SessionParseState = {
@@ -51,6 +59,7 @@ export type SessionParseState = {
   reviewTurnIds: Set<string>;
   currentTurnId: string | null;
   waitingForUserCallIds: Set<string>;
+  skillUsages: SessionSkillUsage[];
 };
 
 /**
@@ -68,6 +77,7 @@ export type ParsedSessionLog = {
   parentThreadId: string | null;
   reviewTurnIds: string[];
   isWaitingForUser: boolean;
+  skillUsages: SessionSkillUsage[];
 };
 
 /**
@@ -103,6 +113,26 @@ const TITLE_MAX_LENGTH_CHARS = 60;
  * 最新メッセージの表示上限文字数
  */
 const LATEST_MESSAGE_MAX_LENGTH_CHARS = 500;
+
+/**
+ * 同一スキル使用を隣接重複としてまとめる時間幅
+ */
+const SKILL_USAGE_DEDUPE_WINDOW_MS = 2 * 60 * 1000;
+
+/**
+ * SKILL.md 読み込み command からスキル名を取り出すパターン
+ */
+const SKILL_FILE_PATH_PATTERN = /\/skills\/(?:\.[^/\s]+\/)?([^/\s]+)\/SKILL\.md\b/;
+
+/**
+ * 英語のスキル使用宣言からスキル名を取り出すパターン
+ */
+const ENGLISH_SKILL_USAGE_PATTERN = /\bUsing (?:the )?([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?) skill\b/i;
+
+/**
+ * 日本語のスキル使用宣言からスキル名を取り出すパターン
+ */
+const JAPANESE_SKILL_USAGE_PATTERN = /([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?)\s*スキル(?:で|を|として|に|$)/;
 
 /**
  * 指示メッセージ判定用の文字列
@@ -159,6 +189,7 @@ function createParseState(): SessionParseState {
     reviewTurnIds: new Set<string>(),
     currentTurnId: null,
     waitingForUserCallIds: new Set<string>(),
+    skillUsages: [],
   };
 }
 
@@ -555,6 +586,100 @@ function parseFunctionCallArguments(value: unknown): Record<string, unknown> | n
 }
 
 /**
+ * 表示・重複判定に使うスキル名を整形する
+ */
+function normalizeSkillName(value: string): string | null {
+  const trimmed = value
+    .trim()
+    .replace(/^the\s+/i, "")
+    .replace(/^`+|`+$/g, "")
+    .trim();
+  if (!trimmed || trimmed.length > 80) {
+    return null;
+  }
+  return trimmed;
+}
+
+/**
+ * スキル名の重複判定キーを作る
+ */
+function buildSkillNameKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * スキル使用時刻をミリ秒に変換する
+ */
+function parseSkillUsageTimestamp(value: string | null): number | null {
+  const parsed = parseLogTimestampToMs(value);
+  return parsed == null ? null : parsed;
+}
+
+/**
+ * 近接した同一スキル使用か判定する
+ */
+function isDuplicateSkillUsage(left: SessionSkillUsage, right: SessionSkillUsage): boolean {
+  if (buildSkillNameKey(left.name) !== buildSkillNameKey(right.name)) {
+    return false;
+  }
+  const leftMs = parseSkillUsageTimestamp(left.timestamp);
+  const rightMs = parseSkillUsageTimestamp(right.timestamp);
+  if (leftMs == null || rightMs == null) {
+    return true;
+  }
+  return Math.abs(rightMs - leftMs) <= SKILL_USAGE_DEDUPE_WINDOW_MS;
+}
+
+/**
+ * 解析状態へスキル使用を追加する
+ */
+function addSkillUsage(state: SessionParseState, usage: SessionSkillUsage | null): void {
+  if (!usage) {
+    return;
+  }
+  const latest = state.skillUsages.at(-1);
+  if (latest && isDuplicateSkillUsage(latest, usage)) {
+    return;
+  }
+  state.skillUsages.push(usage);
+}
+
+/**
+ * function_call からスキル使用を抽出する
+ */
+function extractSkillUsageFromFunctionCall(
+  value: Record<string, unknown>,
+  timestamp: string | null,
+): SessionSkillUsage | null {
+  if (value.type !== "response_item") {
+    return null;
+  }
+  const payload = value.payload;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const payloadValue = payload as Record<string, unknown>;
+  if (payloadValue.type !== "function_call") {
+    return null;
+  }
+  const args = parseFunctionCallArguments(payloadValue.arguments);
+  const command = typeof args?.cmd === "string" ? args.cmd : "";
+  const match = command.match(SKILL_FILE_PATH_PATTERN);
+  const name = match?.[1] ? normalizeSkillName(match[1]) : null;
+  return name ? { name, timestamp } : null;
+}
+
+/**
+ * assistant の commentary からスキル使用を抽出する
+ */
+function extractSkillUsageFromAssistantText(text: string, timestamp: string | null): SessionSkillUsage | null {
+  const englishMatch = text.match(ENGLISH_SKILL_USAGE_PATTERN);
+  const japaneseMatch = text.match(JAPANESE_SKILL_USAGE_PATTERN);
+  const name = normalizeSkillName(englishMatch?.[1] ?? japaneseMatch?.[1] ?? "");
+  return name ? { name, timestamp } : null;
+}
+
+/**
  * function_call がプラグイン呼び出しか判定する
  */
 function isPluginFunctionCallPayload(payload: Record<string, unknown>): boolean {
@@ -946,6 +1071,13 @@ function updateParseState(args: {
       state.goalObjectiveTimestamp = timestamp;
       state.latestStatus = "working";
     }
+    addSkillUsage(state, extractSkillUsageFromFunctionCall(parsed, timestamp));
+    if (eventMessage?.role === "agent") {
+      addSkillUsage(state, extractSkillUsageFromAssistantText(eventMessage.message, timestamp));
+    }
+    if (responseMessage?.role === "assistant") {
+      addSkillUsage(state, extractSkillUsageFromAssistantText(responseMessage.text, timestamp));
+    }
     const responseItemType = extractResponseItemType(parsed);
     const responseItemCallId = extractResponseItemCallId(parsed);
     const waitingForUserCallId = extractWaitingForUserCallId(parsed);
@@ -993,6 +1125,7 @@ function finalizeParseState(state: SessionParseState): ParsedSessionLog {
     parentThreadId: state.parentThreadId,
     reviewTurnIds: Array.from(state.reviewTurnIds),
     isWaitingForUser: state.waitingForUserCallIds.size > 0,
+    skillUsages: [...state.skillUsages],
   };
 }
 
