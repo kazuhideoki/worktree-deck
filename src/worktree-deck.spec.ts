@@ -69,6 +69,7 @@ function buildTitleEntry(args: {
   status?: "working" | "done" | null;
   sessionKind?: WorktreeTitle["sessionKind"];
   isWaitingForUser?: boolean;
+  skillUsages?: WorktreeTitle["skillUsages"];
 }): WorktreeTitle {
   return {
     title: args.title,
@@ -77,6 +78,7 @@ function buildTitleEntry(args: {
     status: args.status ?? null,
     sessionKind: args.sessionKind ?? "main",
     isWaitingForUser: args.isWaitingForUser,
+    skillUsages: args.skillUsages,
   };
 }
 
@@ -297,10 +299,72 @@ describe("buildDetailMarkdown", () => {
 });
 
 describe("formatTitleEntry", () => {
-  it("最新メッセージを省略せず表示する", () => {
+  it("タイトルは詳細テーブルで1行に収まりやすい長さへ省略する", () => {
+    const entry = buildTitleEntry({
+      title: "power-mode normal で無操作時ロック時のパスワード要求を修正",
+      latestMessage: "message",
+      updatedAt: 0,
+    });
+
+    const result = formatTitleEntry(entry);
+
+    expect(result).toContain("| 📝 | power-mode normal で無操作時ロック時のパスワード要求... |");
+    expect(result).not.toContain("を修正");
+  });
+
+  it("重複排除後のスキルが3種類以上なら2種類と残り件数で1行に畳む", () => {
     const entry = buildTitleEntry({
       title: "Session Title",
-      latestMessage: "a".repeat(210),
+      latestMessage: "message",
+      updatedAt: 0,
+      skillUsages: [
+        { name: "review-by-sub-agents", timestamp: null },
+        { name: "browser:browser", timestamp: null },
+        { name: "computer-use:computer-use", timestamp: null },
+      ],
+    });
+
+    const result = formatTitleEntry(entry);
+
+    expect(result).toContain("| 🧰 | `review-by-sub-agents`, `browser:browser` +1 |");
+    expect(result).not.toContain("computer-use");
+  });
+
+  it("重複スキルは乗算記号で回数を表示する", () => {
+    const entry = buildTitleEntry({
+      title: "Session Title",
+      latestMessage: "message",
+      updatedAt: 0,
+      skillUsages: [
+        { name: "github:yeet", timestamp: null },
+        { name: "GitHub Yeet", timestamp: null },
+        { name: "imagegen", timestamp: null },
+      ],
+    });
+
+    const result = formatTitleEntry(entry);
+
+    expect(result).toContain("| 🧰 | `github:yeet` ×2, `imagegen` |");
+    expect(result).not.toContain("+");
+  });
+
+  it("長いスキル名は1行に収まりやすい長さへ省略する", () => {
+    const entry = buildTitleEntry({
+      title: "Session Title",
+      latestMessage: "message",
+      updatedAt: 0,
+      skillUsages: [{ name: "github:very-long-review-comment-addressing-workflow", timestamp: null }],
+    });
+
+    const result = formatTitleEntry(entry);
+
+    expect(result).toContain("| 🧰 | `github:very-long-review-c...` |");
+  });
+
+  it("LastAnswer 相当の最新メッセージは省略せず表示する", () => {
+    const entry = buildTitleEntry({
+      title: "Session Title",
+      latestMessage: "LastAnswer: " + "a".repeat(210),
       updatedAt: 0,
     });
 
@@ -308,7 +372,8 @@ describe("formatTitleEntry", () => {
     const messageLine = result.split("\n").find((line) => line.startsWith("| 🤖 |")) ?? "";
     const message = messageLine.replace("| 🤖 | ", "").replace(" |", "");
 
-    expect(message.length).toBe(210);
+    expect(message).toBe("LastAnswer: " + "a".repeat(210));
+    expect(message).not.toContain("...");
   });
 });
 
