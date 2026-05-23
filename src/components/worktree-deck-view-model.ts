@@ -373,20 +373,13 @@ export function buildSortedSectionEntries(args: {
  */
 export function formatTitleEntry(entry: WorktreeTitle, gitStatus: string | null = null): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
-  const shouldRenderLatestMessageBlock = hasLineBreak(latestMessage);
   const rows = [
     ["📝", truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS)],
     ["🌿", gitStatus ?? "No git status"],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
   ];
-  if (!shouldRenderLatestMessageBlock) {
-    rows.push(["💬", latestMessage]);
-  }
   const [headerRow, ...bodyRows] = rows.map(([key, value]) => `| ${key} | ${formatTableValue(value)} |`);
   const table = [headerRow, "| --- | --- |", ...bodyRows].join("\n");
-  if (!shouldRenderLatestMessageBlock) {
-    return table;
-  }
   return `${table}\n\n${formatLatestMessageBlock(latestMessage)}`;
 }
 
@@ -472,14 +465,7 @@ function formatTableValue(value: string): string {
 }
 
 /**
- * 文字列に改行が含まれるか判定する
- */
-function hasLineBreak(value: string): boolean {
-  return /\r?\n/.test(value);
-}
-
-/**
- * 改行を含む最新回答の Markdown ブロックを作る
+ * 最新回答の Markdown ブロックを作る
  */
 function formatLatestMessageBlock(value: string): string {
   return value.trim();

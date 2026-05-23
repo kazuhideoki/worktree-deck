@@ -294,7 +294,9 @@ describe("buildDetailMarkdown", () => {
     });
 
     expect(result).not.toContain("# Sessions");
-    expect(result).toContain("| 💬 | No session titles |");
+    expect(result).toContain("| 🧰 | None |");
+    expect(result).not.toContain("| 💬 |");
+    expect(result.endsWith("\n\nNo session titles")).toBe(true);
   });
 });
 
@@ -361,7 +363,7 @@ describe("formatTitleEntry", () => {
     expect(result).toContain("| 🧰 | `github:very-long-review-c...` |");
   });
 
-  it("LastAnswer 相当の最新メッセージは省略せず表示する", () => {
+  it("LastAnswer 相当の最新メッセージは表外で省略せず表示する", () => {
     const entry = buildTitleEntry({
       title: "Session Title",
       latestMessage: "LastAnswer: " + "a".repeat(210),
@@ -369,11 +371,10 @@ describe("formatTitleEntry", () => {
     });
 
     const result = formatTitleEntry(entry);
-    const messageLine = result.split("\n").find((line) => line.startsWith("| 💬 |")) ?? "";
-    const message = messageLine.replace("| 💬 | ", "").replace(" |", "");
 
-    expect(message).toBe("LastAnswer: " + "a".repeat(210));
-    expect(message).not.toContain("...");
+    expect(result).not.toContain("| 💬 |");
+    expect(result.endsWith("\n\nLastAnswer: " + "a".repeat(210))).toBe(true);
+    expect(result).not.toContain("...");
   });
 
   it("改行を含む LastAnswer 相当の最新メッセージは見出しなしの本文ブロックで表示する", () => {
