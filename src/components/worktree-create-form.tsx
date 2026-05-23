@@ -2,6 +2,7 @@ import {
   Action,
   ActionPanel,
   Form,
+  Grid,
   Icon,
   List,
   LocalStorage,
@@ -14,7 +15,7 @@ import {
 import { useCachedState } from "@raycast/utils";
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   appendUniqueImagePaths,
   autoStartImageInputUsecase,
@@ -43,7 +44,7 @@ import { buildBranchOptions, formatExecErrorMessage, type BranchOption } from ".
 
 const CREATE_WORKTREE_FORM_ITEM_IDS = {
   initialPrompt: "initialPrompt",
-  imagePathsText: "imagePathsText",
+  imagePaths: "imagePaths",
   model: "model",
   serviceTier: "serviceTier",
   reasoningEffort: "reasoningEffort",
@@ -142,7 +143,7 @@ export function CreateWorktreeForm({
   onComplete?: () => void;
   worktreeNameDelimiter: string;
 }) {
-  const { pop } = useNavigation();
+  const { pop, push } = useNavigation();
   const [effectiveInitialRepoRoot] = useState<string | null>(() => initialRepoRoot ?? null);
   const [repoOptions, setRepoOptions] = useState<RepoOption[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<string>("");
@@ -161,9 +162,6 @@ export function CreateWorktreeForm({
   const [imagePathsTextDraft, setImagePathsTextDraft] = useCachedState<string>(
     CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.imagePathsText,
     "",
-  );
-  const [isImageInputOpen, setIsImageInputOpen] = useState(
-    () => parseAutoStartImagePathsText(imagePathsTextDraft).length > 0,
   );
   const [modelDraft, setModelDraft] = useCachedState<string>(
     CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.model,
@@ -345,21 +343,11 @@ export function CreateWorktreeForm({
     };
   }, [autoStartDraft, selectedRepo, setModelDraft, setPermissionsDraft, setReasoningEffortDraft, setServiceTierDraft]);
 
-  useEffect(() => {
-    if (parseAutoStartImagePathsText(imagePathsTextDraft).length > 0) {
-      setIsImageInputOpen(true);
-    }
-  }, [imagePathsTextDraft]);
-
   const handleToggleAutoStart = useCallback(() => {
     setAutoStartDraft((current) => !current);
   }, [setAutoStartDraft]);
 
-  const handleToggleImageInput = useCallback(() => {
-    setIsImageInputOpen((current) => !current);
-  }, []);
-
-  const handleAttachClipboardImage = useCallback(async () => {
+  const handleAttachClipboardImage = useCallback(async (): Promise<string[]> => {
     try {
       const imagePath = await autoStartImageInputUsecase.resolveClipboardImagePath({
         dependencies: autoStartImageInputDependencies,
@@ -369,27 +357,28 @@ export function CreateWorktreeForm({
           style: Toast.Style.Failure,
           title: "Clipboard image was not found",
         });
-        return;
+        return [];
       }
       setImagePathsTextDraft((current) =>
         formatAutoStartImagePathsText(appendUniqueImagePaths(parseAutoStartImagePathsText(current), [imagePath])),
       );
-      setIsImageInputOpen(true);
       await showToast({
         style: Toast.Style.Success,
         title: "Clipboard image attached",
         message: basename(imagePath),
       });
+      return [imagePath];
     } catch (error) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Failed to attach clipboard image",
         message: formatExecErrorMessage(error),
       });
+      return [];
     }
   }, [setImagePathsTextDraft]);
 
-  const handleAttachSelectedFinderImages = useCallback(async () => {
+  const handleAttachSelectedFinderImages = useCallback(async (): Promise<string[]> => {
     try {
       const imagePaths = await autoStartImageInputUsecase.resolveSelectedFinderImagePaths({
         dependencies: autoStartImageInputDependencies,
@@ -399,25 +388,62 @@ export function CreateWorktreeForm({
           style: Toast.Style.Failure,
           title: "Selected Finder images were not found",
         });
-        return;
+        return [];
       }
       setImagePathsTextDraft((current) =>
         formatAutoStartImagePathsText(appendUniqueImagePaths(parseAutoStartImagePathsText(current), imagePaths)),
       );
-      setIsImageInputOpen(true);
       await showToast({
         style: Toast.Style.Success,
         title: "Finder images attached",
         message: `${imagePaths.length}`,
       });
+      return imagePaths;
     } catch (error) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Failed to attach Finder images",
         message: formatExecErrorMessage(error),
       });
+      return [];
     }
   }, [setImagePathsTextDraft]);
+
+  const handleClearImagePaths = useCallback(() => {
+    setImagePathsTextDraft("");
+  }, [setImagePathsTextDraft]);
+
+  const imagePaths = useMemo(() => parseAutoStartImagePathsText(imagePathsTextDraft), [imagePathsTextDraft]);
+
+  const handleRemoveImagePath = useCallback(
+    (path: string) => {
+      setImagePathsTextDraft((current) =>
+        formatAutoStartImagePathsText(
+          parseAutoStartImagePathsText(current).filter((currentPath) => currentPath !== path),
+        ),
+      );
+    },
+    [setImagePathsTextDraft],
+  );
+
+  const handlePreviewImagePaths = useCallback(() => {
+    push(
+      <ImageAttachmentsPreview
+        imagePaths={imagePaths}
+        onRemoveImagePath={handleRemoveImagePath}
+        onClearImagePaths={handleClearImagePaths}
+        onAttachClipboardImage={handleAttachClipboardImage}
+        onAttachSelectedFinderImages={handleAttachSelectedFinderImages}
+      />,
+    );
+  }, [
+    handleAttachClipboardImage,
+    handleAttachSelectedFinderImages,
+    handleClearImagePaths,
+    handleRemoveImagePath,
+    imagePaths,
+    push,
+  ]);
 
   const handleSubmit = useCallback(
     async (values: CreateWorktreeFormValues) => {
@@ -432,9 +458,10 @@ export function CreateWorktreeForm({
       const baseBranch = values.baseBranch?.trim();
       const autoStart = autoStartDraft;
       const initialPrompt = values.initialPrompt?.trim();
-      const imagePaths = normalizeAutoStartImagePaths(
-        parseAutoStartImagePathsText(values.imagePathsText ?? imagePathsTextDraft),
-      );
+      const imagePaths = resolveCreateWorktreeFormImagePaths({
+        pickerValue: values.imagePaths,
+        draftText: imagePathsTextDraft,
+      });
       const branch = values.branch?.trim() ?? "";
       if (!repoRoot) {
         await showToast({
@@ -526,7 +553,6 @@ export function CreateWorktreeForm({
           setAutoStartDraft(DEFAULT_CREATE_WORKTREE_AUTO_START);
           setInitialPromptDraft("");
           setImagePathsTextDraft("");
-          setIsImageInputOpen(false);
           setBranchDraft("");
           setOpenAppDraft(DEFAULT_CREATE_WORKTREE_OPEN_APP);
           toast.style = Toast.Style.Success;
@@ -601,7 +627,6 @@ export function CreateWorktreeForm({
           setAutoStartDraft(DEFAULT_CREATE_WORKTREE_AUTO_START);
           setInitialPromptDraft("");
           setImagePathsTextDraft("");
-          setIsImageInputOpen(false);
           setBranchDraft("");
           setOpenAppDraft(DEFAULT_CREATE_WORKTREE_OPEN_APP);
           if (existsSync(createdPath)) {
@@ -669,18 +694,12 @@ export function CreateWorktreeForm({
           />
           {autoStartDraft ? (
             <Action
-              title={isImageInputOpen ? "Hide Images" : "Show Images"}
-              icon={isImageInputOpen ? Icon.EyeDisabled : Icon.Image}
-              shortcut={{ modifiers: ["cmd"], key: "i" }}
-              onAction={handleToggleImageInput}
-            />
-          ) : null}
-          {autoStartDraft ? (
-            <Action
               title="Attach Clipboard Image"
               icon={Icon.Image}
               shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
-              onAction={handleAttachClipboardImage}
+              onAction={() => {
+                void handleAttachClipboardImage();
+              }}
             />
           ) : null}
           {autoStartDraft ? (
@@ -688,7 +707,25 @@ export function CreateWorktreeForm({
               title="Attach Selected Finder Images"
               icon={Icon.Finder}
               shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
-              onAction={handleAttachSelectedFinderImages}
+              onAction={() => {
+                void handleAttachSelectedFinderImages();
+              }}
+            />
+          ) : null}
+          {autoStartDraft && imagePaths.length > 0 ? (
+            <Action
+              title="Preview Images"
+              icon={Icon.Image}
+              shortcut={{ modifiers: ["cmd"], key: "i" }}
+              onAction={handlePreviewImagePaths}
+            />
+          ) : null}
+          {autoStartDraft && imagePaths.length > 0 ? (
+            <Action
+              title="Clear Images"
+              icon={Icon.XMarkCircle}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "x" }}
+              onAction={handleClearImagePaths}
             />
           ) : null}
         </ActionPanel>
@@ -698,7 +735,7 @@ export function CreateWorktreeForm({
         ? null
         : buildCreateWorktreeFormItemOrder({
             autoStart: autoStartDraft,
-            imageInputOpen: isImageInputOpen,
+            hasImageAttachments: imagePaths.length > 0,
             hasBaseBranchError: Boolean(branchErrorMessage),
           }).map((itemId) => {
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt) {
@@ -713,16 +750,9 @@ export function CreateWorktreeForm({
                 />
               );
             }
-            if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.imagePathsText) {
+            if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths) {
               return (
-                <Form.TextArea
-                  key={itemId}
-                  id="imagePathsText"
-                  title="Images"
-                  placeholder="/path/to/image.png"
-                  value={imagePathsTextDraft}
-                  onChange={setImagePathsTextDraft}
-                />
+                <Form.Description key={itemId} title="Images" text={formatImageAttachmentSummary(imagePaths.length)} />
               );
             }
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.model) {
@@ -873,9 +903,142 @@ export function CreateWorktreeForm({
   );
 }
 
+/**
+ * 添付画像のフォーム表示用サマリーを返す
+ */
+export function formatImageAttachmentSummary(count: number): string {
+  return count === 1 ? "1 image attached" : `${count} images attached`;
+}
+
+type ImageAttachmentsPreviewProps = {
+  imagePaths: string[];
+  onRemoveImagePath: (path: string) => void;
+  onClearImagePaths: () => void;
+  onAttachClipboardImage: () => Promise<string[]>;
+  onAttachSelectedFinderImages: () => Promise<string[]>;
+};
+
+/**
+ * 添付画像をサムネイルで確認・削除する
+ */
+function ImageAttachmentsPreview({
+  imagePaths,
+  onRemoveImagePath,
+  onClearImagePaths,
+  onAttachClipboardImage,
+  onAttachSelectedFinderImages,
+}: ImageAttachmentsPreviewProps) {
+  const { pop } = useNavigation();
+  const [previewImagePaths, setPreviewImagePaths] = useState(imagePaths);
+
+  const handleRemoveImagePath = useCallback(
+    (path: string) => {
+      setPreviewImagePaths((current) => current.filter((currentPath) => currentPath !== path));
+      onRemoveImagePath(path);
+    },
+    [onRemoveImagePath],
+  );
+
+  const handleClearImagePaths = useCallback(() => {
+    setPreviewImagePaths([]);
+    onClearImagePaths();
+  }, [onClearImagePaths]);
+
+  const handleAttachClipboardImage = useCallback(async () => {
+    const addedImagePaths = await onAttachClipboardImage();
+    setPreviewImagePaths((current) => appendUniqueImagePaths(current, addedImagePaths));
+  }, [onAttachClipboardImage]);
+
+  const handleAttachSelectedFinderImages = useCallback(async () => {
+    const addedImagePaths = await onAttachSelectedFinderImages();
+    setPreviewImagePaths((current) => appendUniqueImagePaths(current, addedImagePaths));
+  }, [onAttachSelectedFinderImages]);
+
+  return (
+    <Grid
+      navigationTitle="Images"
+      columns={3}
+      aspectRatio="16/9"
+      fit={Grid.Fit.Contain}
+      inset={Grid.Inset.Small}
+      searchBarPlaceholder="Search images"
+      actions={
+        <ActionPanel>
+          <Action
+            title="Back to Form"
+            icon={Icon.ArrowLeft}
+            shortcut={{ modifiers: ["cmd"], key: "i" }}
+            onAction={pop}
+          />
+          <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+          <Action
+            title="Attach Selected Finder Images"
+            icon={Icon.Finder}
+            onAction={handleAttachSelectedFinderImages}
+          />
+        </ActionPanel>
+      }
+    >
+      {previewImagePaths.length === 0 ? (
+        <Grid.EmptyView
+          title="No images attached"
+          icon={Icon.Image}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Back to Form"
+                icon={Icon.ArrowLeft}
+                shortcut={{ modifiers: ["cmd"], key: "i" }}
+                onAction={pop}
+              />
+              <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+              <Action
+                title="Attach Selected Finder Images"
+                icon={Icon.Finder}
+                onAction={handleAttachSelectedFinderImages}
+              />
+            </ActionPanel>
+          }
+        />
+      ) : null}
+      {previewImagePaths.map((path) => (
+        <Grid.Item
+          key={path}
+          title={basename(path)}
+          subtitle={path}
+          content={{ source: path, fallback: Icon.Image }}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Back to Form"
+                icon={Icon.ArrowLeft}
+                shortcut={{ modifiers: ["cmd"], key: "i" }}
+                onAction={pop}
+              />
+              <Action
+                title="Remove Image"
+                icon={Icon.XMarkCircle}
+                shortcut={{ modifiers: ["cmd"], key: "d" }}
+                onAction={() => handleRemoveImagePath(path)}
+              />
+              <Action title="Clear Images" icon={Icon.Trash} onAction={handleClearImagePaths} />
+              <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+              <Action
+                title="Attach Selected Finder Images"
+                icon={Icon.Finder}
+                onAction={handleAttachSelectedFinderImages}
+              />
+            </ActionPanel>
+          }
+        />
+      ))}
+    </Grid>
+  );
+}
+
 type CreateWorktreeFormValues = {
   initialPrompt: string;
-  imagePathsText: string;
+  imagePaths?: string[];
   model: string;
   serviceTier: string;
   reasoningEffort: string;
@@ -1060,6 +1223,16 @@ export function buildBaseBranchOptions(args: { branches: string[]; defaultBaseRe
 }
 
 /**
+ * 画像プレビュー入力と保存済みドラフトから送信用の画像パスを返す
+ */
+export function resolveCreateWorktreeFormImagePaths(args: { pickerValue?: string[]; draftText: string }): string[] {
+  if (Array.isArray(args.pickerValue)) {
+    return normalizeAutoStartImagePaths(args.pickerValue);
+  }
+  return normalizeAutoStartImagePaths(parseAutoStartImagePathsText(args.draftText));
+}
+
+/**
  * worktree の準備を待って Zed で開く
  */
 type OpenWorktreeWhenReadyDependencies = {
@@ -1216,13 +1389,13 @@ function buildWorktreeCreateContext(): WorktreeCreateContext {
  */
 export function buildCreateWorktreeFormItemOrder(args: {
   autoStart: boolean;
-  imageInputOpen?: boolean;
+  hasImageAttachments?: boolean;
   hasBaseBranchError: boolean;
 }): CreateWorktreeFormItemId[] {
   if (args.autoStart) {
     const items: CreateWorktreeFormItemId[] = [CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt];
-    if (args.imageInputOpen === true) {
-      items.push(CREATE_WORKTREE_FORM_ITEM_IDS.imagePathsText);
+    if (args.hasImageAttachments === true) {
+      items.push(CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths);
     }
     items.push(CREATE_WORKTREE_FORM_ITEM_IDS.repoRoot, CREATE_WORKTREE_FORM_ITEM_IDS.baseBranch);
     if (args.hasBaseBranchError) {

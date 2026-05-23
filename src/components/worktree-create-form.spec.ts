@@ -5,8 +5,10 @@ import {
   CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS,
   DEFAULT_CREATE_WORKTREE_AUTO_START,
   extractLocalBranchNameFromRef,
+  formatImageAttachmentSummary,
   normalizeBaseRefDropdownValue,
   openWorktreeWhenReady,
+  resolveCreateWorktreeFormImagePaths,
   resetCreateWorktreeFormDraftStorage,
   resolveDefaultBaseBranchValue,
   resolveDropdownValue,
@@ -37,16 +39,16 @@ describe("buildCreateWorktreeFormItemOrder", () => {
     ]);
   });
 
-  it("画像入力が開かれている場合は Images を表示する", () => {
+  it("添付画像がある場合は Images サマリーを表示する", () => {
     expect(
       buildCreateWorktreeFormItemOrder({
         autoStart: true,
-        imageInputOpen: true,
+        hasImageAttachments: true,
         hasBaseBranchError: false,
       }),
     ).toEqual([
       "initialPrompt",
-      "imagePathsText",
+      "imagePaths",
       "repoRoot",
       "baseBranch",
       "openApp",
@@ -58,11 +60,11 @@ describe("buildCreateWorktreeFormItemOrder", () => {
     ]);
   });
 
-  it("画像パスが保持されていても閉じられている場合は Images を隠す", () => {
+  it("添付画像がない場合は Images を隠す", () => {
     expect(
       buildCreateWorktreeFormItemOrder({
         autoStart: true,
-        imageInputOpen: false,
+        hasImageAttachments: false,
         hasBaseBranchError: false,
       }),
     ).toEqual([
@@ -172,6 +174,35 @@ describe("buildBaseBranchOptions", () => {
       { value: "origin/main", title: "origin/main" },
       { value: "develop", title: "develop" },
     ]);
+  });
+});
+
+describe("resolveCreateWorktreeFormImagePaths", () => {
+  it("FilePicker の選択値を送信用画像パスへ正規化する", () => {
+    expect(
+      resolveCreateWorktreeFormImagePaths({
+        pickerValue: [" /tmp/a.png ", "", "/tmp/a.png", "/tmp/b.jpg"],
+        draftText: "/tmp/draft.png",
+      }),
+    ).toEqual(["/tmp/a.png", "/tmp/b.jpg"]);
+  });
+
+  it("FilePicker の値がない場合は保存済みドラフトを使う", () => {
+    expect(
+      resolveCreateWorktreeFormImagePaths({
+        draftText: " /tmp/draft.png\n/tmp/other.jpg ",
+      }),
+    ).toEqual(["/tmp/draft.png", "/tmp/other.jpg"]);
+  });
+});
+
+describe("formatImageAttachmentSummary", () => {
+  it("1枚の場合は単数形で表示する", () => {
+    expect(formatImageAttachmentSummary(1)).toBe("1 image attached");
+  });
+
+  it("複数枚の場合は複数形で表示する", () => {
+    expect(formatImageAttachmentSummary(2)).toBe("2 images attached");
   });
 });
 
