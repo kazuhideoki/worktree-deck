@@ -2,8 +2,8 @@ import { Clipboard, getSelectedFinderItems } from "@raycast/api";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -19,6 +19,11 @@ const SUPPORTED_AUTO_START_IMAGE_EXTENSIONS = new Set([
   ".heic",
   ".heif",
 ]);
+
+/**
+ * macOS スクリーンショット名として扱う接頭辞
+ */
+const SCREENSHOT_FILENAME_PREFIXES = ["Screenshot", "Screen Shot", "スクリーンショット"];
 
 /**
  * node:child_process の Promise 版 execFile
@@ -44,6 +49,27 @@ export function isReadableAutoStartImagePath(path: string): boolean {
 }
 
 /**
+ * ファイル名が macOS のスクリーンショット名らしいか判定する
+ */
+export function isLikelyMacScreenshotFilename(filename: string): boolean {
+  return SCREENSHOT_FILENAME_PREFIXES.some((prefix) => filename.startsWith(prefix));
+}
+
+/**
+ * 候補ファイルから最終更新日時が最新のスクリーンショットを選ぶ
+ */
+export function selectLatestScreenshotPath(
+  candidates: { path: string; filename: string; modifiedAtMs: number }[],
+): string | null {
+  const sorted = candidates
+    .filter(
+      (candidate) => isSupportedAutoStartImagePath(candidate.path) && isLikelyMacScreenshotFilename(candidate.filename),
+    )
+    .sort((left, right) => right.modifiedAtMs - left.modifiedAtMs);
+  return sorted[0]?.path ?? null;
+}
+
+/**
  * クリップボードから Auto Start に添付する画像パスを解決する
  */
 export async function resolveClipboardImagePath(): Promise<string | null> {
@@ -59,11 +85,58 @@ export async function resolveClipboardImagePath(): Promise<string | null> {
 }
 
 /**
+ * macOS のスクリーンショット保存先から最新画像パスを解決する
+ */
+export async function resolveLatestScreenshotImagePath(): Promise<string | null> {
+  const screenshotDir = await resolveMacScreenshotDirectory();
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(screenshotDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const candidates = await Promise.all(
+    entries
+      .filter((entry) => entry.isFile())
+      .map(async (entry) => {
+        const path = join(screenshotDir, entry.name);
+        try {
+          const fileStat = await stat(path);
+          return { path, filename: entry.name, modifiedAtMs: fileStat.mtimeMs };
+        } catch {
+          return null;
+        }
+      }),
+  );
+  const latestPath = selectLatestScreenshotPath(candidates.filter((candidate) => candidate !== null));
+  return latestPath && isReadableAutoStartImagePath(latestPath) ? latestPath : null;
+}
+
+/**
  * Finder で選択中の画像パスを解決する
  */
 export async function resolveSelectedFinderImagePaths(): Promise<string[]> {
   const items = await getSelectedFinderItems();
   return items.map((item) => item.path).filter((path) => isReadableAutoStartImagePath(path));
+}
+
+/**
+ * macOS のスクリーンショット保存先を defaults から解決する
+ */
+async function resolveMacScreenshotDirectory(): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("/usr/bin/defaults", ["read", "com.apple.screencapture", "location"], {
+      timeout: 5000,
+    });
+    const configuredPath = stdout.trim();
+    if (configuredPath) {
+      return configuredPath.replace(/^~(?=\/|$)/, homedir());
+    }
+  } catch {
+    // 未設定時は Desktop へフォールバックする
+  }
+  return join(homedir(), "Desktop");
 }
 
 /**

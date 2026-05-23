@@ -44,6 +44,7 @@ describe("autoStartImageInputUsecase.findInvalidImagePath", () => {
       dependencies: {
         isReadableImagePath: (path) => path !== "/tmp/missing.png",
         resolveClipboardImagePath: async () => null,
+        resolveLatestScreenshotImagePath: async () => null,
         resolveSelectedFinderImagePaths: async () => [],
       },
     });
@@ -58,10 +59,26 @@ describe("autoStartImageInputUsecase.resolveClipboardImagePath", () => {
       dependencies: {
         isReadableImagePath: () => false,
         resolveClipboardImagePath: async () => "/tmp/clipboard.png",
+        resolveLatestScreenshotImagePath: async () => null,
         resolveSelectedFinderImagePaths: async () => [],
       },
     });
 
     expect(result).toBe("/tmp/clipboard.png");
+  });
+});
+
+describe("autoStartImageInputUsecase.resolveLatestScreenshotImagePath", () => {
+  it("依存ポートで解決した最新スクリーンショット画像パスを返す", async () => {
+    const result = await autoStartImageInputUsecase.resolveLatestScreenshotImagePath({
+      dependencies: {
+        isReadableImagePath: () => false,
+        resolveClipboardImagePath: async () => null,
+        resolveLatestScreenshotImagePath: async () => "/tmp/Screenshot.png",
+        resolveSelectedFinderImagePaths: async () => [],
+      },
+    });
+
+    expect(result).toBe("/tmp/Screenshot.png");
   });
 });

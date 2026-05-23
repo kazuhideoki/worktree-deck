@@ -378,6 +378,37 @@ export function CreateWorktreeForm({
     }
   }, [setImagePathsTextDraft]);
 
+  const handleAttachLatestScreenshotImage = useCallback(async (): Promise<string[]> => {
+    try {
+      const imagePath = await autoStartImageInputUsecase.resolveLatestScreenshotImagePath({
+        dependencies: autoStartImageInputDependencies,
+      });
+      if (!imagePath) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Latest screenshot was not found",
+        });
+        return [];
+      }
+      setImagePathsTextDraft((current) =>
+        formatAutoStartImagePathsText(appendUniqueImagePaths(parseAutoStartImagePathsText(current), [imagePath])),
+      );
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Latest screenshot attached",
+        message: basename(imagePath),
+      });
+      return [imagePath];
+    } catch (error) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to attach latest screenshot",
+        message: formatExecErrorMessage(error),
+      });
+      return [];
+    }
+  }, [setImagePathsTextDraft]);
+
   const handleAttachSelectedFinderImages = useCallback(async (): Promise<string[]> => {
     try {
       const imagePaths = await autoStartImageInputUsecase.resolveSelectedFinderImagePaths({
@@ -433,11 +464,13 @@ export function CreateWorktreeForm({
         onRemoveImagePath={handleRemoveImagePath}
         onClearImagePaths={handleClearImagePaths}
         onAttachClipboardImage={handleAttachClipboardImage}
+        onAttachLatestScreenshotImage={handleAttachLatestScreenshotImage}
         onAttachSelectedFinderImages={handleAttachSelectedFinderImages}
       />,
     );
   }, [
     handleAttachClipboardImage,
+    handleAttachLatestScreenshotImage,
     handleAttachSelectedFinderImages,
     handleClearImagePaths,
     handleRemoveImagePath,
@@ -704,6 +737,16 @@ export function CreateWorktreeForm({
           ) : null}
           {autoStartDraft ? (
             <Action
+              title="Attach Latest Screenshot"
+              icon={Icon.Image}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+              onAction={() => {
+                void handleAttachLatestScreenshotImage();
+              }}
+            />
+          ) : null}
+          {autoStartDraft ? (
+            <Action
               title="Attach Selected Finder Images"
               icon={Icon.Finder}
               shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
@@ -735,7 +778,6 @@ export function CreateWorktreeForm({
         ? null
         : buildCreateWorktreeFormItemOrder({
             autoStart: autoStartDraft,
-            hasImageAttachments: imagePaths.length > 0,
             hasBaseBranchError: Boolean(branchErrorMessage),
           }).map((itemId) => {
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt) {
@@ -752,7 +794,11 @@ export function CreateWorktreeForm({
             }
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths) {
               return (
-                <Form.Description key={itemId} title="Images" text={formatImageAttachmentSummary(imagePaths.length)} />
+                <Form.Description
+                  key={itemId}
+                  title="Attach Images"
+                  text={formatImageAttachmentControlsText(imagePaths.length)}
+                />
               );
             }
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.model) {
@@ -910,11 +956,19 @@ export function formatImageAttachmentSummary(count: number): string {
   return count === 1 ? "1 image attached" : `${count} images attached`;
 }
 
+/**
+ * 画像添付操作のフォーム表示テキストを返す
+ */
+export function formatImageAttachmentControlsText(count: number): string {
+  return `${formatImageAttachmentSummary(count)}  |  Clipboard ⌘⇧I  |  Screenshot ⌘⇧S  |  Finder ⌘⇧F`;
+}
+
 type ImageAttachmentsPreviewProps = {
   imagePaths: string[];
   onRemoveImagePath: (path: string) => void;
   onClearImagePaths: () => void;
   onAttachClipboardImage: () => Promise<string[]>;
+  onAttachLatestScreenshotImage: () => Promise<string[]>;
   onAttachSelectedFinderImages: () => Promise<string[]>;
 };
 
@@ -926,6 +980,7 @@ function ImageAttachmentsPreview({
   onRemoveImagePath,
   onClearImagePaths,
   onAttachClipboardImage,
+  onAttachLatestScreenshotImage,
   onAttachSelectedFinderImages,
 }: ImageAttachmentsPreviewProps) {
   const { pop } = useNavigation();
@@ -954,6 +1009,11 @@ function ImageAttachmentsPreview({
     setPreviewImagePaths((current) => appendUniqueImagePaths(current, addedImagePaths));
   }, [onAttachSelectedFinderImages]);
 
+  const handleAttachLatestScreenshotImage = useCallback(async () => {
+    const addedImagePaths = await onAttachLatestScreenshotImage();
+    setPreviewImagePaths((current) => appendUniqueImagePaths(current, addedImagePaths));
+  }, [onAttachLatestScreenshotImage]);
+
   return (
     <Grid
       navigationTitle="Images"
@@ -971,6 +1031,12 @@ function ImageAttachmentsPreview({
             onAction={pop}
           />
           <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+          <Action
+            title="Attach Latest Screenshot"
+            icon={Icon.Image}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+            onAction={handleAttachLatestScreenshotImage}
+          />
           <Action
             title="Attach Selected Finder Images"
             icon={Icon.Finder}
@@ -992,6 +1058,12 @@ function ImageAttachmentsPreview({
                 onAction={pop}
               />
               <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+              <Action
+                title="Attach Latest Screenshot"
+                icon={Icon.Image}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+                onAction={handleAttachLatestScreenshotImage}
+              />
               <Action
                 title="Attach Selected Finder Images"
                 icon={Icon.Finder}
@@ -1023,6 +1095,12 @@ function ImageAttachmentsPreview({
               />
               <Action title="Clear Images" icon={Icon.Trash} onAction={handleClearImagePaths} />
               <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+              <Action
+                title="Attach Latest Screenshot"
+                icon={Icon.Image}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+                onAction={handleAttachLatestScreenshotImage}
+              />
               <Action
                 title="Attach Selected Finder Images"
                 icon={Icon.Finder}
@@ -1389,14 +1467,13 @@ function buildWorktreeCreateContext(): WorktreeCreateContext {
  */
 export function buildCreateWorktreeFormItemOrder(args: {
   autoStart: boolean;
-  hasImageAttachments?: boolean;
   hasBaseBranchError: boolean;
 }): CreateWorktreeFormItemId[] {
   if (args.autoStart) {
-    const items: CreateWorktreeFormItemId[] = [CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt];
-    if (args.hasImageAttachments === true) {
-      items.push(CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths);
-    }
+    const items: CreateWorktreeFormItemId[] = [
+      CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt,
+      CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths,
+    ];
     items.push(CREATE_WORKTREE_FORM_ITEM_IDS.repoRoot, CREATE_WORKTREE_FORM_ITEM_IDS.baseBranch);
     if (args.hasBaseBranchError) {
       items.push(CREATE_WORKTREE_FORM_ITEM_IDS.baseBranchError);

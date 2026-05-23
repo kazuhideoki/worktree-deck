@@ -6,6 +6,7 @@ import {
   DEFAULT_CREATE_WORKTREE_AUTO_START,
   extractLocalBranchNameFromRef,
   formatImageAttachmentSummary,
+  formatImageAttachmentControlsText,
   normalizeBaseRefDropdownValue,
   openWorktreeWhenReady,
   resolveCreateWorktreeFormImagePaths,
@@ -25,28 +26,8 @@ describe("buildCreateWorktreeFormItemOrder", () => {
     ]);
   });
 
-  it("Auto Start モードでは空の画像入力を既定で隠す", () => {
+  it("Auto Start モードでは Images サマリーをプロンプト直下に表示する", () => {
     expect(buildCreateWorktreeFormItemOrder({ autoStart: true, hasBaseBranchError: false })).toEqual([
-      "initialPrompt",
-      "repoRoot",
-      "baseBranch",
-      "openApp",
-      "spacing",
-      "reasoningEffort",
-      "model",
-      "serviceTier",
-      "permissions",
-    ]);
-  });
-
-  it("添付画像がある場合は Images サマリーを表示する", () => {
-    expect(
-      buildCreateWorktreeFormItemOrder({
-        autoStart: true,
-        hasImageAttachments: true,
-        hasBaseBranchError: false,
-      }),
-    ).toEqual([
       "initialPrompt",
       "imagePaths",
       "repoRoot",
@@ -60,23 +41,10 @@ describe("buildCreateWorktreeFormItemOrder", () => {
     ]);
   });
 
-  it("添付画像がない場合は Images を隠す", () => {
-    expect(
-      buildCreateWorktreeFormItemOrder({
-        autoStart: true,
-        hasImageAttachments: false,
-        hasBaseBranchError: false,
-      }),
-    ).toEqual([
+  it("Auto Start モードでは Initial Prompt の直後に Images サマリーを表示する", () => {
+    expect(buildCreateWorktreeFormItemOrder({ autoStart: true, hasBaseBranchError: false }).slice(0, 2)).toEqual([
       "initialPrompt",
-      "repoRoot",
-      "baseBranch",
-      "openApp",
-      "spacing",
-      "reasoningEffort",
-      "model",
-      "serviceTier",
-      "permissions",
+      "imagePaths",
     ]);
   });
 
@@ -94,6 +62,7 @@ describe("buildCreateWorktreeFormItemOrder", () => {
   it("Auto Start モードで Base Branch Error がある場合も Open With の前に表示される", () => {
     expect(buildCreateWorktreeFormItemOrder({ autoStart: true, hasBaseBranchError: true })).toEqual([
       "initialPrompt",
+      "imagePaths",
       "repoRoot",
       "baseBranch",
       "baseBranchError",
@@ -203,6 +172,14 @@ describe("formatImageAttachmentSummary", () => {
 
   it("複数枚の場合は複数形で表示する", () => {
     expect(formatImageAttachmentSummary(2)).toBe("2 images attached");
+  });
+});
+
+describe("formatImageAttachmentControlsText", () => {
+  it("添付数と3種類の添付操作を表示する", () => {
+    expect(formatImageAttachmentControlsText(2)).toBe(
+      "2 images attached  |  Clipboard ⌘⇧I  |  Screenshot ⌘⇧S  |  Finder ⌘⇧F",
+    );
   });
 });
 

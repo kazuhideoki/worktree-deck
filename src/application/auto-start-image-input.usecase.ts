@@ -4,6 +4,7 @@
 export type AutoStartImageInputDependencies = {
   isReadableImagePath(path: string): boolean;
   resolveClipboardImagePath(): Promise<string | null>;
+  resolveLatestScreenshotImagePath(): Promise<string | null>;
   resolveSelectedFinderImagePaths(): Promise<string[]>;
 };
 
@@ -74,10 +75,20 @@ async function resolveSelectedFinderImagePaths(args: {
 }
 
 /**
+ * 最新スクリーンショットの画像パスを解決する
+ */
+async function resolveLatestScreenshotImagePath(args: {
+  dependencies: AutoStartImageInputDependencies;
+}): Promise<string | null> {
+  return args.dependencies.resolveLatestScreenshotImagePath();
+}
+
+/**
  * Auto Start 画像入力ユースケース関数群
  */
 export const autoStartImageInputUsecase = {
   findInvalidImagePath,
   resolveClipboardImagePath,
+  resolveLatestScreenshotImagePath,
   resolveSelectedFinderImagePaths,
 } as const;

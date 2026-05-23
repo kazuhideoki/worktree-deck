@@ -2,12 +2,14 @@ import type { AutoStartImageInputDependencies } from "../application/auto-start-
 import {
   isReadableAutoStartImagePath,
   resolveClipboardImagePath,
+  resolveLatestScreenshotImagePath,
   resolveSelectedFinderImagePaths,
 } from "../infrastructure/auto-start-image-input-infra";
 
 type AutoStartImageInputInfra = {
   isReadableImagePath(path: string): boolean;
   resolveClipboardImagePath(): Promise<string | null>;
+  resolveLatestScreenshotImagePath(): Promise<string | null>;
   resolveSelectedFinderImagePaths(): Promise<string[]>;
 };
 
@@ -18,6 +20,7 @@ function createAutoStartImageInputDependencies(infra: AutoStartImageInputInfra):
   return {
     isReadableImagePath: infra.isReadableImagePath,
     resolveClipboardImagePath: infra.resolveClipboardImagePath,
+    resolveLatestScreenshotImagePath: infra.resolveLatestScreenshotImagePath,
     resolveSelectedFinderImagePaths: infra.resolveSelectedFinderImagePaths,
   };
 }
@@ -29,6 +32,7 @@ export function createDefaultAutoStartImageInputDependencies(): AutoStartImageIn
   return createAutoStartImageInputDependencies({
     isReadableImagePath: isReadableAutoStartImagePath,
     resolveClipboardImagePath,
+    resolveLatestScreenshotImagePath,
     resolveSelectedFinderImagePaths,
   });
 }
