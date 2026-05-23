@@ -377,7 +377,7 @@ export function formatTitleEntry(entry: WorktreeTitle, gitStatus: string | null 
     ["📝", truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS)],
     ["🌿", gitStatus ?? "No git status"],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
-    ["🤖", latestMessage],
+    ["💬", latestMessage],
   ];
   const [headerRow, ...bodyRows] = rows.map(([key, value]) => `| ${key} | ${formatTableValue(value)} |`);
   return [headerRow, "| --- | --- |", ...bodyRows].join("\n");

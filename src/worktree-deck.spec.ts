@@ -294,7 +294,7 @@ describe("buildDetailMarkdown", () => {
     });
 
     expect(result).not.toContain("# Sessions");
-    expect(result).toContain("| 🤖 | No session titles |");
+    expect(result).toContain("| 💬 | No session titles |");
   });
 });
 
@@ -369,8 +369,8 @@ describe("formatTitleEntry", () => {
     });
 
     const result = formatTitleEntry(entry);
-    const messageLine = result.split("\n").find((line) => line.startsWith("| 🤖 |")) ?? "";
-    const message = messageLine.replace("| 🤖 | ", "").replace(" |", "");
+    const messageLine = result.split("\n").find((line) => line.startsWith("| 💬 |")) ?? "";
+    const message = messageLine.replace("| 💬 | ", "").replace(" |", "");
 
     expect(message).toBe("LastAnswer: " + "a".repeat(210));
     expect(message).not.toContain("...");

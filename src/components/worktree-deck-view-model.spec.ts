@@ -114,7 +114,7 @@ describe("worktree-deck-view-model", () => {
         "| --- | --- |",
         "| 🌿 | 🌿 main (+2 -1)  ⚠️ dirty |",
         "| 🧰 | `github:yeet` ×2, `imagegen` |",
-        "| 🤖 | Done<br><br>- changed a \\| b<br>- verified |",
+        "| 💬 | Done<br><br>- changed a \\| b<br>- verified |",
       ].join("\n"),
     );
   });
