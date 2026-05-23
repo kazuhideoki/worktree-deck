@@ -127,12 +127,12 @@ const SKILL_FILE_PATH_PATTERN = /\/skills\/(?:\.[^/\s]+\/)?([^/\s]+)\/SKILL\.md\
 /**
  * 英語のスキル使用宣言からスキル名を取り出すパターン
  */
-const ENGLISH_SKILL_USAGE_PATTERN = /\bUsing (?:the )?([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?) skill\b/i;
+const ENGLISH_SKILL_USAGE_PATTERN = /(?:^|\n)\s*Using (?:the )?([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?) skill\b/i;
 
 /**
  * 日本語のスキル使用宣言からスキル名を取り出すパターン
  */
-const JAPANESE_SKILL_USAGE_PATTERN = /([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?)\s*スキル(?:で|を|として|に|$)/;
+const JAPANESE_SKILL_USAGE_PATTERN = /(?:^|\n)\s*([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?)\s*スキル(?:で|を|として|に|$)/;
 
 /**
  * Codex が注入する skill ブロックからスキル本文を取り出すパターン
@@ -1106,7 +1106,7 @@ function updateParseState(args: {
         addSkillUsage(state, usage);
       }
     }
-    if (responseMessage?.role === "assistant") {
+    if (responseMessage?.role === "assistant" && responseMessage.phase === "commentary") {
       addSkillUsage(state, extractSkillUsageFromAssistantText(responseMessage.text, timestamp));
     }
     const responseItemType = extractResponseItemType(parsed);

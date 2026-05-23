@@ -259,6 +259,80 @@ describe("sessionLogParserService", () => {
     expect(result.skillUsages).toEqual([{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" }]);
   });
 
+  it("説明文中のスキル使用例を実使用として扱わない", () => {
+    const result = parseLines([
+      {
+        timestamp: "2026-05-03T10:00:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "agent_message",
+          message: "自然文の推測だと「xxx スキルを使います」のような説明文も拾ってしまいます。",
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:01:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "同じターンで review-by-sub-agents スキルを使います の commentary が続いても重複しません。",
+            },
+          ],
+          phase: "commentary",
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:02:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "review-by-sub-agents スキルを使います、という例示を最終回答に含めても実使用ではありません。",
+            },
+          ],
+          phase: "final_answer",
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:03:30.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "<skill>\n" +
+                "<name>review-by-sub-agents</name>\n" +
+                "<path>/Users/me/.codex/skills/review-by-sub-agents/SKILL.md</path>\n" +
+                "</skill>",
+            },
+          ],
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:03:40.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: JSON.stringify({
+            cmd: "sed -n '1,220p' /Users/me/.codex/skills/review-by-sub-agents/SKILL.md",
+          }),
+        },
+      },
+    ]);
+
+    expect(result.skillUsages).toEqual([{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:03:30.000Z" }]);
+  });
+
   it.each([
     {
       name: "cli",
