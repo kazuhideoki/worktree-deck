@@ -135,6 +135,16 @@ const ENGLISH_SKILL_USAGE_PATTERN = /\bUsing (?:the )?([A-Za-z0-9][A-Za-z0-9:_./
 const JAPANESE_SKILL_USAGE_PATTERN = /([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?)\s*スキル(?:で|を|として|に|$)/;
 
 /**
+ * Codex が注入する skill ブロックからスキル本文を取り出すパターン
+ */
+const USER_SKILL_BLOCK_PATTERN = /<skill>\s*([\s\S]*?)\s*<\/skill>/g;
+
+/**
+ * Codex が注入する skill ブロック本文からスキル名を取り出すパターン
+ */
+const USER_SKILL_NAME_PATTERN = /<name>\s*([^<]+?)\s*<\/name>/;
+
+/**
  * 指示メッセージ判定用の文字列
  */
 const USER_INSTRUCTION_MARKERS = ["<INSTRUCTIONS>", "AGENTS.md instructions", "AGENTS.override.md instructions"];
@@ -680,6 +690,22 @@ function extractSkillUsageFromAssistantText(text: string, timestamp: string | nu
 }
 
 /**
+ * user message の skill ブロックからスキル使用を抽出する
+ */
+function extractSkillUsagesFromUserText(text: string, timestamp: string | null): SessionSkillUsage[] {
+  const usages: SessionSkillUsage[] = [];
+  USER_SKILL_BLOCK_PATTERN.lastIndex = 0;
+  for (const blockMatch of text.matchAll(USER_SKILL_BLOCK_PATTERN)) {
+    const block = blockMatch[1] ?? "";
+    const name = normalizeSkillName(block.match(USER_SKILL_NAME_PATTERN)?.[1] ?? "");
+    if (name) {
+      usages.push({ name, timestamp });
+    }
+  }
+  return usages;
+}
+
+/**
  * function_call がプラグイン呼び出しか判定する
  */
 function isPluginFunctionCallPayload(payload: Record<string, unknown>): boolean {
@@ -1074,6 +1100,11 @@ function updateParseState(args: {
     addSkillUsage(state, extractSkillUsageFromFunctionCall(parsed, timestamp));
     if (eventMessage?.role === "agent") {
       addSkillUsage(state, extractSkillUsageFromAssistantText(eventMessage.message, timestamp));
+    }
+    if (responseMessage?.role === "user") {
+      for (const usage of extractSkillUsagesFromUserText(responseMessage.text, timestamp)) {
+        addSkillUsage(state, usage);
+      }
     }
     if (responseMessage?.role === "assistant") {
       addSkillUsage(state, extractSkillUsageFromAssistantText(responseMessage.text, timestamp));

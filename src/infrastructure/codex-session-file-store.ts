@@ -58,7 +58,7 @@ const ENV_SEARCH_DAYS = "WORKTREE_DECK_SEARCH_DAYS";
 /**
  * タイトルキャッシュのキー接頭辞
  */
-const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v11";
+const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v12";
 /**
  * working を done に切り替える経過日数の環境変数名
  */
