@@ -43,6 +43,13 @@ import {
 } from "./components/worktree-ui-utils";
 import { buildOpenAppAccessory, resolveOpenAppIcon } from "./components/worktree-open-app-icon";
 import {
+  SCROLL_DETAIL_DOWN_SHORTCUT,
+  SCROLL_DETAIL_UP_SHORTCUT,
+  buildScrollableDetailMarkdown,
+  resolveNextDetailScrollOffset,
+  type DetailScrollDirection,
+} from "./components/worktree-detail-scroll";
+import {
   buildDetailMarkdown,
   buildSectionsWithMappings,
   buildSortedSectionEntries,
@@ -251,6 +258,7 @@ export default function Command() {
   const [repositoryMappings, setRepositoryMappings] = useState<RepositoryMapping[]>([]);
   const [hiddenWorktreePaths, setHiddenWorktreePaths] = useState<Set<string>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [detailScrollOffsetsByItemId, setDetailScrollOffsetsByItemId] = useState<Record<string, number>>({});
   const [persistedSelection, setPersistedSelection] = useState<PersistedSelectionState | null>(null);
   const [selectionPhase, setSelectionPhase] = useState<SelectionRestorePhase>("loading-storage");
   const [originLastCommitByPath, setOriginLastCommitByPath] = useState<Map<string, string | null>>(new Map());
@@ -1532,6 +1540,52 @@ export default function Command() {
     ],
   );
 
+  /**
+   * 選択中アイテムの詳細ペイン表示位置を更新する
+   */
+  const handleScrollDetail = useCallback(
+    (args: { itemId: string; markdown: string; direction: DetailScrollDirection }): void => {
+      setDetailScrollOffsetsByItemId((current) => {
+        const currentOffset = current[args.itemId] ?? 0;
+        const nextOffset = resolveNextDetailScrollOffset({
+          markdown: args.markdown,
+          currentOffset,
+          direction: args.direction,
+        });
+        if (nextOffset === currentOffset) {
+          return current;
+        }
+        return { ...current, [args.itemId]: nextOffset };
+      });
+    },
+    [],
+  );
+
+  /**
+   * 詳細ペインを一覧選択とは独立して送るアクションを描画する
+   */
+  const renderDetailScrollActions = useCallback(
+    (args: { itemId: string; markdown: string }) => {
+      return (
+        <>
+          <Action
+            title="Scroll Upward"
+            icon={Icon.ArrowUp}
+            shortcut={SCROLL_DETAIL_UP_SHORTCUT}
+            onAction={() => handleScrollDetail({ ...args, direction: "up" })}
+          />
+          <Action
+            title="Scroll Downward"
+            icon={Icon.ArrowDown}
+            shortcut={SCROLL_DETAIL_DOWN_SHORTCUT}
+            onAction={() => handleScrollDetail({ ...args, direction: "down" })}
+          />
+        </>
+      );
+    },
+    [handleScrollDetail],
+  );
+
   return (
     <List
       isLoading={isLoading || isTitlesLoading || isDetailsLoading || isSelectionPreparing}
@@ -1589,13 +1643,14 @@ export default function Command() {
           return (
             <List.Section key={section.repo} title={section.repo}>
               {entries.map((entry) => {
+                const itemId = resolveEntryItemId(entry);
                 if (entry.kind === "origin") {
                   const openApp = resolveOpenAppForPath(entry.originPath);
                   const threadId = resolveThreadIdForPath(entry.originPath);
                   const status = resolveWorktreeStatus(entry.titles);
                   const statusTint = resolveStatusTint({ status, titles: entry.titles });
                   const originBranch = formatBranchTitle({ branch: entry.branch ?? "origin", titles: entry.titles });
-                  const detailMarkdown = buildDetailMarkdown({
+                  const rawDetailMarkdown = buildDetailMarkdown({
                     title: originBranch,
                     titles: entry.titles,
                     isTitlesLoading,
@@ -1603,10 +1658,14 @@ export default function Command() {
                     openApp,
                     useLastCommitSeparator: false,
                   });
+                  const detailMarkdown = buildScrollableDetailMarkdown(
+                    rawDetailMarkdown,
+                    detailScrollOffsetsByItemId[itemId] ?? 0,
+                  );
                   return (
                     <List.Item
-                      key={resolveEntryItemId(entry)}
-                      id={resolveEntryItemId(entry)}
+                      key={itemId}
+                      id={itemId}
                       title={originBranch}
                       keywords={buildSearchKeywords({
                         repo: section.repo,
@@ -1638,6 +1697,7 @@ export default function Command() {
                               />
                             }
                           />
+                          {renderDetailScrollActions({ itemId, markdown: rawDetailMarkdown })}
                           <Action
                             title="Create Pull Request"
                             icon={Icon.Upload}
@@ -1686,7 +1746,7 @@ export default function Command() {
                 const threadId = resolveThreadIdForPath(item.path);
                 const titles = item.titleEntries ?? [];
                 const branchTitle = formatBranchTitle({ branch: item.branch, titles });
-                const detailMarkdown = buildDetailMarkdown({
+                const rawDetailMarkdown = buildDetailMarkdown({
                   title: branchTitle,
                   titles,
                   isTitlesLoading,
@@ -1698,6 +1758,10 @@ export default function Command() {
                   behindCount: item.behindCount ?? null,
                   openApp,
                 });
+                const detailMarkdown = buildScrollableDetailMarkdown(
+                  rawDetailMarkdown,
+                  detailScrollOffsetsByItemId[itemId] ?? 0,
+                );
                 const canRemoveWorktree = canRemoveWorktreeItem(item);
                 const canMergeWorktree = item.originPath ? item.originPath !== item.path : false;
                 const canRenameBranch = normalizeWorktreeBranchName(item.branch) !== null;
@@ -1707,8 +1771,8 @@ export default function Command() {
                 const statusTint = resolveStatusTint({ status, titles });
                 return (
                   <List.Item
-                    key={resolveEntryItemId(entry)}
-                    id={resolveEntryItemId(entry)}
+                    key={itemId}
+                    id={itemId}
                     title={branchTitle}
                     keywords={buildSearchKeywords({
                       repo: item.repo,
@@ -1742,6 +1806,7 @@ export default function Command() {
                             />
                           }
                         />
+                        {renderDetailScrollActions({ itemId, markdown: rawDetailMarkdown })}
                         {canPullWorktree ? (
                           <Action
                             title="Pull Worktree"
