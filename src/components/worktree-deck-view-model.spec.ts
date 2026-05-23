@@ -123,6 +123,18 @@ describe("worktree-deck-view-model", () => {
     );
   });
 
+  it("1行の最新メッセージも表の外に表示する", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [buildTitleEntry({ title: "Implement feature", latestMessage: "Done", updatedAt: 100 })],
+    });
+
+    expect(markdown).toBe(
+      ["| 📝 | Implement feature |", "| --- | --- |", "| 🌿 | No git status |", "| 🧰 | None |", "", "Done"].join("\n"),
+    );
+  });
+
   it("Worktrees Only モードでは repo ごとのセクションを返して origin だけの mapping は含めない", () => {
     const mode: WorktreeDeckDisplayMode = "worktrees-only";
     const sections = buildSectionsWithMappings(
