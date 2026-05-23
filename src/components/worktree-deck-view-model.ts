@@ -49,6 +49,21 @@ type SkillUsageSummary = {
 };
 
 /**
+ * 詳細テーブルでタイトルが折り返されにくい最大表示幅
+ */
+const TITLE_DETAIL_MAX_COLUMNS = 56;
+
+/**
+ * 詳細テーブルでスキル名が折り返されにくい最大表示幅
+ */
+const SKILL_DETAIL_MAX_COLUMNS = 28;
+
+/**
+ * 詳細テーブルに直接表示するスキル種類数
+ */
+const SKILL_DETAIL_VISIBLE_COUNT = 2;
+
+/**
  * タイトル一覧にユーザー指示待ちが含まれるか判定する
  */
 export function hasAnySessionWaitingForUser(titles: WorktreeTitle[]): boolean {
@@ -359,7 +374,7 @@ export function buildSortedSectionEntries(args: {
 export function formatTitleEntry(entry: WorktreeTitle, gitStatus: string | null = null): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
   const rows = [
-    ["📝", entry.title],
+    ["📝", truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS)],
     ["🌿", gitStatus ?? "No git status"],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
     ["🤖", latestMessage],
@@ -404,6 +419,45 @@ function formatInlineCode(value: string): string {
 }
 
 /**
+ * Markdown 詳細の折り返しを抑えるための概算表示幅を返す
+ */
+function measureDisplayColumns(value: string): number {
+  return Array.from(value).reduce((width, character) => {
+    return (
+      width +
+      (/[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/u.test(
+        character,
+      )
+        ? 2
+        : 1)
+    );
+  }, 0);
+}
+
+/**
+ * Markdown 詳細の1行表示向けに文字列を省略する
+ */
+function truncateDisplayText(value: string, maxColumns: number): string {
+  const trimmed = value.trim();
+  if (measureDisplayColumns(trimmed) <= maxColumns) {
+    return trimmed;
+  }
+  const ellipsis = "...";
+  const limit = Math.max(0, maxColumns - ellipsis.length);
+  let width = 0;
+  let result = "";
+  for (const character of Array.from(trimmed)) {
+    const characterWidth = measureDisplayColumns(character);
+    if (width + characterWidth > limit) {
+      break;
+    }
+    result += character;
+    width += characterWidth;
+  }
+  return `${result.trimEnd()}${ellipsis}`;
+}
+
+/**
  * Markdown テーブル内の値を崩れない文字列へ整形する
  */
 function formatTableValue(value: string): string {
@@ -418,12 +472,16 @@ function formatSkillUsageSummary(skillUsages: NonNullable<WorktreeTitle["skillUs
   if (summaries.length === 0) {
     return null;
   }
-  return summaries
+  const visibleSummaries = summaries.slice(0, SKILL_DETAIL_VISIBLE_COUNT);
+  const remainingCount = summaries.length - visibleSummaries.length;
+  const remainingText = remainingCount > 0 ? ` +${remainingCount}` : "";
+  const visibleText = visibleSummaries
     .map((summary) => {
-      const count = summary.count > 1 ? ` x${summary.count}` : "";
-      return `${formatInlineCode(summary.name)}${count}`;
+      const count = summary.count > 1 ? ` ×${summary.count}` : "";
+      return `${formatInlineCode(truncateDisplayText(summary.name, SKILL_DETAIL_MAX_COLUMNS))}${count}`;
     })
     .join(", ");
+  return `${visibleText}${remainingText}`;
 }
 
 /**
