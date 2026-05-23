@@ -9,6 +9,16 @@ import {
 } from "./worktree-detail-scroll";
 
 const DETAIL_MARKDOWN = ["| 📝 | title |", "| --- | --- |", "| 🌿 | main |", "", "line 1", "line 2"].join("\n");
+const DETAIL_MARKDOWN_WITH_BLANK_BODY_LINES = [
+  "| 📝 | title |",
+  "| --- | --- |",
+  "| 🌿 | main |",
+  "",
+  "line 1",
+  "",
+  "",
+  "line 2",
+].join("\n");
 
 describe("worktree detail scroll", () => {
   it("shift+上下を詳細スクロールのショートカットにする", () => {
@@ -26,6 +36,42 @@ describe("worktree detail scroll", () => {
 
   it("本文内では1行ずつ進める", () => {
     expect(resolveNextDetailScrollOffset({ markdown: DETAIL_MARKDOWN, currentOffset: 4, direction: "down" })).toBe(5);
+  });
+
+  it("下方向は本文中の空白行を飛ばす", () => {
+    expect(
+      resolveNextDetailScrollOffset({
+        markdown: DETAIL_MARKDOWN_WITH_BLANK_BODY_LINES,
+        currentOffset: 4,
+        direction: "down",
+      }),
+    ).toBe(7);
+  });
+
+  it("概要から本文へ移るときも本文先頭の空白行を飛ばす", () => {
+    const markdown = ["| 📝 | title |", "| --- | --- |", "| 🌿 | main |", "", "", "line 1"].join("\n");
+
+    expect(resolveNextDetailScrollOffset({ markdown, currentOffset: 0, direction: "down" })).toBe(5);
+  });
+
+  it("上方向は本文中の空白行を飛ばす", () => {
+    expect(
+      resolveNextDetailScrollOffset({
+        markdown: DETAIL_MARKDOWN_WITH_BLANK_BODY_LINES,
+        currentOffset: 7,
+        direction: "up",
+      }),
+    ).toBe(4);
+  });
+
+  it("空白行の位置を指定された場合は次の本文行から表示する", () => {
+    expect(buildScrollableDetailMarkdown(DETAIL_MARKDOWN_WITH_BLANK_BODY_LINES, 5)).toBe("line 2");
+  });
+
+  it("末尾の空白行には止まらない", () => {
+    const markdown = ["line 1", "line 2", ""].join("\n");
+
+    expect(resolveNextDetailScrollOffset({ markdown, currentOffset: 1, direction: "down" })).toBe(1);
   });
 
   it("スクロール位置を反映した Markdown を返す", () => {

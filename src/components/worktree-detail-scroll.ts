@@ -25,13 +25,13 @@ export function resolveSafeDetailScrollOffset(markdown: string, offset: number):
   }
   const boundedOffset = Math.min(Math.max(Math.trunc(offset), 0), lines.length - 1);
   const contentStartIndex = resolveScrollableContentStartIndex(lines);
-  if (boundedOffset === 0 || contentStartIndex === 0) {
+  if (boundedOffset === 0) {
     return boundedOffset;
   }
   if (boundedOffset < contentStartIndex) {
-    return contentStartIndex;
+    return resolveReadableDetailScrollOffset(lines, contentStartIndex, "down");
   }
-  return boundedOffset;
+  return resolveReadableDetailScrollOffset(lines, boundedOffset, "down");
 }
 
 /**
@@ -48,9 +48,9 @@ export function resolveNextDetailScrollOffset(args: {
     if (contentStartIndex > 0 && args.currentOffset <= contentStartIndex) {
       return 0;
     }
+    return resolveReadableDetailScrollOffset(lines, args.currentOffset - 1, "up");
   }
-  const delta = args.direction === "down" ? 1 : -1;
-  return resolveSafeDetailScrollOffset(args.markdown, args.currentOffset + delta);
+  return resolveSafeDetailScrollOffset(args.markdown, args.currentOffset + 1);
 }
 
 /**
@@ -79,4 +79,26 @@ function resolveScrollableContentStartIndex(lines: string[]): number {
   }
   const contentStartIndex = blankLineIndex + 1;
   return contentStartIndex >= lines.length ? 0 : contentStartIndex;
+}
+
+/**
+ * 空白行を避けた読み取り可能なスクロール位置を返す
+ */
+function resolveReadableDetailScrollOffset(lines: string[], offset: number, direction: DetailScrollDirection): number {
+  const boundedOffset = Math.min(Math.max(Math.trunc(offset), 0), lines.length - 1);
+  if (lines[boundedOffset]?.trim() !== "") {
+    return boundedOffset;
+  }
+  const delta = direction === "down" ? 1 : -1;
+  for (let index = boundedOffset + delta; index >= 0 && index < lines.length; index += delta) {
+    if (lines[index]?.trim() !== "") {
+      return index;
+    }
+  }
+  for (let index = boundedOffset - delta; index >= 0 && index < lines.length; index -= delta) {
+    if (lines[index]?.trim() !== "") {
+      return index;
+    }
+  }
+  return boundedOffset;
 }
