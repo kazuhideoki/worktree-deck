@@ -375,6 +375,30 @@ describe("formatTitleEntry", () => {
     expect(message).toBe("LastAnswer: " + "a".repeat(210));
     expect(message).not.toContain("...");
   });
+
+  it("改行を含む LastAnswer 相当の最新メッセージは見出しなしの本文ブロックで表示する", () => {
+    const entry = buildTitleEntry({
+      title: "Session Title",
+      latestMessage: "Final decision: approve\n\n- Commit: e8f2a9b\n- Tests: passed",
+      updatedAt: 0,
+    });
+
+    const result = formatTitleEntry(entry);
+
+    expect(result).toBe(
+      [
+        "| 📝 | Session Title |",
+        "| --- | --- |",
+        "| 🌿 | No git status |",
+        "| 🧰 | None |",
+        "",
+        "Final decision: approve",
+        "",
+        "- Commit: e8f2a9b",
+        "- Tests: passed",
+      ].join("\n"),
+    );
+  });
 });
 
 describe("buildMergeConfirmationMessage", () => {

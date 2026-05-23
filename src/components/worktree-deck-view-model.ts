@@ -373,14 +373,21 @@ export function buildSortedSectionEntries(args: {
  */
 export function formatTitleEntry(entry: WorktreeTitle, gitStatus: string | null = null): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
+  const shouldRenderLatestMessageBlock = hasLineBreak(latestMessage);
   const rows = [
     ["📝", truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS)],
     ["🌿", gitStatus ?? "No git status"],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
-    ["💬", latestMessage],
   ];
+  if (!shouldRenderLatestMessageBlock) {
+    rows.push(["💬", latestMessage]);
+  }
   const [headerRow, ...bodyRows] = rows.map(([key, value]) => `| ${key} | ${formatTableValue(value)} |`);
-  return [headerRow, "| --- | --- |", ...bodyRows].join("\n");
+  const table = [headerRow, "| --- | --- |", ...bodyRows].join("\n");
+  if (!shouldRenderLatestMessageBlock) {
+    return table;
+  }
+  return `${table}\n\n${formatLatestMessageBlock(latestMessage)}`;
 }
 
 /**
@@ -462,6 +469,20 @@ function truncateDisplayText(value: string, maxColumns: number): string {
  */
 function formatTableValue(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+}
+
+/**
+ * 文字列に改行が含まれるか判定する
+ */
+function hasLineBreak(value: string): boolean {
+  return /\r?\n/.test(value);
+}
+
+/**
+ * 改行を含む最新回答の Markdown ブロックを作る
+ */
+function formatLatestMessageBlock(value: string): string {
+  return value.trim();
 }
 
 /**

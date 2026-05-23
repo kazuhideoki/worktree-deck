@@ -64,10 +64,34 @@ describe("sessionLogParserService", () => {
       titleTurnId: "turn-1",
       cwds: [path],
       status: "done",
+      latestMessage: "🤖 Done",
       startedAt: Date.parse("2026-05-03T10:00:00.000Z"),
       sessionKind: "main",
       isWaitingForUser: false,
     });
+  });
+
+  it("latestMessage は回答本文の改行を保持する", () => {
+    const result = parseLines([
+      {
+        timestamp: "2026-05-03T10:00:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "Review changes",
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:01:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "agent_message",
+          message: "Final decision: approve\n\n- Commit: abc123\n- Tests: passed",
+        },
+      },
+    ]);
+
+    expect(result.latestMessage).toBe("🤖 Final decision: approve\n\n- Commit: abc123\n- Tests: passed");
   });
 
   it("goal 継続 developer message の objective を title fallback として解析する", () => {

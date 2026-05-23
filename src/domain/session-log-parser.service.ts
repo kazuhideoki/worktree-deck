@@ -110,11 +110,6 @@ const CWD_PATTERN = /<cwd>([^<]+)<\/cwd>/g;
 const TITLE_MAX_LENGTH_CHARS = 60;
 
 /**
- * 最新メッセージの表示上限文字数
- */
-const LATEST_MESSAGE_MAX_LENGTH_CHARS = 500;
-
-/**
  * 同一スキル使用を隣接重複としてまとめる時間幅
  */
 const SKILL_USAGE_DEDUPE_WINDOW_MS = 2 * 60 * 1000;
@@ -985,21 +980,21 @@ function extractAssistantMessageFromLogLine(line: string): string | null {
 /**
  * メッセージ先頭からプレビュー用文字列を作る
  */
-function extractPreviewFromMessage(message: string, maxLengthChars: number): string | null {
+function extractPreviewFromMessage(message: string): string | null {
   const trimmed = message.trim();
   if (!trimmed) {
     return null;
   }
-  // 改行を空白に置換してプレビューを作る
   const normalized = trimmed
-    .replace(/[\r\n]+/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
     .trim();
   if (!normalized) {
     return null;
   }
-  const preview = normalized.slice(0, maxLengthChars).trim();
-  return preview || null;
+  return normalized || null;
 }
 
 /**
@@ -1097,6 +1092,9 @@ function updateParseState(args: {
       state.goalObjectiveTimestamp = timestamp;
       state.latestStatus = "working";
     }
+    if (responseMessage?.role === "assistant" && responseMessage.phase === "final_answer") {
+      state.latestEventMessage = { role: "agent", message: responseMessage.text };
+    }
     addSkillUsage(state, extractSkillUsageFromFunctionCall(parsed, timestamp));
     if (eventMessage?.role === "agent") {
       addSkillUsage(state, extractSkillUsageFromAssistantText(eventMessage.message, timestamp));
@@ -1139,7 +1137,7 @@ function finalizeParseState(state: SessionParseState): ParsedSessionLog {
   const startedAtTimestamp = state.firstEventUserTimestamp ?? state.goalObjectiveTimestamp;
   let latestMessage: string | null = null;
   if (state.latestEventMessage?.message) {
-    const trimmed = extractPreviewFromMessage(state.latestEventMessage.message, LATEST_MESSAGE_MAX_LENGTH_CHARS);
+    const trimmed = extractPreviewFromMessage(state.latestEventMessage.message);
     if (trimmed) {
       latestMessage = `${state.latestEventMessage.role === "agent" ? "🤖" : "🙂"} ${trimmed}`;
     }
