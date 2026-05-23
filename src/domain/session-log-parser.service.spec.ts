@@ -223,6 +223,42 @@ describe("sessionLogParserService", () => {
     ]);
   });
 
+  it("user message の skill ブロックからスキル使用履歴を解析する", () => {
+    const result = parseLines([
+      {
+        timestamp: "2026-05-03T10:00:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "$review-by-sub-agents 1spawn\n" +
+                "<skill>\n" +
+                "<name>review-by-sub-agents</name>\n" +
+                "<path>/Users/me/.codex/skills/review-by-sub-agents/SKILL.md</path>\n" +
+                "---\n" +
+                "name: review-by-sub-agents\n" +
+                "</skill>",
+            },
+          ],
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:00:01.000Z",
+        type: "event_msg",
+        payload: {
+          type: "agent_message",
+          message: "review-by-sub-agents スキルを使います。",
+        },
+      },
+    ]);
+
+    expect(result.skillUsages).toEqual([{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" }]);
+  });
+
   it.each([
     {
       name: "cli",
