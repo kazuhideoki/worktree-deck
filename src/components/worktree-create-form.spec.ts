@@ -200,19 +200,17 @@ describe("resolveCreateWorktreeFormImagePaths", () => {
 
 describe("formatImageAttachmentSummary", () => {
   it("1枚の場合は単数形で表示する", () => {
-    expect(formatImageAttachmentSummary(1)).toBe("1 image attached");
+    expect(formatImageAttachmentSummary(1)).toBe("1 image");
   });
 
   it("複数枚の場合は複数形で表示する", () => {
-    expect(formatImageAttachmentSummary(2)).toBe("2 images attached");
+    expect(formatImageAttachmentSummary(2)).toBe("2 images");
   });
 });
 
 describe("formatImageAttachmentControlsText", () => {
   it("添付数と3種類の添付操作を表示する", () => {
-    expect(formatImageAttachmentControlsText(2)).toBe(
-      "2 images attached  |  Clipboard ⌘⇧I  |  Screenshot ⌘⇧S  |  Finder ⌘⇧F",
-    );
+    expect(formatImageAttachmentControlsText(2)).toBe("2 images | Clipboard ⌘⇧C | Shot ⌘⇧S | Finder ⌘⇧F");
   });
 });
 
