@@ -11,7 +11,7 @@ import {
   showToast,
   useNavigation,
 } from "@raycast/api";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useCachedState } from "@raycast/utils";
 import { CreateWorktreeForm } from "./components/worktree-create-form";
 import { MergeWorktreeForm } from "./components/worktree-merge-form";
@@ -42,6 +42,7 @@ import {
   normalizeWorktreeBranchName,
 } from "./components/worktree-ui-utils";
 import { buildOpenAppAccessory, resolveOpenAppIcon } from "./components/worktree-open-app-icon";
+import { worktreeDeckDataStore } from "./components/worktree-deck-data-store";
 import {
   SCROLL_DETAIL_DOWN_SHORTCUT,
   SCROLL_DETAIL_UP_SHORTCUT,
@@ -58,7 +59,6 @@ import {
   hasAnySessionWaitingForUser,
   parseDisplayMode,
   resolveEntryItemId,
-  resolveUnresolvedCodexThreadPaths,
   resolveWorktreeStatus,
   toggleDisplayMode,
   type WorktreeDeckDisplayMode,
@@ -76,7 +76,6 @@ import {
   type PersistedSelectionState,
   type SelectionRestorePhase,
 } from "./components/worktree-deck-selection";
-import { worktreeDeckSnapshotUsecase } from "./application/worktree-deck-snapshot.usecase";
 import { deletedWorktreesUsecase } from "./application/deleted-worktrees.usecase";
 import { removeWorktreeUsecase } from "./application/remove-worktree.usecase";
 import { worktreeRenameUsecase } from "./application/worktree-rename.usecase";
@@ -92,11 +91,7 @@ import {
   type WorktreePullRequestResult,
   type WorktreeTitle,
 } from "./composition-root";
-import {
-  worktreeOpenAppService,
-  type WorktreeOpenApp,
-  type WorktreeOpenAppMeta,
-} from "./domain/worktree-open-app.service";
+import { worktreeOpenAppService, type WorktreeOpenApp } from "./domain/worktree-open-app.service";
 import { buildGlobalActionItems, type GlobalActionId } from "./global-actions";
 
 export {
@@ -248,23 +243,11 @@ export default function Command() {
   useEffect(() => {
     console.info(`[worktree-deck][timing] enabled=${FORCE_TIMING_LOG}`);
   }, []);
-  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isTitlesLoading, setIsTitlesLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [basePath, setBasePath] = useState<string | null>(null);
-  const [worktreeNameDelimiter, setWorktreeNameDelimiter] = useState("~_~");
-  const [titlesByPath, setTitlesByPath] = useState<Map<string, WorktreeTitle[]>>(new Map());
-  const [repositoryMappings, setRepositoryMappings] = useState<RepositoryMapping[]>([]);
   const [hiddenWorktreePaths, setHiddenWorktreePaths] = useState<Set<string>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [detailScrollOffsetsByItemId, setDetailScrollOffsetsByItemId] = useState<Record<string, number>>({});
   const [persistedSelection, setPersistedSelection] = useState<PersistedSelectionState | null>(null);
   const [selectionPhase, setSelectionPhase] = useState<SelectionRestorePhase>("loading-storage");
-  const [originLastCommitByPath, setOriginLastCommitByPath] = useState<Map<string, string | null>>(new Map());
-  const [originBranchByPath, setOriginBranchByPath] = useState<Map<string, string | null>>(new Map());
-  const [openAppMetaByPath, setOpenAppMetaByPath] = useState<Map<string, WorktreeOpenAppMeta>>(new Map());
-  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [displayMode, setDisplayMode] = useCachedState<WorktreeDeckDisplayMode>(
     "worktree-deck.displayMode",
@@ -280,12 +263,8 @@ export default function Command() {
   );
   const shouldRefreshOnPop = useRef(false);
   const displayCacheRef = useRef<WorktreeDeckDisplayCache | null>(displayCache);
-  const titlesRequestIdRef = useRef(0);
+  const lastShownErrorIdRef = useRef(0);
   const selectionSettlingSignatureRef = useRef<string | null>(null);
-  /**
-   * 詳細読み込みの競合を防ぐための識別子
-   */
-  const detailsRequestIdRef = useRef(0);
   /**
    * 計測ログを有効にするか判定する
    */
@@ -317,6 +296,49 @@ export default function Command() {
       console.info(`[worktree-deck][timing] worktrees=${names.length} ${names.join(", ")}`);
     },
     [shouldLogTiming],
+  );
+  const dataSnapshot = useSyncExternalStore(
+    worktreeDeckDataStore.subscribe,
+    worktreeDeckDataStore.getSnapshot,
+    worktreeDeckDataStore.getSnapshot,
+  );
+  const {
+    worktrees,
+    listedWorktrees,
+    isLoading,
+    isTitlesLoading,
+    isDetailsLoading,
+    errorMessage,
+    errorId,
+    basePath,
+    worktreeNameDelimiter,
+    titlesByPath,
+    repositoryMappings,
+    originLastCommitByPath,
+    originBranchByPath,
+    openAppMetaByPath,
+  } = dataSnapshot;
+  const buildDataStoreLoadRequest = useCallback(
+    () => ({
+      context: {
+        env: process.env,
+        cwd: process.cwd(),
+        homeDir: process.env.HOME?.trim() ?? null,
+        assetsPath: environment.assetsPath,
+        packageDir: __dirname,
+        packageName: "worktree-deck",
+      },
+      displayCache: displayCacheRef.current,
+      dependencies: {
+        initialSnapshot: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckInitialSnapshotDependencies,
+        titlesSnapshot: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckTitlesSnapshotDependencies,
+        detailsSnapshot: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckDetailsSnapshotDependencies,
+        sessionFile: WORKTREE_DECK_COMPOSITION_ROOT.worktreeSessionFileDependencies,
+      },
+      logTiming,
+      logWorktreeNames,
+    }),
+    [logTiming, logWorktreeNames],
   );
   /**
    * 検索入力の更新をレンダリング外で反映する
@@ -436,6 +458,38 @@ export default function Command() {
     displayCacheRef.current = displayCache;
   }, [displayCache]);
   useEffect(() => {
+    void worktreeDeckDataStore.ensureLoaded(buildDataStoreLoadRequest());
+  }, [buildDataStoreLoadRequest]);
+  useEffect(() => {
+    if (errorMessage === null || errorId <= lastShownErrorIdRef.current) {
+      return;
+    }
+    lastShownErrorIdRef.current = errorId;
+    void showToast({
+      style: Toast.Style.Failure,
+      title: "Failed to load worktrees",
+      message: errorMessage,
+    });
+  }, [errorId, errorMessage]);
+  useEffect(() => {
+    setHiddenWorktreePaths((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+      const listedPaths = new Set(listedWorktrees.map((item) => item.path));
+      const next = new Set<string>();
+      for (const path of current) {
+        if (listedPaths.has(path)) {
+          next.add(path);
+        }
+      }
+      if (next.size === current.size) {
+        return current;
+      }
+      return next;
+    });
+  }, [listedWorktrees]);
+  useEffect(() => {
     let cancelled = false;
     void WORKTREE_DECK_COMPOSITION_ROOT.selectionStore.loadPersistedSelection().then((stored) => {
       if (cancelled) {
@@ -544,258 +598,9 @@ export default function Command() {
     titlesByPath,
     worktrees,
   ]);
-  const loadTitlesState = useCallback(
-    async (
-      args: {
-        worktrees: Worktree[];
-        mappings: RepositoryMapping[];
-        requestId: number;
-      },
-      guard?: { cancelled: boolean },
-    ) => {
-      const startMs = Date.now();
-      const isCancelled = () => guard?.cancelled ?? false;
-      const isStale = () => args.requestId !== titlesRequestIdRef.current;
-      if (isCancelled() || isStale()) {
-        return;
-      }
-      setIsTitlesLoading(true);
-      try {
-        const snapshot = await worktreeDeckSnapshotUsecase.loadTitlesSnapshot({
-          context: {
-            env: process.env,
-            cwd: process.cwd(),
-            homeDir: process.env.HOME?.trim() ?? null,
-            assetsPath: environment.assetsPath,
-            packageDir: __dirname,
-            packageName: "worktree-deck",
-          },
-          worktrees: args.worktrees,
-          mappings: args.mappings,
-          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckTitlesSnapshotDependencies,
-        });
-        if (isCancelled() || isStale()) {
-          return;
-        }
-        setTitlesByPath(snapshot.titlesByPath);
-        setWorktrees((current) => mergeWorktreeTitlesByPath(current, snapshot.worktrees));
-      } catch {
-        // タイトル取得失敗はUIを壊さない
-      } finally {
-        if (!isCancelled() && !isStale()) {
-          setIsTitlesLoading(false);
-        }
-        logTiming("loadTitlesState", Date.now() - startMs);
-      }
-    },
-    [logTiming],
-  );
-
-  /**
-   * 未解決の Codex thread id をセッションファイルから非同期で補完する
-   */
-  const resolveMissingCodexThreadIds = useCallback(
-    async (paths: string[]): Promise<void> => {
-      const uniquePaths = Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean)));
-      if (uniquePaths.length === 0) {
-        return;
-      }
-      const startMs = Date.now();
-      for (const path of uniquePaths) {
-        try {
-          const resolved = await worktreeSessionFileUsecase.resolveAndSaveCodexThreadId({
-            worktreePath: path,
-            context: {
-              env: process.env,
-              cwd: process.cwd(),
-              homeDir: process.env.HOME?.trim() ?? null,
-              assetsPath: environment.assetsPath,
-              packageDir: __dirname,
-              packageName: "worktree-deck",
-            },
-            dependencies: WORKTREE_DECK_COMPOSITION_ROOT.worktreeSessionFileDependencies,
-          });
-          if (resolved === null) {
-            continue;
-          }
-          setOpenAppMetaByPath((current) => {
-            const currentMeta = current.get(path);
-            if (
-              currentMeta === undefined ||
-              currentMeta.openApp !== "codex-app" ||
-              currentMeta.threadId === resolved.threadId
-            ) {
-              return current;
-            }
-            const next = new Map(current);
-            next.set(path, { ...currentMeta, threadId: resolved.threadId });
-            return next;
-          });
-        } catch {
-          // thread id 解決失敗は次回起動時に再試行する
-        }
-      }
-      logTiming("resolveMissingCodexThreadIds", Date.now() - startMs);
-    },
-    [logTiming],
-  );
-
-  const loadWorktreeDetailsState = useCallback(
-    async (
-      args: {
-        worktrees: Worktree[];
-        mappings: RepositoryMapping[];
-        requestId: number;
-      },
-      guard?: { cancelled: boolean },
-    ) => {
-      const startMs = Date.now();
-      const isCancelled = () => guard?.cancelled ?? false;
-      const isStale = () => args.requestId !== detailsRequestIdRef.current;
-      /**
-       * 詳細取得の各ステップ時間を記録する
-       */
-      const logDetailsStep = (label: string, startedAt: number): void => {
-        logTiming(`loadWorktreeDetailsState:${label}`, Date.now() - startedAt);
-      };
-      if (isCancelled() || isStale()) {
-        return;
-      }
-      setIsDetailsLoading(true);
-      try {
-        const snapshotStartMs = Date.now();
-        const snapshot = await worktreeDeckSnapshotUsecase.loadDetailsSnapshot({
-          worktrees: args.worktrees,
-          mappings: args.mappings,
-          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckDetailsSnapshotDependencies,
-        });
-        logDetailsStep("snapshot", snapshotStartMs);
-        if (isCancelled() || isStale()) {
-          return;
-        }
-        setRepositoryMappings(snapshot.mappings);
-        setOriginLastCommitByPath(snapshot.originLastCommitByPath);
-        setOriginBranchByPath(snapshot.originBranchByPath);
-        setOpenAppMetaByPath(snapshot.openAppMetaByPath);
-        void resolveMissingCodexThreadIds(resolveUnresolvedCodexThreadPaths(snapshot.openAppMetaByPath));
-        setWorktrees((current) => mergeWorktreesByPath(current, snapshot.worktrees));
-      } catch {
-        // 詳細取得失敗はUIを壊さない
-      } finally {
-        if (!isCancelled() && !isStale()) {
-          setIsDetailsLoading(false);
-        }
-        logTiming("loadWorktreeDetailsState", Date.now() - startMs);
-      }
-    },
-    [logTiming, resolveMissingCodexThreadIds],
-  );
-
-  const loadWorktreesState = useCallback(
-    async (guard?: { cancelled: boolean }) => {
-      const startMs = Date.now();
-      const isCancelled = () => guard?.cancelled ?? false;
-      if (isCancelled()) {
-        return;
-      }
-      setIsLoading(true);
-      setIsTitlesLoading(false);
-      setIsDetailsLoading(false);
-      try {
-        const snapshot = await worktreeDeckSnapshotUsecase.loadInitialSnapshot({
-          context: {
-            env: process.env,
-            cwd: process.cwd(),
-            homeDir: process.env.HOME?.trim() ?? null,
-            assetsPath: environment.assetsPath,
-            packageDir: __dirname,
-            packageName: "worktree-deck",
-          },
-          displayCache: displayCacheRef.current,
-          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckInitialSnapshotDependencies,
-        });
-        logWorktreeNames(snapshot.listedWorktrees);
-        if (isCancelled()) {
-          return;
-        }
-        setBasePath(snapshot.basePath);
-        setWorktreeNameDelimiter(snapshot.delimiter);
-        setWorktrees(snapshot.worktrees);
-        setHiddenWorktreePaths((current) => {
-          if (current.size === 0) {
-            return current;
-          }
-          const listedPaths = new Set(snapshot.listedWorktrees.map((item) => item.path));
-          const next = new Set<string>();
-          for (const path of current) {
-            if (listedPaths.has(path)) {
-              next.add(path);
-            }
-          }
-          if (next.size === current.size) {
-            return current;
-          }
-          return next;
-        });
-        setRepositoryMappings(snapshot.mappings);
-        setOriginLastCommitByPath(snapshot.originLastCommitByPath);
-        setOriginBranchByPath(snapshot.originBranchByPath);
-        setOpenAppMetaByPath(snapshot.openAppMetaByPath);
-        setTitlesByPath(snapshot.titlesByPath);
-        setErrorMessage(null);
-        setIsLoading(false);
-        titlesRequestIdRef.current += 1;
-        const requestId = titlesRequestIdRef.current;
-        void loadTitlesState({ worktrees: snapshot.listedWorktrees, mappings: snapshot.mappings, requestId }, guard);
-        detailsRequestIdRef.current += 1;
-        const detailsRequestId = detailsRequestIdRef.current;
-        void loadWorktreeDetailsState(
-          {
-            worktrees: snapshot.listedWorktrees,
-            mappings: snapshot.mappings,
-            requestId: detailsRequestId,
-          },
-          guard,
-        );
-      } catch (error) {
-        if (isCancelled()) {
-          return;
-        }
-        const message = error instanceof Error ? error.message : "Unknown error";
-        setWorktrees([]);
-        setTitlesByPath(new Map());
-        setRepositoryMappings([]);
-        setOriginLastCommitByPath(new Map());
-        setOriginBranchByPath(new Map());
-        setOpenAppMetaByPath(new Map());
-        setErrorMessage(message);
-        setIsDetailsLoading(false);
-        await showToast({
-          style: Toast.Style.Failure,
-          title: "Failed to load worktrees",
-          message,
-        });
-      } finally {
-        if (!isCancelled()) {
-          setIsLoading(false);
-        }
-        logTiming("loadWorktreesState", Date.now() - startMs);
-      }
-    },
-    [loadTitlesState, loadWorktreeDetailsState, logTiming, logWorktreeNames],
-  );
-
-  useEffect(() => {
-    const guard = { cancelled: false };
-    void loadWorktreesState(guard);
-    return () => {
-      guard.cancelled = true;
-    };
-  }, [loadWorktreesState]);
-
   const refreshWorktrees = useCallback(async () => {
-    await loadWorktreesState();
-  }, [loadWorktreesState]);
+    await worktreeDeckDataStore.reload(buildDataStoreLoadRequest());
+  }, [buildDataStoreLoadRequest]);
 
   /**
    * ユーザー操作で一覧を最新状態へ更新する
@@ -1279,11 +1084,7 @@ export default function Command() {
           dependencies: WORKTREE_DECK_COMPOSITION_ROOT.openWorktreeInPreferredAppDependencies,
         });
         if (result.savedMeta !== null) {
-          setOpenAppMetaByPath((current) => {
-            const next = new Map(current);
-            next.set(path.trim(), result.savedMeta as WorktreeOpenAppMeta);
-            return next;
-          });
+          worktreeDeckDataStore.updateOpenAppMetaByPath(path, result.savedMeta);
         }
         toast.style = Toast.Style.Success;
         toast.title = `Opened in ${label}`;
@@ -1588,7 +1389,7 @@ export default function Command() {
 
   return (
     <List
-      isLoading={isLoading || isTitlesLoading || isDetailsLoading || isSelectionPreparing}
+      isLoading={isLoading || isSelectionPreparing}
       searchBarPlaceholder="Search worktrees"
       searchBarAccessory={
         <List.Dropdown
@@ -1882,50 +1683,6 @@ export default function Command() {
       )}
     </List>
   );
-}
-
-/**
- * worktree の追加情報をパス単位で統合する
- */
-function mergeWorktreesByPath(current: Worktree[], updates: Worktree[]): Worktree[] {
-  const currentMap = new Map(current.map((item) => [item.path, item]));
-  return updates.map((item) => {
-    const existing = currentMap.get(item.path);
-    if (!existing) {
-      return item;
-    }
-    return {
-      ...existing,
-      ...item,
-      titleEntries: item.titleEntries ?? existing.titleEntries,
-      mergeStatus: item.mergeStatus ?? existing.mergeStatus,
-      lastCommitAt: item.lastCommitAt ?? existing.lastCommitAt,
-      baseRef: item.baseRef ?? existing.baseRef,
-      aheadCount: item.aheadCount ?? existing.aheadCount,
-      behindCount: item.behindCount ?? existing.behindCount,
-    };
-  });
-}
-
-/**
- * worktree のタイトル情報をパス単位で統合する
- */
-function mergeWorktreeTitlesByPath(current: Worktree[], updates: Worktree[]): Worktree[] {
-  const currentMap = new Map(current.map((item) => [item.path, item]));
-  const titlesByPath = new Map(updates.map((item) => [item.path, item.titleEntries]));
-  const merged = current.map((item) => {
-    const titles = titlesByPath.get(item.path);
-    if (!titles) {
-      return item;
-    }
-    return { ...item, titleEntries: titles };
-  });
-  for (const update of updates) {
-    if (!currentMap.has(update.path)) {
-      merged.push(update);
-    }
-  }
-  return merged;
 }
 
 /**
