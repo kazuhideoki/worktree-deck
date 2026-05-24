@@ -10,6 +10,7 @@ import {
   closeMainWindow,
   environment,
   showToast,
+  type Keyboard,
   useNavigation,
 } from "@raycast/api";
 import { useCachedState } from "@raycast/utils";
@@ -119,6 +120,24 @@ const {
   saveOpenAppForWorktreePath,
 } = WORKTREE_DECK_COMPOSITION_ROOT.createWorktreeFormDependencies;
 const { autoStartImageInputDependencies } = WORKTREE_DECK_COMPOSITION_ROOT;
+
+/**
+ * クリップボード画像添付のショートカット
+ */
+const ATTACH_CLIPBOARD_IMAGE_SHORTCUT = { modifiers: ["cmd", "shift"], key: "c" } satisfies Keyboard.Shortcut;
+
+/**
+ * 最新スクリーンショット添付のショートカット
+ */
+const ATTACH_LATEST_SCREENSHOT_IMAGE_SHORTCUT = {
+  modifiers: ["cmd", "shift"],
+  key: "s",
+} satisfies Keyboard.Shortcut;
+
+/**
+ * Finder 選択画像添付のショートカット
+ */
+const ATTACH_SELECTED_FINDER_IMAGES_SHORTCUT = { modifiers: ["cmd", "shift"], key: "f" } satisfies Keyboard.Shortcut;
 
 /**
  * worktree を指定アプリで開く
@@ -729,7 +748,7 @@ export function CreateWorktreeForm({
             <Action
               title="Attach Clipboard Image"
               icon={Icon.Image}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
+              shortcut={ATTACH_CLIPBOARD_IMAGE_SHORTCUT}
               onAction={() => {
                 void handleAttachClipboardImage();
               }}
@@ -739,7 +758,7 @@ export function CreateWorktreeForm({
             <Action
               title="Attach Latest Screenshot"
               icon={Icon.Image}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+              shortcut={ATTACH_LATEST_SCREENSHOT_IMAGE_SHORTCUT}
               onAction={() => {
                 void handleAttachLatestScreenshotImage();
               }}
@@ -749,7 +768,7 @@ export function CreateWorktreeForm({
             <Action
               title="Attach Selected Finder Images"
               icon={Icon.Finder}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
+              shortcut={ATTACH_SELECTED_FINDER_IMAGES_SHORTCUT}
               onAction={() => {
                 void handleAttachSelectedFinderImages();
               }}
@@ -796,7 +815,7 @@ export function CreateWorktreeForm({
               return (
                 <Form.Description
                   key={itemId}
-                  title="Attach Images"
+                  title="Images"
                   text={formatImageAttachmentControlsText(imagePaths.length)}
                 />
               );
@@ -953,14 +972,14 @@ export function CreateWorktreeForm({
  * 添付画像のフォーム表示用サマリーを返す
  */
 export function formatImageAttachmentSummary(count: number): string {
-  return count === 1 ? "1 image attached" : `${count} images attached`;
+  return count === 1 ? "1 image" : `${count} images`;
 }
 
 /**
  * 画像添付操作のフォーム表示テキストを返す
  */
 export function formatImageAttachmentControlsText(count: number): string {
-  return `${formatImageAttachmentSummary(count)}  |  Clipboard ⌘⇧I  |  Screenshot ⌘⇧S  |  Finder ⌘⇧F`;
+  return `${formatImageAttachmentSummary(count)} | Clipboard ⌘⇧C | Shot ⌘⇧S | Finder ⌘⇧F`;
 }
 
 type ImageAttachmentsPreviewProps = {
@@ -1030,16 +1049,22 @@ function ImageAttachmentsPreview({
             shortcut={{ modifiers: ["cmd"], key: "i" }}
             onAction={pop}
           />
-          <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+          <Action
+            title="Attach Clipboard Image"
+            icon={Icon.Image}
+            shortcut={ATTACH_CLIPBOARD_IMAGE_SHORTCUT}
+            onAction={handleAttachClipboardImage}
+          />
           <Action
             title="Attach Latest Screenshot"
             icon={Icon.Image}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+            shortcut={ATTACH_LATEST_SCREENSHOT_IMAGE_SHORTCUT}
             onAction={handleAttachLatestScreenshotImage}
           />
           <Action
             title="Attach Selected Finder Images"
             icon={Icon.Finder}
+            shortcut={ATTACH_SELECTED_FINDER_IMAGES_SHORTCUT}
             onAction={handleAttachSelectedFinderImages}
           />
         </ActionPanel>
@@ -1057,16 +1082,22 @@ function ImageAttachmentsPreview({
                 shortcut={{ modifiers: ["cmd"], key: "i" }}
                 onAction={pop}
               />
-              <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+              <Action
+                title="Attach Clipboard Image"
+                icon={Icon.Image}
+                shortcut={ATTACH_CLIPBOARD_IMAGE_SHORTCUT}
+                onAction={handleAttachClipboardImage}
+              />
               <Action
                 title="Attach Latest Screenshot"
                 icon={Icon.Image}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+                shortcut={ATTACH_LATEST_SCREENSHOT_IMAGE_SHORTCUT}
                 onAction={handleAttachLatestScreenshotImage}
               />
               <Action
                 title="Attach Selected Finder Images"
                 icon={Icon.Finder}
+                shortcut={ATTACH_SELECTED_FINDER_IMAGES_SHORTCUT}
                 onAction={handleAttachSelectedFinderImages}
               />
             </ActionPanel>
@@ -1094,16 +1125,22 @@ function ImageAttachmentsPreview({
                 onAction={() => handleRemoveImagePath(path)}
               />
               <Action title="Clear Images" icon={Icon.Trash} onAction={handleClearImagePaths} />
-              <Action title="Attach Clipboard Image" icon={Icon.Image} onAction={handleAttachClipboardImage} />
+              <Action
+                title="Attach Clipboard Image"
+                icon={Icon.Image}
+                shortcut={ATTACH_CLIPBOARD_IMAGE_SHORTCUT}
+                onAction={handleAttachClipboardImage}
+              />
               <Action
                 title="Attach Latest Screenshot"
                 icon={Icon.Image}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+                shortcut={ATTACH_LATEST_SCREENSHOT_IMAGE_SHORTCUT}
                 onAction={handleAttachLatestScreenshotImage}
               />
               <Action
                 title="Attach Selected Finder Images"
                 icon={Icon.Finder}
+                shortcut={ATTACH_SELECTED_FINDER_IMAGES_SHORTCUT}
                 onAction={handleAttachSelectedFinderImages}
               />
             </ActionPanel>
