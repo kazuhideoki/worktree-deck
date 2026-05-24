@@ -22,7 +22,9 @@ import {
   resolveOpenActionThreadId,
   resolveInitialRepoRoot,
   SHOW_DETAILS_SHORTCUT,
+  shouldAutoOpenRepositoryMappingOnboarding,
   shouldSelectCodexSessionForOpenAction,
+  shouldShowRepositoryMappingOnboardingEmptyState,
   type WorktreeDeckDisplayMode,
 } from "./worktree-deck";
 
@@ -806,6 +808,73 @@ describe("resolveInitialRepoRoot", () => {
     });
 
     expect(result).toBe("/repos/gitui");
+  });
+});
+
+describe("shouldAutoOpenRepositoryMappingOnboarding", () => {
+  it("初期読み込み完了後に mapping が空なら自動表示する", () => {
+    const result = shouldAutoOpenRepositoryMappingOnboarding({
+      isLoading: false,
+      errorMessage: null,
+      mappings: [],
+      hasOpened: false,
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it("一度開いた後は mapping が空でも自動表示しない", () => {
+    const result = shouldAutoOpenRepositoryMappingOnboarding({
+      isLoading: false,
+      errorMessage: null,
+      mappings: [],
+      hasOpened: true,
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it("読み込み中・エラー中・設定済みのときは自動表示しない", () => {
+    expect(
+      shouldAutoOpenRepositoryMappingOnboarding({
+        isLoading: true,
+        errorMessage: null,
+        mappings: [],
+        hasOpened: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoOpenRepositoryMappingOnboarding({
+        isLoading: false,
+        errorMessage: "failed",
+        mappings: [],
+        hasOpened: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoOpenRepositoryMappingOnboarding({
+        isLoading: false,
+        errorMessage: null,
+        mappings: [{ repoRoot: "/repos/repo-a", mapValue: "repo-a" }],
+        hasOpened: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldShowRepositoryMappingOnboardingEmptyState", () => {
+  it("検索中でなく mapping が空なら初回用の空状態を表示する", () => {
+    expect(shouldShowRepositoryMappingOnboardingEmptyState({ searchText: "", mappings: [] })).toBe(true);
+  });
+
+  it("検索中または mapping 設定済みなら初回用の空状態を表示しない", () => {
+    expect(shouldShowRepositoryMappingOnboardingEmptyState({ searchText: "repo", mappings: [] })).toBe(false);
+    expect(
+      shouldShowRepositoryMappingOnboardingEmptyState({
+        searchText: "",
+        mappings: [{ repoRoot: "/repos/repo-a", mapValue: "repo-a" }],
+      }),
+    ).toBe(false);
   });
 });
 

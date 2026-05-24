@@ -265,6 +265,7 @@ export default function Command() {
   const displayCacheRef = useRef<WorktreeDeckDisplayCache | null>(displayCache);
   const lastShownErrorIdRef = useRef(0);
   const selectionSettlingSignatureRef = useRef<string | null>(null);
+  const hasOpenedRepositoryMappingOnboardingRef = useRef(false);
   /**
    * 計測ログを有効にするか判定する
    */
@@ -426,6 +427,10 @@ export default function Command() {
   const restoreDeletedWorktreeAction = globalActionById.get("restore-deleted-worktree");
   const repositorySettingsAction = globalActionById.get("repository-settings");
   const hasVisibleContent = visibleSections.length > 0;
+  const isRepositoryMappingOnboardingEmptyState = shouldShowRepositoryMappingOnboardingEmptyState({
+    searchText,
+    mappings: repositoryMappings,
+  });
   const isSelectionPreparing = selectionPhase === "loading-storage" || selectionPhase === "waiting-first-list";
   const selectedCreateInitialRepoRoot = useMemo(() => {
     if (!selectedItemId) {
@@ -621,6 +626,28 @@ export default function Command() {
     shouldRefreshOnPop.current = false;
     void refreshWorktrees();
   }, [refreshWorktrees]);
+
+  /**
+   * repository mapping 変更後にメイン一覧を更新する
+   */
+  const handleRepositoryMappingChange = useCallback(() => {
+    markRefreshOnPop();
+    void refreshWorktrees();
+  }, [markRefreshOnPop, refreshWorktrees]);
+
+  useEffect(() => {
+    const shouldOpen = shouldAutoOpenRepositoryMappingOnboarding({
+      isLoading,
+      errorMessage,
+      mappings: repositoryMappings,
+      hasOpened: hasOpenedRepositoryMappingOnboardingRef.current,
+    });
+    if (!shouldOpen) {
+      return;
+    }
+    hasOpenedRepositoryMappingOnboardingRef.current = true;
+    push(<RepositoryMappingManager autoOpenAddForm onChange={handleRepositoryMappingChange} />, handleCreatePop);
+  }, [errorMessage, handleCreatePop, handleRepositoryMappingChange, isLoading, push, repositoryMappings]);
 
   const handleRemoveWorktree = useCallback(
     async (args: { item: Worktree; deleteBranch: boolean; deleteRemoteBranch: boolean }): Promise<void> => {
@@ -1320,7 +1347,7 @@ export default function Command() {
                 title={repositorySettingsAction.title}
                 icon={Icon.Gear}
                 shortcut={repositorySettingsAction.shortcut}
-                target={<RepositoryMappingManager onChange={markRefreshOnPop} />}
+                target={<RepositoryMappingManager onChange={handleRepositoryMappingChange} />}
                 onPop={handleCreatePop}
               />
             </>
@@ -1332,7 +1359,7 @@ export default function Command() {
       createWorktreeAction,
       handleCreatePop,
       handleReloadWorktrees,
-      markRefreshOnPop,
+      handleRepositoryMappingChange,
       refreshWorktrees,
       reloadWorktreesAction,
       repositorySettingsAction,
@@ -1341,6 +1368,23 @@ export default function Command() {
       setDisplayMode,
     ],
   );
+
+  /**
+   * 初回 repository 追加アクションを描画する
+   */
+  const renderAddRepositoryMappingAction = useCallback(() => {
+    if (!repositorySettingsAction) {
+      return null;
+    }
+    return (
+      <Action.Push
+        title="Add Repository Mapping"
+        icon={Icon.PlusCircle}
+        target={<RepositoryMappingManager autoOpenAddForm onChange={handleRepositoryMappingChange} />}
+        onPop={handleCreatePop}
+      />
+    );
+  }, [handleCreatePop, handleRepositoryMappingChange, repositorySettingsAction]);
 
   /**
    * 選択中アイテムの詳細ペイン表示位置を更新する
@@ -1426,17 +1470,28 @@ export default function Command() {
       ) : !hasVisibleContent ? (
         <List.Section title="Status">
           <List.Item
-            title={searchText.trim() ? "No matching worktrees" : "No worktrees"}
+            title={
+              searchText.trim()
+                ? "No matching worktrees"
+                : isRepositoryMappingOnboardingEmptyState
+                  ? "Add your first repository"
+                  : "No worktrees"
+            }
             subtitle={
               searchText.trim()
                 ? "No worktrees matched your search."
-                : basePath
-                  ? `No worktrees were found under ${basePath}.`
-                  : "No worktrees were found."
+                : isRepositoryMappingOnboardingEmptyState
+                  ? "Register a repository path to start tracking worktrees."
+                  : basePath
+                    ? `No worktrees were found under ${basePath}.`
+                    : "No worktrees were found."
             }
-            icon={Icon.Folder}
+            icon={isRepositoryMappingOnboardingEmptyState ? Icon.PlusCircle : Icon.Folder}
             actions={
-              <ActionPanel>{renderGlobalActions({ initialRepoRoot: selectedCreateInitialRepoRoot })}</ActionPanel>
+              <ActionPanel>
+                {isRepositoryMappingOnboardingEmptyState ? renderAddRepositoryMappingAction() : null}
+                {renderGlobalActions({ initialRepoRoot: selectedCreateInitialRepoRoot })}
+              </ActionPanel>
             }
           />
         </List.Section>
@@ -1730,6 +1785,31 @@ export function resolveInitialRepoRoot(args: { item: Worktree; mappings: Reposit
     return resolvePathBasename(mapping.repoRoot) === args.item.repo;
   });
   return mapped?.repoRoot ?? args.item.path;
+}
+
+/**
+ * 初回利用時に repository mapping 追加導線を自動表示するか判定する
+ */
+export function shouldAutoOpenRepositoryMappingOnboarding(args: {
+  isLoading: boolean;
+  errorMessage: string | null;
+  mappings: RepositoryMapping[];
+  hasOpened: boolean;
+}): boolean {
+  if (args.hasOpened || args.isLoading || args.errorMessage !== null) {
+    return false;
+  }
+  return args.mappings.length === 0;
+}
+
+/**
+ * repository mapping 未設定時の初回空状態を表示するか判定する
+ */
+export function shouldShowRepositoryMappingOnboardingEmptyState(args: {
+  searchText: string;
+  mappings: RepositoryMapping[];
+}): boolean {
+  return args.searchText.trim().length === 0 && args.mappings.length === 0;
 }
 
 /**

@@ -7,11 +7,12 @@ import {
   List,
   Toast,
   confirmAlert,
+  popToRoot,
   showToast,
   useNavigation,
 } from "@raycast/api";
 import { basename } from "node:path";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveWorktreeDeckCompositionRoot } from "../composition-root";
 import { type RepositoryMapping } from "../domain/repository-mapping.service";
 
@@ -26,19 +27,23 @@ type RepositoryMappingFormValues = {
 type RepositoryMappingFormProps = {
   initialMapping?: RepositoryMapping;
   onSave: (values: RepositoryMappingFormValues, originalRepoRoot?: string) => Promise<boolean>;
+  returnToRootAfterSave?: boolean;
 };
 
 type RepositoryMappingManagerProps = {
+  autoOpenAddForm?: boolean;
   onChange?: () => void;
 };
 
 /**
  * repository mapping 管理画面を表示する
  */
-export function RepositoryMappingManager({ onChange }: RepositoryMappingManagerProps) {
+export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: RepositoryMappingManagerProps) {
+  const { push } = useNavigation();
   const [mappings, setMappings] = useState<RepositoryMapping[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasAutoOpenedAddFormRef = useRef(false);
 
   /**
    * mapping の一覧を再読み込みする
@@ -145,6 +150,27 @@ export function RepositoryMappingManager({ onChange }: RepositoryMappingManagerP
 
   const sortedMappings = useMemo(() => mappings, [mappings]);
 
+  useEffect(() => {
+    if (
+      !shouldAutoOpenRepositoryMappingForm({
+        autoOpenAddForm,
+        hasAutoOpened: hasAutoOpenedAddFormRef.current,
+        isLoading,
+        errorMessage,
+        mappingCount: sortedMappings.length,
+      })
+    ) {
+      return;
+    }
+    hasAutoOpenedAddFormRef.current = true;
+    push(
+      <RepositoryMappingForm
+        onSave={handleSaveMapping}
+        returnToRootAfterSave={resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm)}
+      />,
+    );
+  }, [autoOpenAddForm, errorMessage, handleSaveMapping, isLoading, push, sortedMappings.length]);
+
   return (
     <List isLoading={isLoading} searchBarPlaceholder="Search repository mappings">
       <List.Section title="Actions">
@@ -156,7 +182,12 @@ export function RepositoryMappingManager({ onChange }: RepositoryMappingManagerP
               <Action.Push
                 title="Add Repository Mapping"
                 icon={Icon.PlusCircle}
-                target={<RepositoryMappingForm onSave={handleSaveMapping} />}
+                target={
+                  <RepositoryMappingForm
+                    onSave={handleSaveMapping}
+                    returnToRootAfterSave={resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm)}
+                  />
+                }
               />
             </ActionPanel>
           }
@@ -168,7 +199,25 @@ export function RepositoryMappingManager({ onChange }: RepositoryMappingManagerP
         </List.Section>
       ) : sortedMappings.length === 0 ? (
         <List.Section title="Status">
-          <List.Item title="No repository mappings" subtitle="Add a mapping to get started." icon={Icon.List} />
+          <List.Item
+            title="Add your first repository"
+            subtitle="Register a repository path to start tracking worktrees."
+            icon={Icon.PlusCircle}
+            actions={
+              <ActionPanel>
+                <Action.Push
+                  title="Add Repository Mapping"
+                  icon={Icon.PlusCircle}
+                  target={
+                    <RepositoryMappingForm
+                      onSave={handleSaveMapping}
+                      returnToRootAfterSave={resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm)}
+                    />
+                  }
+                />
+              </ActionPanel>
+            }
+          />
         </List.Section>
       ) : (
         <List.Section title="Mappings">
@@ -206,9 +255,32 @@ export function RepositoryMappingManager({ onChange }: RepositoryMappingManagerP
 }
 
 /**
+ * repository mapping 追加フォームを自動表示するか判定する
+ */
+export function shouldAutoOpenRepositoryMappingForm(args: {
+  autoOpenAddForm: boolean;
+  hasAutoOpened: boolean;
+  isLoading: boolean;
+  errorMessage: string | null;
+  mappingCount: number;
+}): boolean {
+  if (!args.autoOpenAddForm || args.hasAutoOpened || args.isLoading || args.errorMessage !== null) {
+    return false;
+  }
+  return args.mappingCount === 0;
+}
+
+/**
+ * 初回オンボーディング中の追加フォーム保存後に root へ戻すか返す
+ */
+export function resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm: boolean): boolean {
+  return autoOpenAddForm;
+}
+
+/**
  * mapping 入力フォームを表示する
  */
-function RepositoryMappingForm({ initialMapping, onSave }: RepositoryMappingFormProps) {
+function RepositoryMappingForm({ initialMapping, onSave, returnToRootAfterSave = false }: RepositoryMappingFormProps) {
   const { pop } = useNavigation();
 
   /**
@@ -218,10 +290,14 @@ function RepositoryMappingForm({ initialMapping, onSave }: RepositoryMappingForm
     async (values: RepositoryMappingFormValues) => {
       const saved = await onSave(values, initialMapping?.repoRoot);
       if (saved) {
+        if (returnToRootAfterSave) {
+          await popToRoot({ clearSearchBar: true });
+          return;
+        }
         pop();
       }
     },
-    [initialMapping?.repoRoot, onSave, pop],
+    [initialMapping?.repoRoot, onSave, pop, returnToRootAfterSave],
   );
 
   return (
