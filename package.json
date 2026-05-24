@@ -3,9 +3,20 @@
   "name": "worktree-deck",
   "version": "0.1.0",
   "title": "Worktree Deck",
-  "description": "git worktree と Codex セッションを一覧する",
+  "description": "Track git worktrees and Codex sessions from Raycast",
   "icon": "worktree-deck-icon.png",
   "author": "kazuhide",
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "keywords": [
+    "git",
+    "worktree",
+    "codex",
+    "session",
+    "zed"
+  ],
   "platforms": [
     "macOS"
   ],
