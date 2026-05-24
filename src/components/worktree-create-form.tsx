@@ -15,7 +15,7 @@ import {
 import { useCachedState } from "@raycast/utils";
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   appendUniqueImagePaths,
   autoStartImageInputUsecase,
@@ -58,6 +58,33 @@ const CREATE_WORKTREE_FORM_ITEM_IDS = {
 } as const;
 
 type CreateWorktreeFormItemId = (typeof CREATE_WORKTREE_FORM_ITEM_IDS)[keyof typeof CREATE_WORKTREE_FORM_ITEM_IDS];
+
+type CreateWorktreeFocusableItemId = Exclude<
+  CreateWorktreeFormItemId,
+  | typeof CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths
+  | typeof CREATE_WORKTREE_FORM_ITEM_IDS.spacing
+  | typeof CREATE_WORKTREE_FORM_ITEM_IDS.baseBranchError
+>;
+
+/**
+ * プレビュー画面から戻った後にフォーム focus を戻す待機時間
+ */
+const CREATE_WORKTREE_FORM_FOCUS_RESTORE_DELAY_MS = 0;
+
+/**
+ * Create Worktree フォームで focus 復元できる item ID
+ */
+const CREATE_WORKTREE_FOCUSABLE_ITEM_IDS: readonly CreateWorktreeFocusableItemId[] = [
+  CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt,
+  CREATE_WORKTREE_FORM_ITEM_IDS.model,
+  CREATE_WORKTREE_FORM_ITEM_IDS.serviceTier,
+  CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort,
+  CREATE_WORKTREE_FORM_ITEM_IDS.permissions,
+  CREATE_WORKTREE_FORM_ITEM_IDS.branch,
+  CREATE_WORKTREE_FORM_ITEM_IDS.repoRoot,
+  CREATE_WORKTREE_FORM_ITEM_IDS.baseBranch,
+  CREATE_WORKTREE_FORM_ITEM_IDS.openApp,
+];
 
 /**
  * Create Worktree フォームの既定 Auto Start 状態
@@ -195,6 +222,48 @@ export function CreateWorktreeForm({
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const focusedFormItemIdRef = useRef<CreateWorktreeFocusableItemId>(CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt);
+  const initialPromptRef = useRef<Form.TextArea>(null);
+  const modelRef = useRef<Form.Dropdown>(null);
+  const serviceTierRef = useRef<Form.Dropdown>(null);
+  const reasoningEffortRef = useRef<Form.Dropdown>(null);
+  const permissionsRef = useRef<Form.Dropdown>(null);
+  const branchRef = useRef<Form.TextField>(null);
+  const repoRootRef = useRef<Form.Dropdown>(null);
+  const baseBranchRef = useRef<Form.Dropdown>(null);
+  const openAppRef = useRef<Form.Dropdown>(null);
+
+  const recordFocusedFormItem = useCallback((itemId: CreateWorktreeFocusableItemId) => {
+    focusedFormItemIdRef.current = itemId;
+  }, []);
+
+  const focusCreateWorktreeFormItem = useCallback((itemId: CreateWorktreeFocusableItemId) => {
+    const refs = {
+      [CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt]: initialPromptRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.model]: modelRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.serviceTier]: serviceTierRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort]: reasoningEffortRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.permissions]: permissionsRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.branch]: branchRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.repoRoot]: repoRootRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.baseBranch]: baseBranchRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.openApp]: openAppRef,
+    } satisfies Record<CreateWorktreeFocusableItemId, { current: { focus: () => void } | null }>;
+
+    refs[itemId].current?.focus();
+  }, []);
+
+  const restoreCreateWorktreeFormFocus = useCallback(() => {
+    const itemId = resolveCreateWorktreeFormFocusRestoreItemId({
+      itemId: focusedFormItemIdRef.current,
+      autoStart: autoStartDraft,
+      hasBaseBranchError: Boolean(branchErrorMessage),
+    });
+
+    setTimeout(() => {
+      focusCreateWorktreeFormItem(itemId);
+    }, CREATE_WORKTREE_FORM_FOCUS_RESTORE_DELAY_MS);
+  }, [autoStartDraft, branchErrorMessage, focusCreateWorktreeFormItem]);
 
   useEffect(() => {
     let cancelled = false;
@@ -467,6 +536,7 @@ export function CreateWorktreeForm({
         onAttachLatestScreenshotImage={handleAttachLatestScreenshotImage}
         onAttachSelectedFinderImages={handleAttachSelectedFinderImages}
       />,
+      restoreCreateWorktreeFormFocus,
     );
   }, [
     handleAttachClipboardImage,
@@ -476,6 +546,7 @@ export function CreateWorktreeForm({
     handleRemoveImagePath,
     imagePaths,
     push,
+    restoreCreateWorktreeFormFocus,
   ]);
 
   const handleSubmit = useCallback(
@@ -755,7 +826,7 @@ export function CreateWorktreeForm({
               }}
             />
           ) : null}
-          {autoStartDraft && imagePaths.length > 0 ? (
+          {autoStartDraft ? (
             <Action
               title="Preview Images"
               icon={Icon.Image}
@@ -785,10 +856,12 @@ export function CreateWorktreeForm({
                 <Form.TextArea
                   key={itemId}
                   id="initialPrompt"
+                  ref={initialPromptRef}
                   title="Initial Prompt"
                   placeholder="Describe the work to start"
                   value={initialPromptDraft}
                   onChange={setInitialPromptDraft}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt)}
                 />
               );
             }
@@ -806,9 +879,11 @@ export function CreateWorktreeForm({
                 <Form.Dropdown
                   key={itemId}
                   id="model"
+                  ref={modelRef}
                   title="Model"
                   value={resolveCodexModel(modelDraft)}
                   onChange={setModelDraft}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.model)}
                 >
                   {CODEX_MODEL_OPTIONS.map((model) => (
                     <Form.Dropdown.Item key={model} value={model} title={model} />
@@ -821,9 +896,11 @@ export function CreateWorktreeForm({
                 <Form.Dropdown
                   key={itemId}
                   id="reasoningEffort"
+                  ref={reasoningEffortRef}
                   title="Reasoning Effort"
                   value={reasoningEffortDraft}
                   onChange={(value) => setReasoningEffortDraft(resolveReasoningEffort(value))}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort)}
                 >
                   <Form.Dropdown.Item value="low" title="low" />
                   <Form.Dropdown.Item value="medium" title="medium" />
@@ -837,9 +914,11 @@ export function CreateWorktreeForm({
                 <Form.Dropdown
                   key={itemId}
                   id="serviceTier"
+                  ref={serviceTierRef}
                   title="Fast Mode"
                   value={resolveServiceTier(serviceTierDraft)}
                   onChange={(value) => setServiceTierDraft(resolveServiceTier(value))}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.serviceTier)}
                 >
                   <Form.Dropdown.Item value="default" title="Off" />
                   <Form.Dropdown.Item value="fast" title="On" />
@@ -851,9 +930,11 @@ export function CreateWorktreeForm({
                 <Form.Dropdown
                   key={itemId}
                   id="permissions"
+                  ref={permissionsRef}
                   title="Permissions"
                   value={resolvePermissionsMode(permissionsDraft)}
                   onChange={(value) => setPermissionsDraft(resolvePermissionsMode(value))}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.permissions)}
                 >
                   <Form.Dropdown.Item value="default" title="Default" />
                   <Form.Dropdown.Item value="auto_review" title="Auto Review" />
@@ -867,10 +948,12 @@ export function CreateWorktreeForm({
                 <Form.TextField
                   key={itemId}
                   id="branch"
+                  ref={branchRef}
                   title="Branch Name"
                   placeholder="feature/my-branch"
                   value={branchDraft}
                   onChange={setBranchDraft}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.branch)}
                 />
               );
             }
@@ -887,9 +970,11 @@ export function CreateWorktreeForm({
                 <Form.Dropdown
                   key={`${itemId}:${repoDropdownValue}:${repoOptionValues.join("\n")}`}
                   id="repoRoot"
+                  ref={repoRootRef}
                   title="Repository"
                   value={repoDropdownValue}
                   onChange={setSelectedRepo}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.repoRoot)}
                 >
                   <Form.Dropdown.Item value="" title="Select repository" />
                   {repoOptions.map((option) => (
@@ -908,10 +993,12 @@ export function CreateWorktreeForm({
                 <Form.Dropdown
                   key={`${itemId}:${selectedRepo}:${baseBranchDropdownValue}:${baseBranchOptionValues.join("\n")}`}
                   id="baseBranch"
+                  ref={baseBranchRef}
                   title="Base Branch"
                   value={baseBranchDropdownValue}
                   isLoading={isBranchesLoading}
                   onChange={setSelectedBaseBranch}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.baseBranch)}
                 >
                   <Form.Dropdown.Item value="" title="Select base branch" />
                   {baseBranchOptions.map((option) => (
@@ -930,9 +1017,11 @@ export function CreateWorktreeForm({
                 <Form.Dropdown
                   key={itemId}
                   id="openApp"
+                  ref={openAppRef}
                   title="Open With"
                   value={resolveCreateFormOpenApp(openAppDraft)}
                   onChange={(value) => setOpenAppDraft(resolveCreateFormOpenApp(value))}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.openApp)}
                 >
                   <Form.Dropdown.Item value="zed" title={resolveOpenAppTitle("zed")} icon={resolveOpenAppIcon("zed")} />
                   <Form.Dropdown.Item
@@ -1375,6 +1464,24 @@ export async function resetCreateWorktreeFormDraftStorage(
 }
 
 /**
+ * プレビューから戻る時に focus 復元するフォーム item ID を返す
+ */
+export function resolveCreateWorktreeFormFocusRestoreItemId(args: {
+  itemId: CreateWorktreeFormItemId;
+  autoStart: boolean;
+  hasBaseBranchError: boolean;
+}): CreateWorktreeFocusableItemId {
+  const visibleItemIds = buildCreateWorktreeFormItemOrder({
+    autoStart: args.autoStart,
+    hasBaseBranchError: args.hasBaseBranchError,
+  });
+  if (visibleItemIds.includes(args.itemId) && isCreateWorktreeFocusableItemId(args.itemId)) {
+    return args.itemId;
+  }
+  return args.autoStart ? CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt : CREATE_WORKTREE_FORM_ITEM_IDS.branch;
+}
+
+/**
  * フォーム値から Codex 初回セッションのメタ情報を組み立てる
  */
 function buildCodexInitialSessionMetadata(
@@ -1500,4 +1607,11 @@ export function buildCreateWorktreeFormItemOrder(args: {
   }
   items.push(CREATE_WORKTREE_FORM_ITEM_IDS.openApp);
   return items;
+}
+
+/**
+ * focus 復元できるフォーム item ID かを判定する
+ */
+function isCreateWorktreeFocusableItemId(itemId: CreateWorktreeFormItemId): itemId is CreateWorktreeFocusableItemId {
+  return CREATE_WORKTREE_FOCUSABLE_ITEM_IDS.includes(itemId as CreateWorktreeFocusableItemId);
 }
