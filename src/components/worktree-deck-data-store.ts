@@ -179,6 +179,8 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         context: request.context,
         displayCache: request.displayCache,
         dependencies: request.dependencies.initialSnapshot,
+        timingLabelPrefix: "loadWorktreesState",
+        logTiming: request.logTiming,
       })
       .then((snapshot) => {
         if (loadId !== loadSequence) {
@@ -254,6 +256,8 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         worktrees,
         mappings,
         dependencies: request.dependencies.titlesSnapshot,
+        timingLabelPrefix: "loadTitlesState",
+        logTiming: request.logTiming,
       });
       if (loadId !== loadSequence) {
         return;
@@ -293,6 +297,8 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         worktrees,
         mappings,
         dependencies: request.dependencies.detailsSnapshot,
+        timingLabelPrefix: "loadWorktreeDetailsState:snapshot",
+        logTiming: request.logTiming,
       });
       request.logTiming("loadWorktreeDetailsState:snapshot", Date.now() - snapshotStartMs);
       if (loadId !== loadSequence) {

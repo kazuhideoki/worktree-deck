@@ -147,6 +147,15 @@ describe("createWorktreeDeckDataStore", () => {
 
     expect(store.getSnapshot().isLoading).toBe(false);
     expect(store.getSnapshot().worktrees).toHaveLength(1);
+    expect(request.logTiming).toHaveBeenCalledWith("loadWorktreesState:listWorktrees", expect.any(Number));
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreesState:restoreDisplayCache(worktrees=1)",
+      expect.any(Number),
+    );
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreesState:loadOpenAppMetaByWorktreePath(paths=2)",
+      expect.any(Number),
+    );
     expect(request.logTiming).toHaveBeenCalledWith("loadWorktreesState", expect.any(Number));
   });
 
@@ -200,5 +209,34 @@ describe("createWorktreeDeckDataStore", () => {
     expect(snapshot.worktrees[0]?.titleEntries).toEqual([titleEntry]);
     expect(snapshot.worktrees[0]?.mergeStatus).toBe("synced");
     expect(snapshot.worktrees[0]?.lastCommitAt).toBe("2026-05-24 10:00");
+    expect(request.logTiming).toHaveBeenCalledWith("loadTitlesState:loadTitlesForPaths(paths=2)", expect.any(Number));
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadTitlesState:attachWorktreeTitles(worktrees=1)",
+      expect.any(Number),
+    );
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreeDetailsState:snapshot:loadLastCommitAtByPath(paths=1)",
+      expect.any(Number),
+    );
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreeDetailsState:snapshot:loadCurrentBranchByPath(paths=1)",
+      expect.any(Number),
+    );
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreeDetailsState:snapshot:loadBaseRefByWorktreePath(paths=1)",
+      expect.any(Number),
+    );
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreeDetailsState:snapshot:loadOpenAppMetaByWorktreePath(paths=2)",
+      expect.any(Number),
+    );
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreeDetailsState:snapshot:loadWorktreeMetadata(worktrees=1)",
+      expect.any(Number),
+    );
+    expect(request.logTiming).toHaveBeenCalledWith(
+      "loadWorktreeDetailsState:snapshot:attachWorktreeBaseDiffs(worktrees=1)",
+      expect.any(Number),
+    );
   });
 });
