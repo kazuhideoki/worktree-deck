@@ -1,4 +1,7 @@
-import type { AutoStartImageInputDependencies } from "../application/auto-start-image-input.usecase";
+import type {
+  AutoStartImageInputDependencies,
+  AutoStartImagePathResolutionRequest,
+} from "../application/auto-start-image-input.usecase";
 import {
   isReadableAutoStartImagePath,
   resolveClipboardImagePath,
@@ -8,8 +11,8 @@ import {
 
 type AutoStartImageInputInfra = {
   isReadableImagePath(path: string): boolean;
-  resolveClipboardImagePath(): Promise<string | null>;
-  resolveLatestScreenshotImagePath(): Promise<string | null>;
+  resolveClipboardImagePath(request?: AutoStartImagePathResolutionRequest): Promise<string | null>;
+  resolveLatestScreenshotImagePath(request?: AutoStartImagePathResolutionRequest): Promise<string | null>;
   resolveSelectedFinderImagePaths(): Promise<string[]>;
 };
 

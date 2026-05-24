@@ -1,8 +1,8 @@
 import { Clipboard, getSelectedFinderItems } from "@raycast/api";
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, lstatSync } from "node:fs";
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { promisify } from "node:util";
@@ -24,6 +24,15 @@ const SUPPORTED_AUTO_START_IMAGE_EXTENSIONS = new Set([
  * macOS スクリーンショット名として扱う接頭辞
  */
 const SCREENSHOT_FILENAME_PREFIXES = ["Screenshot", "Screen Shot", "スクリーンショット"];
+
+/**
+ * Raycast Clipboard 履歴で参照する最大 offset
+ */
+const CLIPBOARD_HISTORY_MAX_OFFSET = 5;
+
+type ImagePathResolutionRequest = {
+  excludedImagePaths?: string[];
+};
 
 /**
  * node:child_process の Promise 版 execFile
@@ -60,10 +69,15 @@ export function isLikelyMacScreenshotFilename(filename: string): boolean {
  */
 export function selectLatestScreenshotPath(
   candidates: { path: string; filename: string; modifiedAtMs: number }[],
+  options: { excludedImagePaths?: string[] } = {},
 ): string | null {
+  const excludedImagePaths = new Set(options.excludedImagePaths ?? []);
   const sorted = candidates
     .filter(
-      (candidate) => isSupportedAutoStartImagePath(candidate.path) && isLikelyMacScreenshotFilename(candidate.filename),
+      (candidate) =>
+        !excludedImagePaths.has(candidate.path) &&
+        isSupportedAutoStartImagePath(candidate.path) &&
+        isLikelyMacScreenshotFilename(candidate.filename),
     )
     .sort((left, right) => right.modifiedAtMs - left.modifiedAtMs);
   return sorted[0]?.path ?? null;
@@ -72,22 +86,37 @@ export function selectLatestScreenshotPath(
 /**
  * クリップボードから Auto Start に添付する画像パスを解決する
  */
-export async function resolveClipboardImagePath(): Promise<string | null> {
-  const content = await Clipboard.read();
-  const candidates = [content.file?.toString(), content.text];
-  for (const candidate of candidates) {
-    const path = candidate?.trim();
-    if (path && isReadableAutoStartImagePath(path)) {
+export async function resolveClipboardImagePath(request: ImagePathResolutionRequest = {}): Promise<string | null> {
+  const excludedImagePaths = new Set(request.excludedImagePaths ?? []);
+  for (let offset = 0; offset <= CLIPBOARD_HISTORY_MAX_OFFSET; offset += 1) {
+    let content: Clipboard.ReadContent;
+    try {
+      content = await Clipboard.read({ offset });
+    } catch {
+      continue;
+    }
+
+    const path = resolveClipboardContentImagePath({ content, excludedImagePaths });
+    if (path) {
       return path;
     }
+
+    if (offset === 0) {
+      const nativeImagePath = await extractNativeClipboardImage({ excludedImagePaths });
+      if (nativeImagePath) {
+        return nativeImagePath;
+      }
+    }
   }
-  return extractNativeClipboardImage();
+  return null;
 }
 
 /**
  * macOS のスクリーンショット保存先から最新画像パスを解決する
  */
-export async function resolveLatestScreenshotImagePath(): Promise<string | null> {
+export async function resolveLatestScreenshotImagePath(
+  request: ImagePathResolutionRequest = {},
+): Promise<string | null> {
   const screenshotDir = await resolveMacScreenshotDirectory();
   let entries: Awaited<ReturnType<typeof readdir>>;
   try {
@@ -109,7 +138,12 @@ export async function resolveLatestScreenshotImagePath(): Promise<string | null>
         }
       }),
   );
-  const latestPath = selectLatestScreenshotPath(candidates.filter((candidate) => candidate !== null));
+  const latestPath = selectLatestScreenshotPath(
+    candidates.filter((candidate) => candidate !== null),
+    {
+      excludedImagePaths: request.excludedImagePaths,
+    },
+  );
   return latestPath && isReadableAutoStartImagePath(latestPath) ? latestPath : null;
 }
 
@@ -142,12 +176,12 @@ async function resolveMacScreenshotDirectory(): Promise<string> {
 /**
  * macOS のクリップボード画像を一時 PNG として保存する
  */
-async function extractNativeClipboardImage(): Promise<string | null> {
+async function extractNativeClipboardImage(args: { excludedImagePaths: Set<string> }): Promise<string | null> {
   const outputDir = join(tmpdir(), "worktree-deck-clipboard-images");
   await mkdir(outputDir, { recursive: true });
   const pngPath = join(outputDir, `${randomUUID()}.png`);
   if (await writeClipboardImageDataToFile({ format: "png", outputPath: pngPath })) {
-    return pngPath;
+    return (await isDuplicateImageFile({ path: pngPath, comparedPaths: args.excludedImagePaths })) ? null : pngPath;
   }
 
   const tiffPath = join(outputDir, `${randomUUID()}.tiff`);
@@ -156,9 +190,60 @@ async function extractNativeClipboardImage(): Promise<string | null> {
   }
   try {
     await execFileAsync("/usr/bin/sips", ["-s", "format", "png", tiffPath, "--out", pngPath], { timeout: 5000 });
-    return (await isNonEmptyFile(pngPath)) ? pngPath : null;
+    if (!(await isNonEmptyFile(pngPath))) {
+      return null;
+    }
+    return (await isDuplicateImageFile({ path: pngPath, comparedPaths: args.excludedImagePaths })) ? null : pngPath;
   } finally {
     await rm(tiffPath, { force: true });
+  }
+}
+
+/**
+ * Clipboard 読み取り内容から添付可能な画像パスを取り出す
+ */
+function resolveClipboardContentImagePath(args: {
+  content: Clipboard.ReadContent;
+  excludedImagePaths: Set<string>;
+}): string | null {
+  const candidates = [args.content.file?.toString(), args.content.text];
+  for (const candidate of candidates) {
+    const path = candidate?.trim();
+    if (path && !args.excludedImagePaths.has(path) && isReadableAutoStartImagePath(path)) {
+      return path;
+    }
+  }
+  return null;
+}
+
+/**
+ * 既存添付と同じ画像内容なら一時ファイルを破棄する
+ */
+async function isDuplicateImageFile(args: { path: string; comparedPaths: Set<string> }): Promise<boolean> {
+  const pathHash = await hashFile(args.path);
+  if (!pathHash) {
+    await rm(args.path, { force: true });
+    return true;
+  }
+  for (const comparedPath of args.comparedPaths) {
+    const comparedHash = await hashFile(comparedPath);
+    if (comparedHash && comparedHash === pathHash) {
+      await rm(args.path, { force: true });
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * ファイル内容の SHA-256 を返す
+ */
+async function hashFile(path: string): Promise<string | null> {
+  try {
+    const data = await readFile(path);
+    return createHash("sha256").update(data).digest("hex");
+  } catch {
+    return null;
   }
 }
 

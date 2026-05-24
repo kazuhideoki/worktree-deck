@@ -4,6 +4,7 @@ import {
   buildCreateWorktreeFormItemOrder,
   CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS,
   DEFAULT_CREATE_WORKTREE_AUTO_START,
+  createSequentialImageAttachmentRunner,
   extractLocalBranchNameFromRef,
   formatImageAttachmentSummary,
   formatImageAttachmentControlsText,
@@ -211,6 +212,47 @@ describe("formatImageAttachmentSummary", () => {
 describe("formatImageAttachmentControlsText", () => {
   it("添付数と3種類の添付操作を表示する", () => {
     expect(formatImageAttachmentControlsText(2)).toBe("2 images | Clipboard ⌘⇧C | Shot ⌘⇧S | Finder ⌘⇧F");
+  });
+});
+
+describe("createSequentialImageAttachmentRunner", () => {
+  it("画像添付処理を呼び出し順に直列実行する", async () => {
+    const run = createSequentialImageAttachmentRunner();
+    let releaseFirst = () => {};
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const order: string[] = [];
+
+    const first = run(async () => {
+      order.push("first:start");
+      await firstGate;
+      order.push("first:end");
+      return "first";
+    });
+    const second = run(async () => {
+      order.push("second:start");
+      return "second";
+    });
+
+    await Promise.resolve();
+    expect(order).toEqual(["first:start"]);
+
+    releaseFirst();
+    await expect(first).resolves.toBe("first");
+    await expect(second).resolves.toBe("second");
+    expect(order).toEqual(["first:start", "first:end", "second:start"]);
+  });
+
+  it("前の画像添付処理が失敗しても次の処理を実行する", async () => {
+    const run = createSequentialImageAttachmentRunner();
+
+    await expect(
+      run(async () => {
+        throw new Error("failed");
+      }),
+    ).rejects.toThrow("failed");
+    await expect(run(async () => "next")).resolves.toBe("next");
   });
 });
 

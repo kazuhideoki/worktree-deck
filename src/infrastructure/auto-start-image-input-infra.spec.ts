@@ -41,6 +41,19 @@ describe("selectLatestScreenshotPath", () => {
     ).toBe("/Desktop/Screenshot new.png");
   });
 
+  it("除外済みスクリーンショットを飛ばして次に新しい画像を返す", () => {
+    expect(
+      selectLatestScreenshotPath(
+        [
+          { path: "/Desktop/Screenshot old.png", filename: "Screenshot old.png", modifiedAtMs: 100 },
+          { path: "/Desktop/Screenshot newer.png", filename: "Screenshot newer.png", modifiedAtMs: 200 },
+          { path: "/Desktop/Screenshot latest.png", filename: "Screenshot latest.png", modifiedAtMs: 300 },
+        ],
+        { excludedImagePaths: ["/Desktop/Screenshot latest.png"] },
+      ),
+    ).toBe("/Desktop/Screenshot newer.png");
+  });
+
   it("スクリーンショット画像候補がない場合は null を返す", () => {
     expect(
       selectLatestScreenshotPath([

@@ -3,9 +3,16 @@
  */
 export type AutoStartImageInputDependencies = {
   isReadableImagePath(path: string): boolean;
-  resolveClipboardImagePath(): Promise<string | null>;
-  resolveLatestScreenshotImagePath(): Promise<string | null>;
+  resolveClipboardImagePath(request?: AutoStartImagePathResolutionRequest): Promise<string | null>;
+  resolveLatestScreenshotImagePath(request?: AutoStartImagePathResolutionRequest): Promise<string | null>;
   resolveSelectedFinderImagePaths(): Promise<string[]>;
+};
+
+/**
+ * 画像パス解決時に除外する既存添付の指定
+ */
+export type AutoStartImagePathResolutionRequest = {
+  excludedImagePaths?: string[];
 };
 
 /**
@@ -60,9 +67,12 @@ function findInvalidImagePath(args: {
  * クリップボードから画像パスを解決する
  */
 async function resolveClipboardImagePath(args: {
+  existingImagePaths?: string[];
   dependencies: AutoStartImageInputDependencies;
 }): Promise<string | null> {
-  return args.dependencies.resolveClipboardImagePath();
+  return args.dependencies.resolveClipboardImagePath({
+    excludedImagePaths: normalizeAutoStartImagePaths(args.existingImagePaths ?? []),
+  });
 }
 
 /**
@@ -78,9 +88,12 @@ async function resolveSelectedFinderImagePaths(args: {
  * 最新スクリーンショットの画像パスを解決する
  */
 async function resolveLatestScreenshotImagePath(args: {
+  existingImagePaths?: string[];
   dependencies: AutoStartImageInputDependencies;
 }): Promise<string | null> {
-  return args.dependencies.resolveLatestScreenshotImagePath();
+  return args.dependencies.resolveLatestScreenshotImagePath({
+    excludedImagePaths: normalizeAutoStartImagePaths(args.existingImagePaths ?? []),
+  });
 }
 
 /**

@@ -167,6 +167,21 @@ const ATTACH_LATEST_SCREENSHOT_IMAGE_SHORTCUT = {
 const ATTACH_SELECTED_FINDER_IMAGES_SHORTCUT = { modifiers: ["cmd", "shift"], key: "f" } satisfies Keyboard.Shortcut;
 
 /**
+ * 画像添付処理を呼び出し順に直列実行するランナーを作成する
+ */
+export function createSequentialImageAttachmentRunner(): <T>(operation: () => Promise<T>) => Promise<T> {
+  let queue = Promise.resolve();
+  return async function runSequentially<T>(operation: () => Promise<T>): Promise<T> {
+    const result = queue.then(operation, operation);
+    queue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+}
+
+/**
  * worktree を指定アプリで開く
  */
 async function openPathInPreferredApp(path: string, openApp: WorktreeOpenApp): Promise<void> {
@@ -435,112 +450,133 @@ export function CreateWorktreeForm({
     setAutoStartDraft((current) => !current);
   }, [setAutoStartDraft]);
 
+  const imagePaths = useMemo(() => parseAutoStartImagePathsText(imagePathsTextDraft), [imagePathsTextDraft]);
+  const imagePathsRef = useRef<string[]>(imagePaths);
+  const runImageAttachmentSequentiallyRef = useRef(createSequentialImageAttachmentRunner());
+
+  useEffect(() => {
+    imagePathsRef.current = imagePaths;
+  }, [imagePaths]);
+
   const handleAttachClipboardImage = useCallback(async (): Promise<string[]> => {
-    try {
-      const imagePath = await autoStartImageInputUsecase.resolveClipboardImagePath({
-        dependencies: autoStartImageInputDependencies,
-      });
-      if (!imagePath) {
+    return runImageAttachmentSequentiallyRef.current(async () => {
+      try {
+        const imagePath = await autoStartImageInputUsecase.resolveClipboardImagePath({
+          existingImagePaths: imagePathsRef.current,
+          dependencies: autoStartImageInputDependencies,
+        });
+        if (!imagePath) {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Clipboard image was not found",
+          });
+          return [];
+        }
+        setImagePathsTextDraft((current) => {
+          const nextImagePaths = appendUniqueImagePaths(parseAutoStartImagePathsText(current), [imagePath]);
+          imagePathsRef.current = nextImagePaths;
+          return formatAutoStartImagePathsText(nextImagePaths);
+        });
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Clipboard image attached",
+          message: basename(imagePath),
+        });
+        return [imagePath];
+      } catch (error) {
         await showToast({
           style: Toast.Style.Failure,
-          title: "Clipboard image was not found",
+          title: "Failed to attach clipboard image",
+          message: formatExecErrorMessage(error),
         });
         return [];
       }
-      setImagePathsTextDraft((current) =>
-        formatAutoStartImagePathsText(appendUniqueImagePaths(parseAutoStartImagePathsText(current), [imagePath])),
-      );
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Clipboard image attached",
-        message: basename(imagePath),
-      });
-      return [imagePath];
-    } catch (error) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Failed to attach clipboard image",
-        message: formatExecErrorMessage(error),
-      });
-      return [];
-    }
+    });
   }, [setImagePathsTextDraft]);
 
   const handleAttachLatestScreenshotImage = useCallback(async (): Promise<string[]> => {
-    try {
-      const imagePath = await autoStartImageInputUsecase.resolveLatestScreenshotImagePath({
-        dependencies: autoStartImageInputDependencies,
-      });
-      if (!imagePath) {
+    return runImageAttachmentSequentiallyRef.current(async () => {
+      try {
+        const imagePath = await autoStartImageInputUsecase.resolveLatestScreenshotImagePath({
+          existingImagePaths: imagePathsRef.current,
+          dependencies: autoStartImageInputDependencies,
+        });
+        if (!imagePath) {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Latest screenshot was not found",
+          });
+          return [];
+        }
+        setImagePathsTextDraft((current) => {
+          const nextImagePaths = appendUniqueImagePaths(parseAutoStartImagePathsText(current), [imagePath]);
+          imagePathsRef.current = nextImagePaths;
+          return formatAutoStartImagePathsText(nextImagePaths);
+        });
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Latest screenshot attached",
+          message: basename(imagePath),
+        });
+        return [imagePath];
+      } catch (error) {
         await showToast({
           style: Toast.Style.Failure,
-          title: "Latest screenshot was not found",
+          title: "Failed to attach latest screenshot",
+          message: formatExecErrorMessage(error),
         });
         return [];
       }
-      setImagePathsTextDraft((current) =>
-        formatAutoStartImagePathsText(appendUniqueImagePaths(parseAutoStartImagePathsText(current), [imagePath])),
-      );
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Latest screenshot attached",
-        message: basename(imagePath),
-      });
-      return [imagePath];
-    } catch (error) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Failed to attach latest screenshot",
-        message: formatExecErrorMessage(error),
-      });
-      return [];
-    }
+    });
   }, [setImagePathsTextDraft]);
 
   const handleAttachSelectedFinderImages = useCallback(async (): Promise<string[]> => {
-    try {
-      const imagePaths = await autoStartImageInputUsecase.resolveSelectedFinderImagePaths({
-        dependencies: autoStartImageInputDependencies,
-      });
-      if (imagePaths.length === 0) {
+    return runImageAttachmentSequentiallyRef.current(async () => {
+      try {
+        const imagePaths = await autoStartImageInputUsecase.resolveSelectedFinderImagePaths({
+          dependencies: autoStartImageInputDependencies,
+        });
+        if (imagePaths.length === 0) {
+          await showToast({
+            style: Toast.Style.Failure,
+            title: "Selected Finder images were not found",
+          });
+          return [];
+        }
+        setImagePathsTextDraft((current) => {
+          const nextImagePaths = appendUniqueImagePaths(parseAutoStartImagePathsText(current), imagePaths);
+          imagePathsRef.current = nextImagePaths;
+          return formatAutoStartImagePathsText(nextImagePaths);
+        });
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Finder images attached",
+          message: `${imagePaths.length}`,
+        });
+        return imagePaths;
+      } catch (error) {
         await showToast({
           style: Toast.Style.Failure,
-          title: "Selected Finder images were not found",
+          title: "Failed to attach Finder images",
+          message: formatExecErrorMessage(error),
         });
         return [];
       }
-      setImagePathsTextDraft((current) =>
-        formatAutoStartImagePathsText(appendUniqueImagePaths(parseAutoStartImagePathsText(current), imagePaths)),
-      );
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Finder images attached",
-        message: `${imagePaths.length}`,
-      });
-      return imagePaths;
-    } catch (error) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Failed to attach Finder images",
-        message: formatExecErrorMessage(error),
-      });
-      return [];
-    }
+    });
   }, [setImagePathsTextDraft]);
 
   const handleClearImagePaths = useCallback(() => {
+    imagePathsRef.current = [];
     setImagePathsTextDraft("");
   }, [setImagePathsTextDraft]);
 
-  const imagePaths = useMemo(() => parseAutoStartImagePathsText(imagePathsTextDraft), [imagePathsTextDraft]);
-
   const handleRemoveImagePath = useCallback(
     (path: string) => {
-      setImagePathsTextDraft((current) =>
-        formatAutoStartImagePathsText(
-          parseAutoStartImagePathsText(current).filter((currentPath) => currentPath !== path),
-        ),
-      );
+      setImagePathsTextDraft((current) => {
+        const nextImagePaths = parseAutoStartImagePathsText(current).filter((currentPath) => currentPath !== path);
+        imagePathsRef.current = nextImagePaths;
+        return formatAutoStartImagePathsText(nextImagePaths);
+      });
     },
     [setImagePathsTextDraft],
   );

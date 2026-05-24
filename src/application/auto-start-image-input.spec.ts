@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   appendUniqueImagePaths,
   autoStartImageInputUsecase,
@@ -66,6 +66,22 @@ describe("autoStartImageInputUsecase.resolveClipboardImagePath", () => {
 
     expect(result).toBe("/tmp/clipboard.png");
   });
+
+  it("添付済み画像パスを除外指定として依存ポートへ渡す", async () => {
+    const resolveClipboardImagePath = vi.fn(async () => "/tmp/next.png");
+    const result = await autoStartImageInputUsecase.resolveClipboardImagePath({
+      existingImagePaths: [" /tmp/current.png ", "/tmp/current.png"],
+      dependencies: {
+        isReadableImagePath: () => false,
+        resolveClipboardImagePath,
+        resolveLatestScreenshotImagePath: async () => null,
+        resolveSelectedFinderImagePaths: async () => [],
+      },
+    });
+
+    expect(result).toBe("/tmp/next.png");
+    expect(resolveClipboardImagePath).toHaveBeenCalledWith({ excludedImagePaths: ["/tmp/current.png"] });
+  });
 });
 
 describe("autoStartImageInputUsecase.resolveLatestScreenshotImagePath", () => {
@@ -80,5 +96,23 @@ describe("autoStartImageInputUsecase.resolveLatestScreenshotImagePath", () => {
     });
 
     expect(result).toBe("/tmp/Screenshot.png");
+  });
+
+  it("添付済み画像パスを除外指定として依存ポートへ渡す", async () => {
+    const resolveLatestScreenshotImagePath = vi.fn(async () => "/tmp/Screenshot next.png");
+    const result = await autoStartImageInputUsecase.resolveLatestScreenshotImagePath({
+      existingImagePaths: ["/tmp/Screenshot latest.png"],
+      dependencies: {
+        isReadableImagePath: () => false,
+        resolveClipboardImagePath: async () => null,
+        resolveLatestScreenshotImagePath,
+        resolveSelectedFinderImagePaths: async () => [],
+      },
+    });
+
+    expect(result).toBe("/tmp/Screenshot next.png");
+    expect(resolveLatestScreenshotImagePath).toHaveBeenCalledWith({
+      excludedImagePaths: ["/tmp/Screenshot latest.png"],
+    });
   });
 });
