@@ -10,6 +10,7 @@ import {
   normalizeBaseRefDropdownValue,
   openWorktreeWhenReady,
   resolveCreateWorktreeFormImagePaths,
+  resolveCreateWorktreeFormFocusRestoreItemId,
   resetCreateWorktreeFormDraftStorage,
   resolveDefaultBaseBranchValue,
   resolveDropdownValue,
@@ -79,6 +80,38 @@ describe("buildCreateWorktreeFormItemOrder", () => {
 describe("DEFAULT_CREATE_WORKTREE_AUTO_START", () => {
   it("保持済みドラフトがない場合は Auto Start を既定にする", () => {
     expect(DEFAULT_CREATE_WORKTREE_AUTO_START).toBe(true);
+  });
+});
+
+describe("resolveCreateWorktreeFormFocusRestoreItemId", () => {
+  it("表示中の focus 可能 item はそのまま復元対象にする", () => {
+    expect(
+      resolveCreateWorktreeFormFocusRestoreItemId({
+        itemId: "baseBranch",
+        autoStart: true,
+        hasBaseBranchError: false,
+      }),
+    ).toBe("baseBranch");
+  });
+
+  it("Auto Start で非表示 item が記録されている場合は Initial Prompt へ戻す", () => {
+    expect(
+      resolveCreateWorktreeFormFocusRestoreItemId({
+        itemId: "branch",
+        autoStart: true,
+        hasBaseBranchError: false,
+      }),
+    ).toBe("initialPrompt");
+  });
+
+  it("手動 branch モードで非表示 item が記録されている場合は Branch Name へ戻す", () => {
+    expect(
+      resolveCreateWorktreeFormFocusRestoreItemId({
+        itemId: "initialPrompt",
+        autoStart: false,
+        hasBaseBranchError: false,
+      }),
+    ).toBe("branch");
   });
 });
 
