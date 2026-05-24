@@ -14,6 +14,11 @@ import type { WorktreeOpenAppMeta } from "../domain/worktree-open-app.service";
 import { resolveUnresolvedCodexThreadPaths } from "./worktree-deck-view-model";
 
 /**
+ * 初期描画を優先するためのタイトル更新遅延
+ */
+const TITLE_REFRESH_DELAY_MS = 200;
+
+/**
  * worktree-deck の表示データ状態
  */
 type WorktreeDeckDataSnapshot = {
@@ -49,10 +54,16 @@ export type WorktreeDeckDataStoreDependencies = {
 export type WorktreeDeckDataStoreLoadRequest = {
   context: WorktreeDeckContext;
   displayCache: unknown;
+  includeOriginEntries: boolean;
   dependencies: WorktreeDeckDataStoreDependencies;
   logTiming(label: string, elapsedMs: number): void;
   logWorktreeNames(items: Worktree[]): void;
 };
+
+/**
+ * 初期 snapshot 読み込み結果
+ */
+type LoadedInitialSnapshot = Awaited<ReturnType<typeof worktreeDeckSnapshotUsecase.loadInitialSnapshot>>;
 
 /**
  * data store の購読解除関数
@@ -133,7 +144,10 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
   let state = createInitialSnapshot();
   let hasLoadedInitialSnapshot = false;
   let loadSequence = 0;
+  let requestedIncludeOriginEntries = false;
+  let lastIncludeOriginEntries: boolean | null = null;
   let initialLoadPromise: Promise<void> | null = null;
+  let titleLoadTimer: ReturnType<typeof setTimeout> | null = null;
   const listeners = new Set<() => void>();
 
   /**
@@ -154,18 +168,114 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
   };
 
   /**
+   * 予約済みタイトル更新を取り消す
+   */
+  const clearScheduledTitleLoad = (): void => {
+    if (titleLoadTimer === null) {
+      return;
+    }
+    clearTimeout(titleLoadTimer);
+    titleLoadTimer = null;
+  };
+
+  /**
+   * 現在の表示モード要求に合わせた読み込み request を返す
+   */
+  const buildCurrentIncludeRequest = (request: WorktreeDeckDataStoreLoadRequest): WorktreeDeckDataStoreLoadRequest => {
+    if (request.includeOriginEntries === requestedIncludeOriginEntries) {
+      return request;
+    }
+    return {
+      ...request,
+      includeOriginEntries: requestedIncludeOriginEntries,
+    };
+  };
+
+  /**
+   * 初期 snapshot を store 状態へ反映する
+   */
+  const applyInitialSnapshot = (
+    request: WorktreeDeckDataStoreLoadRequest,
+    snapshot: LoadedInitialSnapshot,
+    loadId: number,
+  ): void => {
+    if (loadId !== loadSequence) {
+      return;
+    }
+    hasLoadedInitialSnapshot = true;
+    lastIncludeOriginEntries = request.includeOriginEntries;
+    request.logWorktreeNames(snapshot.listedWorktrees);
+    updateState((current) => ({
+      ...current,
+      basePath: snapshot.basePath,
+      worktreeNameDelimiter: snapshot.delimiter,
+      worktrees: snapshot.worktrees,
+      listedWorktrees: snapshot.listedWorktrees,
+      repositoryMappings: snapshot.mappings,
+      originLastCommitByPath: snapshot.originLastCommitByPath,
+      originBranchByPath: snapshot.originBranchByPath,
+      openAppMetaByPath: snapshot.openAppMetaByPath,
+      titlesByPath: snapshot.titlesByPath,
+      errorMessage: null,
+      isLoading: false,
+    }));
+  };
+
+  /**
+   * 検証済みの初期 snapshot へバックグラウンド更新する
+   */
+  const refreshInitialSnapshotFromFreshScan = async (
+    request: WorktreeDeckDataStoreLoadRequest,
+    loadId: number,
+  ): Promise<void> => {
+    const startMs = Date.now();
+    try {
+      const snapshot = await worktreeDeckSnapshotUsecase.loadInitialSnapshot({
+        context: request.context,
+        displayCache: request.displayCache,
+        dependencies: request.dependencies.initialSnapshot,
+        preferCachedWorktrees: false,
+        includeOriginEntries: request.includeOriginEntries,
+        timingLabelPrefix: "loadWorktreesState:refresh",
+        logTiming: request.logTiming,
+      });
+      if (loadId !== loadSequence) {
+        return;
+      }
+      const currentRequest = buildCurrentIncludeRequest(request);
+      applyInitialSnapshot(currentRequest, snapshot, loadId);
+      scheduleLoadTitles(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
+      void loadDetails(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
+    } catch {
+      // cache-first 後の検証失敗は次回 reload で再試行する
+    } finally {
+      if (loadId === loadSequence) {
+        request.logTiming("loadWorktreesState:refresh", Date.now() - startMs);
+      }
+    }
+  };
+
+  /**
    * 初期 snapshot 読み込みを開始する
    */
   const loadInitial = async (request: WorktreeDeckDataStoreLoadRequest, force: boolean): Promise<void> => {
+    requestedIncludeOriginEntries = request.includeOriginEntries;
     if (initialLoadPromise !== null) {
       return initialLoadPromise;
     }
     if (!force && hasLoadedInitialSnapshot) {
+      if (request.includeOriginEntries && lastIncludeOriginEntries === false) {
+        lastIncludeOriginEntries = true;
+        const loadId = loadSequence;
+        scheduleLoadTitles(request, state.listedWorktrees, state.repositoryMappings, loadId);
+        void loadDetails(request, state.listedWorktrees, state.repositoryMappings, loadId);
+      }
       return;
     }
 
     const loadId = loadSequence + 1;
     loadSequence = loadId;
+    clearScheduledTitleLoad();
     const startMs = Date.now();
     updateState((current) => ({
       ...current,
@@ -179,29 +289,23 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         context: request.context,
         displayCache: request.displayCache,
         dependencies: request.dependencies.initialSnapshot,
+        preferCachedWorktrees: !force,
+        includeOriginEntries: request.includeOriginEntries,
+        timingLabelPrefix: "loadWorktreesState",
+        logTiming: request.logTiming,
       })
       .then((snapshot) => {
         if (loadId !== loadSequence) {
           return;
         }
-        hasLoadedInitialSnapshot = true;
-        request.logWorktreeNames(snapshot.listedWorktrees);
-        updateState((current) => ({
-          ...current,
-          basePath: snapshot.basePath,
-          worktreeNameDelimiter: snapshot.delimiter,
-          worktrees: snapshot.worktrees,
-          listedWorktrees: snapshot.listedWorktrees,
-          repositoryMappings: snapshot.mappings,
-          originLastCommitByPath: snapshot.originLastCommitByPath,
-          originBranchByPath: snapshot.originBranchByPath,
-          openAppMetaByPath: snapshot.openAppMetaByPath,
-          titlesByPath: snapshot.titlesByPath,
-          errorMessage: null,
-          isLoading: false,
-        }));
-        void loadTitles(request, snapshot.listedWorktrees, snapshot.mappings, loadId);
-        void loadDetails(request, snapshot.listedWorktrees, snapshot.mappings, loadId);
+        const currentRequest = buildCurrentIncludeRequest(request);
+        applyInitialSnapshot(currentRequest, snapshot, loadId);
+        scheduleLoadTitles(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
+        void loadDetails(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
+        if (snapshot.isWorktreeListCacheHit) {
+          void refreshInitialSnapshotFromFreshScan(request, loadId);
+          return;
+        }
       })
       .catch((error: unknown) => {
         if (loadId !== loadSequence) {
@@ -254,6 +358,9 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         worktrees,
         mappings,
         dependencies: request.dependencies.titlesSnapshot,
+        includeOriginEntries: request.includeOriginEntries,
+        timingLabelPrefix: "loadTitlesState",
+        logTiming: request.logTiming,
       });
       if (loadId !== loadSequence) {
         return;
@@ -271,6 +378,22 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         request.logTiming("loadTitlesState", Date.now() - startMs);
       }
     }
+  };
+
+  /**
+   * セッションタイトル更新を初期描画後へ遅延する
+   */
+  const scheduleLoadTitles = (
+    request: WorktreeDeckDataStoreLoadRequest,
+    worktrees: Worktree[],
+    mappings: RepositoryMapping[],
+    loadId: number,
+  ): void => {
+    clearScheduledTitleLoad();
+    titleLoadTimer = setTimeout(() => {
+      titleLoadTimer = null;
+      void loadTitles(request, worktrees, mappings, loadId);
+    }, TITLE_REFRESH_DELAY_MS);
   };
 
   /**
@@ -293,6 +416,9 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         worktrees,
         mappings,
         dependencies: request.dependencies.detailsSnapshot,
+        includeOriginEntries: request.includeOriginEntries,
+        timingLabelPrefix: "loadWorktreeDetailsState:snapshot",
+        logTiming: request.logTiming,
       });
       request.logTiming("loadWorktreeDetailsState:snapshot", Date.now() - snapshotStartMs);
       if (loadId !== loadSequence) {

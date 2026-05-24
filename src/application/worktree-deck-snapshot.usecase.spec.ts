@@ -77,6 +77,7 @@ describe("worktreeDeckSnapshotUsecase.loadInitialSnapshot", () => {
         delimiter: "~_~",
         mappings,
         worktrees: listedWorktrees,
+        isCacheHit: false,
       })),
       restoreDisplayCache: vi.fn(() => ({
         worktrees: restoredWorktrees,
@@ -119,6 +120,7 @@ describe("worktreeDeckSnapshotUsecase.loadInitialSnapshot", () => {
         delimiter: "~_~",
         mappings: [],
         worktrees: listedWorktrees,
+        isCacheHit: false,
       })),
       restoreDisplayCache: vi.fn(() => ({
         worktrees: listedWorktrees,
@@ -204,6 +206,25 @@ describe("worktreeDeckSnapshotUsecase.loadTitlesSnapshot", () => {
 
     expect(result.titlesByPath.size).toBe(0);
     expect(dependencies.attachWorktreeTitles.mock.calls[0]?.[0].titlesByPath.size).toBe(0);
+  });
+
+  it("origin 非表示時は worktree path だけでタイトルを読み込む", async () => {
+    const worktrees = [buildWorktree({ path: "/repo/a", originPath: "/repo/main" })];
+    const mappings = [buildMapping("/repo/main")];
+    const dependencies = {
+      loadTitlesForPaths: vi.fn(async () => new Map<string, WorktreeTitle[]>()),
+      attachWorktreeTitles: vi.fn(async (args: { worktrees: Worktree[] }) => args.worktrees),
+    };
+
+    await worktreeDeckSnapshotUsecase.loadTitlesSnapshot({
+      context: buildContext(),
+      worktrees,
+      mappings,
+      dependencies,
+      includeOriginEntries: false,
+    });
+
+    expect(dependencies.loadTitlesForPaths.mock.calls[0]?.[0].paths).toEqual(["/repo/a"]);
   });
 });
 
@@ -335,5 +356,30 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
       aheadCount: 4,
       behindCount: 3,
     });
+  });
+
+  it("origin 非表示時は origin/mapping path の詳細を読み込まない", async () => {
+    const worktrees = [buildWorktree({ path: "/repo/a", originPath: "/repo/main" })];
+    const mappings = [buildMapping("/repo/other")];
+    const dependencies = {
+      loadLastCommitAtByPath: vi.fn(async () => new Map<string, string | null>()),
+      loadCurrentBranchByPath: vi.fn(async () => new Map<string, string | null>()),
+      loadBaseRefByWorktreePath: vi.fn(async () => new Map<string, string>()),
+      loadOpenAppMetaByWorktreePath: vi.fn(async () => new Map<string, WorktreeOpenAppMeta>()),
+      loadWorktreeMetadata: vi.fn(async (items: Worktree[]) => items),
+      loadAheadBehindCounts: vi.fn(async () => null),
+      resolveMergeTargetRef: vi.fn(async () => null),
+    };
+
+    await worktreeDeckSnapshotUsecase.loadDetailsSnapshot({
+      worktrees,
+      mappings,
+      dependencies,
+      includeOriginEntries: false,
+    });
+
+    expect(dependencies.loadLastCommitAtByPath).toHaveBeenCalledWith([]);
+    expect(dependencies.loadCurrentBranchByPath).toHaveBeenCalledWith([]);
+    expect(dependencies.loadOpenAppMetaByWorktreePath).toHaveBeenCalledWith(["/repo/a"]);
   });
 });

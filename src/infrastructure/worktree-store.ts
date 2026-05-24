@@ -17,5 +17,5 @@ export {
   loadWorktreeMetadata,
   resolveMergeTargetRef,
 } from "./git-worktree-metadata-store";
-export { loadWorktreesBase } from "./worktree-scan-store";
+export { loadCachedWorktreesBase, loadWorktreesBase } from "./worktree-scan-store";
 export { groupWorktrees } from "./worktree-group-store";

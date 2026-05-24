@@ -221,8 +221,12 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
       saveOpenAppForWorktreePath,
     },
     loadWorktreeDeckInitialSnapshotDependencies: {
-      listWorktrees(context) {
-        return listWorktreesUsecase.list({ context, dependencies: listWorktreesDependencies });
+      listWorktrees(context, options) {
+        return listWorktreesUsecase.list({
+          context,
+          dependencies: listWorktreesDependencies,
+          options: { preferCache: options?.preferCache },
+        });
       },
       restoreDisplayCache(args) {
         return applyWorktreeDeckDisplayCache({
