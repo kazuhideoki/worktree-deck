@@ -52,7 +52,7 @@ async function buildFixture(): Promise<{
   nestedGitPath: string;
 }> {
   const basePath = await mkdtemp(join(tmpdir(), "worktree-deck-base-"));
-  const directRepoPath = join(basePath, "app~_~feature-a");
+  const directRepoPath = join(basePath, "app", "feature-a");
   const directGitPath = join(directRepoPath, ".git");
   await mkdir(directRepoPath, { recursive: true });
   await mkdir(directGitPath, { recursive: true });
@@ -148,7 +148,7 @@ describe("loadWorktreesBase", () => {
   it("キャッシュなしでは全件を再帰走査して worktree 一覧を返す", async () => {
     const fixture = await buildFixture();
     try {
-      const result = await loadWorktreesBase(fixture.basePath, "~_~");
+      const result = await loadWorktreesBase(fixture.basePath);
 
       expect(sortWorktreesByPath(result)).toEqual([
         {
@@ -178,11 +178,11 @@ describe("loadWorktreesBase", () => {
   it("キャッシュ再利用時は変更なしのリポジトリ配下を再帰走査しない", async () => {
     const fixture = await buildFixture();
     try {
-      await loadWorktreesBase(fixture.basePath, "~_~");
+      await loadWorktreesBase(fixture.basePath);
       readdirSpy.mockClear();
       statSpy.mockClear();
 
-      const result = await loadWorktreesBase(fixture.basePath, "~_~");
+      const result = await loadWorktreesBase(fixture.basePath);
 
       expect(result).toHaveLength(2);
       const calls = readdirSpy.mock.calls.map((value) => value[0]);
@@ -199,11 +199,11 @@ describe("loadWorktreesBase", () => {
   it("保存済み cache を検証せず worktree 一覧として返す", async () => {
     const fixture = await buildFixture();
     try {
-      await loadWorktreesBase(fixture.basePath, "~_~");
+      await loadWorktreesBase(fixture.basePath);
       readdirSpy.mockClear();
       statSpy.mockClear();
 
-      const result = await loadCachedWorktreesBase(fixture.basePath, "~_~");
+      const result = await loadCachedWorktreesBase(fixture.basePath);
 
       expect(sortWorktreesByPath(result ?? [])).toEqual([
         {
@@ -229,7 +229,7 @@ describe("loadWorktreesBase", () => {
   it("追加されたリポジトリ配下だけを新規に再帰走査する", async () => {
     const fixture = await buildFixture();
     try {
-      await loadWorktreesBase(fixture.basePath, "~_~");
+      await loadWorktreesBase(fixture.basePath);
       readdirSpy.mockClear();
       statSpy.mockClear();
 
@@ -240,7 +240,7 @@ describe("loadWorktreesBase", () => {
       await mkdir(addedWorktreePath, { recursive: true });
       await mkdir(addedGitPath, { recursive: true });
 
-      const result = await loadWorktreesBase(fixture.basePath, "~_~");
+      const result = await loadWorktreesBase(fixture.basePath);
 
       expect(sortWorktreesByPath(result)).toEqual(
         [
@@ -277,13 +277,13 @@ describe("loadWorktreesBase", () => {
   it("削除されたリポジトリは次回起動時にキャッシュを更新して除外できる", async () => {
     const fixture = await buildFixture();
     try {
-      await loadWorktreesBase(fixture.basePath, "~_~");
+      await loadWorktreesBase(fixture.basePath);
       readdirSpy.mockClear();
       statSpy.mockClear();
 
       await rm(fixture.nestedRepoPath, { recursive: true, force: true });
 
-      const result = await loadWorktreesBase(fixture.basePath, "~_~");
+      const result = await loadWorktreesBase(fixture.basePath);
 
       expect(result).toEqual([
         {
@@ -307,14 +307,14 @@ describe("loadWorktreesBase", () => {
     try {
       const fixedMtime = new Date("2025-01-01T00:00:00.000Z");
       await utimes(fixture.nestedRepoPath, fixedMtime, fixedMtime);
-      await loadWorktreesBase(fixture.basePath, "~_~");
+      await loadWorktreesBase(fixture.basePath);
       readdirSpy.mockClear();
       statSpy.mockClear();
 
       await rm(fixture.nestedGitPath, { recursive: true, force: true });
       await utimes(fixture.nestedRepoPath, fixedMtime, fixedMtime);
 
-      const result = await loadWorktreesBase(fixture.basePath, "~_~");
+      const result = await loadWorktreesBase(fixture.basePath);
 
       expect(result).toEqual([
         {
@@ -333,7 +333,7 @@ describe("loadWorktreesBase", () => {
 
   it("直接 worktree の .git が消えたらキャッシュを再利用せず除外する", async () => {
     const basePath = await mkdtemp(join(tmpdir(), "worktree-deck-direct-"));
-    const directPath = join(basePath, "solo~_~feature-a");
+    const directPath = join(basePath, "solo", "feature-a");
     const directGitPath = join(directPath, ".git");
     try {
       const fixedMtime = new Date("2025-02-01T00:00:00.000Z");
@@ -341,7 +341,7 @@ describe("loadWorktreesBase", () => {
       await mkdir(directGitPath, { recursive: true });
       await utimes(directPath, fixedMtime, fixedMtime);
 
-      const first = await loadWorktreesBase(basePath, "~_~");
+      const first = await loadWorktreesBase(basePath);
       expect(first).toEqual([
         {
           repo: "solo",
@@ -356,7 +356,7 @@ describe("loadWorktreesBase", () => {
       await rm(directGitPath, { recursive: true, force: true });
       await utimes(directPath, fixedMtime, fixedMtime);
 
-      const second = await loadWorktreesBase(basePath, "~_~");
+      const second = await loadWorktreesBase(basePath);
       expect(second).toEqual([]);
     } finally {
       await rm(basePath, { recursive: true, force: true });
@@ -374,14 +374,14 @@ describe("loadWorktreesBase", () => {
       await writeFile(gitFilePath, "gitdir: /tmp/git-a\n", "utf8");
       await utimes(worktreePath, fixedMtime, fixedMtime);
       await utimes(gitFilePath, fixedMtime, fixedMtime);
-      await loadWorktreesBase(basePath, "~_~");
+      await loadWorktreesBase(basePath);
 
       readdirSpy.mockClear();
       statSpy.mockClear();
       await writeFile(gitFilePath, "gitdir: /tmp/git-b\n", "utf8");
       await utimes(worktreePath, fixedMtime, fixedMtime);
       await utimes(gitFilePath, fixedMtime, fixedMtime);
-      await loadWorktreesBase(basePath, "~_~");
+      await loadWorktreesBase(basePath);
       const calls = readdirSpy.mock.calls.map((value) => value[0]);
       expect(calls).toContain(repoPath);
     } finally {

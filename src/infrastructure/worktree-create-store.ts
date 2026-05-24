@@ -51,7 +51,7 @@ function hasEnvRoot(root: string): boolean {
 }
 
 /**
- * worktree-deck package root の .env ルートを解決する
+ * worktree-deck package root の env ルートを解決する
  */
 function resolveEnvRoot(args: ResolveArgs): string | null {
   const assetsPath = normalizePathValue(args.assetsPath);
@@ -97,18 +97,14 @@ function resolveCreateScriptPath(assetsPath: string): string {
  */
 export async function resolveRepositoryMapPaths(args: ResolveArgs): Promise<RepositoryMapPaths> {
   const scriptPath = resolveCreateScriptPath(args.assetsPath);
-  const envRoot = resolveEnvRoot(args);
-  if (!envRoot) {
-    throw new Error(".env was not found. Place .env in assets.");
-  }
   return {
-    envRoot,
+    envRoot: resolveEnvRoot(args),
     scriptPath,
   };
 }
 
 /**
- * .env から指定キーの値を読み込む
+ * process env と任意の env ファイルから指定キーの値を読み込む
  */
 async function readEnvValue(envRoot: string | null | undefined, key: string): Promise<string | null> {
   const fromProcess = process.env[key]?.trim();

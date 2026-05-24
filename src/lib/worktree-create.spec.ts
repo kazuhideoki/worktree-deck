@@ -196,29 +196,19 @@ describe("createWorktree", () => {
     expect(storedBaseRef).toBe("main");
   }, 15000);
 
-  it("shell asset は GIT_WORKTREE_PATH の home path を展開する", async () => {
+  it("shell asset は process env の GIT_WORKTREE_PATH の home path を展開する", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-lib-"));
     createdRoots.push(rootDir);
     const repoPath = await createTestRepository(rootDir);
-    const envRoot = join(rootDir, "worktree-deck-root");
     const scriptPath = resolve(__dirname, "../../assets/git_worktree_wrap.sh");
-    await mkdir(envRoot, { recursive: true });
-    await writeFile(
-      join(envRoot, ".env"),
-      [
-        "GIT_WORKTREE_PATH=~/.worktree-deck/worktrees",
-        `WORKTREE_DECK_STORAGE_DIR=${join(rootDir, "storage")}`,
-        "",
-      ].join("\n"),
-      "utf8",
-    );
 
     const { stdout } = await execFileAsync(scriptPath, ["feature/home-path", "main", "--map-value", "repo"], {
       cwd: repoPath,
       env: {
         ...process.env,
         HOME: rootDir,
-        WORKTREE_DECK_ROOT: envRoot,
+        GIT_WORKTREE_PATH: "~/.worktree-deck/worktrees",
+        WORKTREE_DECK_STORAGE_DIR: join(rootDir, "storage"),
         WORKTREE_REPO_ROOT: repoPath,
       },
     });

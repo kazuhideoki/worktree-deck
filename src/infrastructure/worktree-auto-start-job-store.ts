@@ -62,7 +62,7 @@ async function writeAutoStartJobFailure(statePath: string, error: unknown): Prom
 }
 
 /**
- * .env から指定キーの値を読み込む
+ * process env と任意の env ファイルから指定キーの値を読み込む
  */
 async function readEnvValue(envRoot: string | null | undefined, key: string): Promise<string | null> {
   const fromProcess = process.env[key]?.trim();

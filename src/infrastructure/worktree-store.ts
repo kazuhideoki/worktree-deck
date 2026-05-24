@@ -1,4 +1,4 @@
-export { loadBasePath, loadWorktreeNameDelimiter } from "./worktree-config-store";
+export { loadBasePath } from "./worktree-config-store";
 export {
   attachWorktreeTitles,
   findFirstSessionFileByPath,

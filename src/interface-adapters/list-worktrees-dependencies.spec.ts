@@ -18,11 +18,10 @@ function buildContext(): WorktreeDeckContext {
 }
 
 describe("createListWorktreesDependencies", () => {
-  it("設定読み込みで basePath と delimiter を組み立てる", async () => {
+  it("設定読み込みで basePath を組み立てる", async () => {
     const context = buildContext();
     const dependencies = createListWorktreesDependencies({
       loadBasePath: vi.fn(async () => "/tmp/worktrees"),
-      loadWorktreeNameDelimiter: vi.fn(async () => "~_~"),
       loadRepositoryMappings: vi.fn(async () => []),
       loadCachedWorktreesBase: vi.fn(async () => null),
       loadWorktreesBase: vi.fn(async () => []),
@@ -30,13 +29,12 @@ describe("createListWorktreesDependencies", () => {
 
     const result = await dependencies.loadSettings(context);
 
-    expect(result).toEqual({ basePath: "/tmp/worktrees", delimiter: "~_~" });
+    expect(result).toEqual({ basePath: "/tmp/worktrees" });
   });
 
   it("mapping 読み込み失敗時は空配列を返す", async () => {
     const dependencies = createListWorktreesDependencies({
       loadBasePath: vi.fn(async () => "/tmp/worktrees"),
-      loadWorktreeNameDelimiter: vi.fn(async () => "~_~"),
       loadRepositoryMappings: vi.fn(async () => {
         throw new Error("failed");
       }),
@@ -57,15 +55,14 @@ describe("createListWorktreesDependencies", () => {
     ]);
     const dependencies = createListWorktreesDependencies({
       loadBasePath: vi.fn(async () => "/tmp/worktrees"),
-      loadWorktreeNameDelimiter: vi.fn(async () => "~_~"),
       loadRepositoryMappings: vi.fn(async () => []),
       loadCachedWorktreesBase: vi.fn(async () => null),
       loadWorktreesBase,
     });
 
-    const result = await dependencies.loadWorktrees("/tmp/worktrees", "~_~");
+    const result = await dependencies.loadWorktrees("/tmp/worktrees");
 
-    expect(loadWorktreesBase).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
+    expect(loadWorktreesBase).toHaveBeenCalledWith("/tmp/worktrees");
     expect(result).toEqual([
       {
         repo: "app-a",
@@ -85,15 +82,14 @@ describe("createListWorktreesDependencies", () => {
     ]);
     const dependencies = createListWorktreesDependencies({
       loadBasePath: vi.fn(async () => "/tmp/worktrees"),
-      loadWorktreeNameDelimiter: vi.fn(async () => "~_~"),
       loadRepositoryMappings: vi.fn(async () => []),
       loadCachedWorktreesBase,
       loadWorktreesBase: vi.fn(async () => []),
     });
 
-    const result = await dependencies.loadCachedWorktrees("/tmp/worktrees", "~_~");
+    const result = await dependencies.loadCachedWorktrees("/tmp/worktrees");
 
-    expect(loadCachedWorktreesBase).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
+    expect(loadCachedWorktreesBase).toHaveBeenCalledWith("/tmp/worktrees");
     expect(result).toEqual([
       {
         repo: "app-a",

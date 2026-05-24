@@ -96,12 +96,17 @@ resolve_map_file() {
     fail "Missing mapping file: ${fallback}"
 }
 
-# .env からキーに対応する値を取得する
+# process env と任意の env ファイルからキーに対応する値を取得する
 read_env_value() {
     local key="$1"
     local env_file="$2"
-    local line value raw
-    [[ -f "${env_file}" ]] || fail "Missing .env file: ${env_file}"
+    local line value raw from_env
+    from_env="${!key:-}"
+    if [[ -n "${from_env}" ]]; then
+        printf '%s' "${from_env}"
+        return
+    fi
+    [[ -f "${env_file}" ]] || return
     while IFS= read -r line; do
         [[ -z "${line//[[:space:]]/}" ]] && continue
         [[ "${line}" =~ ^[[:space:]]*# ]] && continue
@@ -119,7 +124,6 @@ read_env_value() {
             value="${raw}"
         fi
     done <"${env_file}"
-    [[ -n "${value:-}" ]] || fail "Missing ${key} in ${env_file}"
     printf '%s' "${value}"
 }
 
@@ -316,7 +320,9 @@ main() {
     env_root="$(resolve_env_root "${script_root}")"
     env_file="${env_root}/.env"
 
-    base_path="$(expand_home_path "$(read_env_value "GIT_WORKTREE_PATH" "${env_file}")")"
+    base_path="$(read_env_value "GIT_WORKTREE_PATH" "${env_file}")"
+    [[ -n "${base_path}" ]] || fail "GIT_WORKTREE_PATH is not set."
+    base_path="$(expand_home_path "${base_path}")"
     dest="$(build_worktree_path "${base_path}" "${map_value}" "${branch}")"
 
     ensure_parent_dir "${dest}"

@@ -6,16 +6,13 @@ Worktree Deck is a Raycast extension for tracking git worktrees and related Code
 
 ```sh
 npm install
-cp assets/.env.example assets/.env
 ```
-
-Edit `assets/.env` for your local paths, then run the extension in Raycast development mode.
 
 ```sh
 npm run dev
 ```
 
-After Raycast loads the extension, run the commands from Raycast. `Worktree Status` is a menu bar command, so run it once from Raycast to enable the menu bar item.
+After Raycast loads the extension, set the required preferences when prompted, then run the commands from Raycast. `Worktree Status` is a menu bar command, so run it once from Raycast to enable the menu bar item.
 
 ## Commands
 
@@ -24,18 +21,16 @@ After Raycast loads the extension, run the commands from Raycast. `Worktree Stat
 
 ## Configuration
 
-The extension reads configuration from `assets/.env`. The main settings are:
+The extension reads configuration from Raycast Preferences > Extensions > Worktree Deck. The main settings are:
 
-- `GIT_WORKTREE_PATH`: Base directory where git worktrees are created.
-- `CODEX_HOME`: Codex home directory.
+- `GIT_WORKTREE_PATH`: Worktree directory under your home directory. Default: `~/.worktree-deck/worktrees`.
+- `CODEX_HOME`: Codex home directory. Default: `~/.codex`.
 - `WORKTREE_DECK_SEARCH_DAYS`: Number of days to search for Codex sessions.
 - `WORKTREE_DECK_DONE_THRESHOLD_DAYS`: Number of days after which a working session is treated as done.
-- `WORKTREE_DECK_STORAGE_DIR`: Storage directory for Worktree Deck state.
 
-The following environment variables can also override runtime behavior when needed:
+Worktree Deck stores local state in `~/.worktree-deck/storage`.
 
-- `WORKTREE_MAPPING_FILE`: Path to the `mapping.txt` file used by `git_worktree_wrap.sh`.
-- `WORKTREE_REPO_ROOT`: Repository root used by `git_worktree_wrap.sh`.
+Process environment variables with the same names as the preferences can override those values in local development.
 
 ## Requirements
 

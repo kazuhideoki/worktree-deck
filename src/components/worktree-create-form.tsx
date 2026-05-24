@@ -202,7 +202,6 @@ export function CreateWorktreeForm({
   initialRepoRoot?: string | null;
   onAttempt?: () => void;
   onComplete?: () => void;
-  worktreeNameDelimiter: string;
 }) {
   const { pop, push } = useNavigation();
   const [effectiveInitialRepoRoot] = useState<string | null>(() => initialRepoRoot ?? null);
@@ -1353,10 +1352,6 @@ function resolveRepoNameFromPath(path?: string | null): string | null {
   const basename = resolvePathBasename(path ?? "");
   if (!basename) {
     return null;
-  }
-  const delimiterIndex = basename.indexOf("~_~");
-  if (delimiterIndex > 0) {
-    return basename.slice(0, delimiterIndex);
   }
   return basename;
 }

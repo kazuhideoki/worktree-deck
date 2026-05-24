@@ -36,6 +36,40 @@
       "interval": "10s"
     }
   ],
+  "preferences": [
+    {
+      "name": "GIT_WORKTREE_PATH",
+      "title": "Worktree Directory (~/.worktree-deck/worktrees)",
+      "description": "Home-relative directory where git worktrees are created.",
+      "type": "directory",
+      "required": true,
+      "default": "~/.worktree-deck/worktrees"
+    },
+    {
+      "name": "CODEX_HOME",
+      "title": "Codex Home (~/.codex)",
+      "description": "Home-relative directory where Codex stores sessions and configuration.",
+      "type": "directory",
+      "required": true,
+      "default": "~/.codex"
+    },
+    {
+      "name": "WORKTREE_DECK_SEARCH_DAYS",
+      "title": "Session Search Days",
+      "description": "Number of days to search for Codex sessions.",
+      "type": "textfield",
+      "required": false,
+      "default": "30"
+    },
+    {
+      "name": "WORKTREE_DECK_DONE_THRESHOLD_DAYS",
+      "title": "Done Threshold Days",
+      "description": "Number of days after which a working session is treated as done.",
+      "type": "textfield",
+      "required": false,
+      "default": "1"
+    }
+  ],
   "dependencies": {
     "@raycast/api": "^1.104.1",
     "@raycast/utils": "^2.2.4"
@@ -51,9 +85,8 @@
     "vitest": "^2.1.9"
   },
   "scripts": {
-    "sync-env": "node scripts/sync-env-asset.mjs",
-    "build": "npm run sync-env && ray build",
-    "dev": "npm run sync-env && RAY_Target=x ray develop",
+    "build": "ray build",
+    "dev": "RAY_Target=x ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",
     "unused": "knip",

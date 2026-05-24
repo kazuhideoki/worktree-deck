@@ -30,10 +30,10 @@ vi.mock("node:child_process", () => {
   };
 });
 
-import { createWorktree } from "./worktree-create-store";
+import { createWorktree, resolveRepositoryMapPaths } from "./worktree-create-store";
 
 /**
- * テスト用の .env と作成先を準備する
+ * テスト用の env ファイルと作成先を準備する
  */
 async function createEnvFixture(): Promise<{ rootDir: string; envRoot: string; basePath: string }> {
   const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-store-"));
@@ -59,6 +59,28 @@ describe("createWorktree", () => {
     vi.unstubAllEnvs();
     await Promise.all(createdRoots.map((path) => rm(path, { recursive: true, force: true })));
     createdRoots.length = 0;
+  });
+
+  it("repository map paths は env ファイルが無くても script path を返す", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-store-"));
+    createdRoots.push(rootDir);
+    const assetsPath = join(rootDir, "assets");
+    const scriptPath = join(assetsPath, "git_worktree_wrap.sh");
+    await mkdir(assetsPath, { recursive: true });
+    await writeFile(scriptPath, "#!/usr/bin/env bash\n", "utf8");
+
+    const result = await resolveRepositoryMapPaths({
+      env: {},
+      homeDir: rootDir,
+      assetsPath,
+      packageDir: rootDir,
+      packageName: "worktree-deck",
+    });
+
+    expect(result).toEqual({
+      envRoot: null,
+      scriptPath,
+    });
   });
 
   it("新規ブランチなら git worktree add -b を呼ぶ", async () => {
@@ -104,7 +126,7 @@ describe("createWorktree", () => {
     );
   });
 
-  it("branch 名の delimiter と underscore を壊さず nested path を作る", async () => {
+  it("branch 名の特殊文字列と underscore を壊さず nested path を作る", async () => {
     const fixture = await createEnvFixture();
     createdRoots.push(fixture.rootDir);
     childProcessMocks.execFile.mockImplementation(

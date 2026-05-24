@@ -30,7 +30,6 @@ type WorktreeDeckDataSnapshot = {
   errorMessage: string | null;
   errorId: number;
   basePath: string | null;
-  worktreeNameDelimiter: string;
   titlesByPath: Map<string, WorktreeTitle[]>;
   repositoryMappings: RepositoryMapping[];
   originLastCommitByPath: Map<string, string | null>;
@@ -94,7 +93,6 @@ function createInitialSnapshot(): WorktreeDeckDataSnapshot {
     errorMessage: null,
     errorId: 0,
     basePath: null,
-    worktreeNameDelimiter: "~_~",
     titlesByPath: new Map(),
     repositoryMappings: [],
     originLastCommitByPath: new Map(),
@@ -208,7 +206,6 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
     updateState((current) => ({
       ...current,
       basePath: snapshot.basePath,
-      worktreeNameDelimiter: snapshot.delimiter,
       worktrees: snapshot.worktrees,
       listedWorktrees: snapshot.listedWorktrees,
       repositoryMappings: snapshot.mappings,

@@ -200,7 +200,7 @@ function notify(title, message) {
 }
 
 /**
- * .env から指定キーの値を読み込む
+ * process env と任意の env ファイルから指定キーの値を読み込む
  */
 async function readEnvValue(envRoot, key) {
   const fromProcess = process.env[key]?.trim();
