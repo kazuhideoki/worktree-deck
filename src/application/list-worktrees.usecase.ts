@@ -19,7 +19,6 @@ export type WorktreeDeckContext = {
  */
 export type WorktreeDeckSettings = {
   basePath: string;
-  delimiter: string;
 };
 
 /**
@@ -28,8 +27,8 @@ export type WorktreeDeckSettings = {
 export type ListWorktreesDependencies = {
   loadSettings(context: WorktreeDeckContext): Promise<WorktreeDeckSettings>;
   loadMappings(): Promise<RepositoryMapping[]>;
-  loadCachedWorktrees(basePath: string, delimiter: string): Promise<Worktree[] | null>;
-  loadWorktrees(basePath: string, delimiter: string): Promise<Worktree[]>;
+  loadCachedWorktrees(basePath: string): Promise<Worktree[] | null>;
+  loadWorktrees(basePath: string): Promise<Worktree[]>;
 };
 
 /**
@@ -37,7 +36,6 @@ export type ListWorktreesDependencies = {
  */
 export type ListWorktreesResult = {
   basePath: string;
-  delimiter: string;
   mappings: RepositoryMapping[];
   worktrees: Worktree[];
   isCacheHit: boolean;
@@ -67,7 +65,6 @@ function buildListWorktreesResult(args: {
   });
   return {
     basePath: args.settings.basePath,
-    delimiter: args.settings.delimiter,
     mappings: args.mappings,
     worktrees: filteredWorktrees,
     isCacheHit: args.isCacheHit,
@@ -87,7 +84,7 @@ async function list(args: {
     args.dependencies.loadMappings(),
   ]);
   if (args.options?.preferCache !== false) {
-    const cachedWorktrees = await args.dependencies.loadCachedWorktrees(settings.basePath, settings.delimiter);
+    const cachedWorktrees = await args.dependencies.loadCachedWorktrees(settings.basePath);
     if (cachedWorktrees !== null) {
       return buildListWorktreesResult({
         settings,
@@ -98,7 +95,7 @@ async function list(args: {
       });
     }
   }
-  const worktrees = await args.dependencies.loadWorktrees(settings.basePath, settings.delimiter);
+  const worktrees = await args.dependencies.loadWorktrees(settings.basePath);
   return buildListWorktreesResult({
     settings,
     mappings,

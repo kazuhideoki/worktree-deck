@@ -44,7 +44,6 @@ export type LoadWorktreeDeckInitialSnapshotDependencies = {
  */
 type WorktreeDeckInitialSnapshot = {
   basePath: string;
-  delimiter: string;
   mappings: RepositoryMapping[];
   listedWorktrees: Worktree[];
   worktrees: Worktree[];
@@ -252,7 +251,6 @@ async function loadInitialSnapshot(args: {
   }
   return {
     basePath: listed.basePath,
-    delimiter: listed.delimiter,
     mappings: listed.mappings,
     listedWorktrees: listed.worktrees,
     worktrees: restored.worktrees,

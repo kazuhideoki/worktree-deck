@@ -16,7 +16,6 @@ function buildCommand(overrides: Partial<StartWorktreeAutoStartJobCommand> = {})
     initialPrompt: "Fix startup error",
     imagePaths: [],
     scriptPath: "/tmp/dev-flow/assets/git_worktree_wrap.sh",
-    envRoot: "/tmp/dev-flow",
     mapValue: "app-a",
     openApp: "zed",
     metadata: {

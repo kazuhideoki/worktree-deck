@@ -10,7 +10,6 @@ export type StartWorktreeAutoStartJobCommand = {
   initialPrompt: string;
   imagePaths?: string[];
   scriptPath: string;
-  envRoot?: string | null;
   mapValue: string;
   openApp: WorktreeOpenApp;
   metadata: CodexInitialSessionMetadata;

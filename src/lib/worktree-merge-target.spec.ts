@@ -16,8 +16,8 @@ async function execGit(cwd: string, args: string[]): Promise<void> {
 
 async function createTestRepo(): Promise<{ repoPath: string; storageDir: string }> {
   const repoPath = await mkdtemp(join(tmpdir(), "worktree-merge-target-repo-"));
-  const storageDir = await mkdtemp(join(tmpdir(), "worktree-merge-target-storage-"));
-  process.env.WORKTREE_DECK_STORAGE_DIR = storageDir;
+  const storageDir = await mkdtemp(join(tmpdir(), "worktree-merge-target-home-"));
+  process.env.HOME = storageDir;
 
   await execGit(repoPath, ["init", "-b", "main"]);
   await execGit(repoPath, ["config", "user.email", "test@example.com"]);
@@ -32,20 +32,20 @@ async function createTestRepo(): Promise<{ repoPath: string; storageDir: string 
 describe("resolveMergeTargetRef", () => {
   let repoPath = "";
   let storageDir = "";
-  let originalStorageDir: string | undefined;
+  let originalHome: string | undefined;
 
   beforeEach(async () => {
-    originalStorageDir = process.env.WORKTREE_DECK_STORAGE_DIR;
+    originalHome = process.env.HOME;
     const setup = await createTestRepo();
     repoPath = setup.repoPath;
     storageDir = setup.storageDir;
   });
 
   afterEach(async () => {
-    if (originalStorageDir === undefined) {
-      delete process.env.WORKTREE_DECK_STORAGE_DIR;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
     } else {
-      process.env.WORKTREE_DECK_STORAGE_DIR = originalStorageDir;
+      process.env.HOME = originalHome;
     }
     await Promise.all([
       repoPath ? rm(repoPath, { recursive: true, force: true }) : Promise.resolve(),
@@ -53,7 +53,7 @@ describe("resolveMergeTargetRef", () => {
     ]);
     repoPath = "";
     storageDir = "";
-    originalStorageDir = undefined;
+    originalHome = undefined;
   });
 
   it("保存済みの branch 設定があれば storage より優先して返す", async () => {

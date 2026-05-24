@@ -29,7 +29,6 @@ type CachedWorktreeRepoState = {
 type CachedWorktreeDeck = {
   version: number;
   basePath: string;
-  delimiter: string;
   cachedAt: number;
   repos: Record<string, CachedWorktreeRepoState>;
   worktreesByRepo: Record<string, CachedWorktreeEntry[]>;
@@ -40,11 +39,11 @@ export type { CachedGitMarkerState, CachedWorktreeDirectoryState, CachedWorktree
 /**
  * ワークツリー一覧キャッシュのスキーマバージョン
  */
-export const WORKTREE_DECK_CACHE_VERSION = 4;
+export const WORKTREE_DECK_CACHE_VERSION = 5;
 /**
  * ワークツリー一覧キャッシュキーの接頭辞
  */
-const WORKTREE_DECK_CACHE_KEY_PREFIX = "worktree-deck.scan-cache.v4:";
+const WORKTREE_DECK_CACHE_KEY_PREFIX = "worktree-deck.scan-cache.v5:";
 
 function buildWorktreeDeckCacheKey(basePath: string): string {
   return `${WORKTREE_DECK_CACHE_KEY_PREFIX}${encodeURIComponent(basePath)}`;
@@ -89,9 +88,8 @@ function normalizeCachedWorktreeDeck(raw: unknown): CachedWorktreeDeck | null {
     return null;
   }
   const basePath = typeof rawValue.basePath === "string" ? rawValue.basePath : null;
-  const delimiter = typeof rawValue.delimiter === "string" ? rawValue.delimiter : null;
   const cachedAt = typeof rawValue.cachedAt === "number" ? rawValue.cachedAt : null;
-  if (!basePath || !delimiter || cachedAt == null) {
+  if (!basePath || cachedAt == null) {
     return null;
   }
 
@@ -192,7 +190,6 @@ function normalizeCachedWorktreeDeck(raw: unknown): CachedWorktreeDeck | null {
   return {
     version: WORKTREE_DECK_CACHE_VERSION,
     basePath,
-    delimiter,
     cachedAt,
     repos,
     worktreesByRepo,

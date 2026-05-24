@@ -289,7 +289,9 @@ describe("loadTitlesForPaths", () => {
   });
 
   it("session file が未作成でも明示セッションタイトルを表示する", async () => {
-    const storageDir = await mkdtemp(join(tmpdir(), "worktree-session-title-storage-"));
+    const storageHome = await mkdtemp(join(tmpdir(), "worktree-session-title-home-"));
+    const storageDir = join(storageHome, ".worktree-deck", "storage");
+    await mkdir(storageDir, { recursive: true });
     await writeFile(
       join(storageDir, "worktree-session-titles.json"),
       JSON.stringify({
@@ -308,12 +310,12 @@ describe("loadTitlesForPaths", () => {
     try {
       const titlesByPath = await loadTitlesForPaths({
         ...buildLoadArgs(codexHome, worktreePath),
+        homeDir: storageHome,
         env: {
           ...process.env,
           CODEX_HOME: codexHome,
           WORKTREE_DECK_DONE_THRESHOLD_DAYS: "30",
           WORKTREE_DECK_SEARCH_DAYS: "1",
-          WORKTREE_DECK_STORAGE_DIR: storageDir,
         } as NodeJS.ProcessEnv,
       });
       const titles = titlesByPath.get(worktreePath) ?? [];
@@ -329,12 +331,14 @@ describe("loadTitlesForPaths", () => {
         }),
       ]);
     } finally {
-      await rm(storageDir, { recursive: true, force: true });
+      await rm(storageHome, { recursive: true, force: true });
     }
   });
 
   it("session file に同じ thread id がある場合は明示セッションタイトルを優先する", async () => {
-    const storageDir = await mkdtemp(join(tmpdir(), "worktree-session-title-storage-"));
+    const storageHome = await mkdtemp(join(tmpdir(), "worktree-session-title-home-"));
+    const storageDir = join(storageHome, ".worktree-deck", "storage");
+    await mkdir(storageDir, { recursive: true });
     const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16b";
     await writeFile(
       join(storageDir, "worktree-session-titles.json"),
@@ -361,11 +365,11 @@ describe("loadTitlesForPaths", () => {
     try {
       const loadArgs = {
         ...buildLoadArgs(codexHome, worktreePath),
+        homeDir: storageHome,
         env: {
           ...process.env,
           CODEX_HOME: codexHome,
           WORKTREE_DECK_SEARCH_DAYS: "1",
-          WORKTREE_DECK_STORAGE_DIR: storageDir,
         } as NodeJS.ProcessEnv,
       };
       const first = await loadTitlesForPaths(loadArgs);
@@ -374,12 +378,14 @@ describe("loadTitlesForPaths", () => {
       expect(first.get(worktreePath)?.[0]?.title).toBe("Explicit title");
       expect(second.get(worktreePath)?.[0]?.title).toBe("Explicit title");
     } finally {
-      await rm(storageDir, { recursive: true, force: true });
+      await rm(storageHome, { recursive: true, force: true });
     }
   });
 
   it("古い explicit-only title は done として表示する", async () => {
-    const storageDir = await mkdtemp(join(tmpdir(), "worktree-session-title-storage-"));
+    const storageHome = await mkdtemp(join(tmpdir(), "worktree-session-title-home-"));
+    const storageDir = join(storageHome, ".worktree-deck", "storage");
+    await mkdir(storageDir, { recursive: true });
     await writeFile(
       join(storageDir, "worktree-session-titles.json"),
       JSON.stringify({
@@ -398,17 +404,17 @@ describe("loadTitlesForPaths", () => {
     try {
       const titlesByPath = await loadTitlesForPaths({
         ...buildLoadArgs(codexHome, worktreePath),
+        homeDir: storageHome,
         env: {
           ...process.env,
           CODEX_HOME: codexHome,
           WORKTREE_DECK_SEARCH_DAYS: "1",
-          WORKTREE_DECK_STORAGE_DIR: storageDir,
         } as NodeJS.ProcessEnv,
       });
 
       expect(titlesByPath.get(worktreePath)?.[0]?.status).toBe("done");
     } finally {
-      await rm(storageDir, { recursive: true, force: true });
+      await rm(storageHome, { recursive: true, force: true });
     }
   });
 

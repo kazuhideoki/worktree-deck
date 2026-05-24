@@ -12,7 +12,7 @@ describe("buildDestinationPathSegments", () => {
     ).toEqual({ ok: true, value: ["app", "feature", "create_worktree_path"] });
   });
 
-  it("delimiter 文字列や underscore を branch 名の一部として保持する", () => {
+  it("特殊文字列や underscore を branch 名の一部として保持する", () => {
     expect(
       worktreeCreateService.buildDestinationPathSegments({
         mapValue: "app",

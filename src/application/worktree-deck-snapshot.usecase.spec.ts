@@ -74,7 +74,6 @@ describe("worktreeDeckSnapshotUsecase.loadInitialSnapshot", () => {
     const dependencies = {
       listWorktrees: vi.fn(async () => ({
         basePath: "/repo",
-        delimiter: "~_~",
         mappings,
         worktrees: listedWorktrees,
         isCacheHit: false,
@@ -96,7 +95,6 @@ describe("worktreeDeckSnapshotUsecase.loadInitialSnapshot", () => {
     });
 
     expect(result.basePath).toBe("/repo");
-    expect(result.delimiter).toBe("~_~");
     expect(result.mappings).toBe(mappings);
     expect(result.listedWorktrees).toBe(listedWorktrees);
     expect(result.worktrees).toBe(restoredWorktrees);
@@ -117,7 +115,6 @@ describe("worktreeDeckSnapshotUsecase.loadInitialSnapshot", () => {
     const dependencies = {
       listWorktrees: vi.fn(async () => ({
         basePath: "/repo",
-        delimiter: "~_~",
         mappings: [],
         worktrees: listedWorktrees,
         isCacheHit: false,

@@ -9,7 +9,6 @@ import {
   loadBasePathInfra,
   loadCachedWorktreesBaseInfra,
   loadRepositoryMappingsInfra,
-  loadWorktreeNameDelimiterInfra,
   loadWorktreesBaseInfra,
 } from "../infrastructure/list-worktrees-infra";
 
@@ -18,22 +17,20 @@ import {
  */
 type ListWorktreesInfra = {
   loadBasePath(context: WorktreeDeckContext): Promise<string>;
-  loadWorktreeNameDelimiter(context: WorktreeDeckContext): Promise<string>;
   loadRepositoryMappings(): Promise<RepositoryMapping[]>;
-  loadCachedWorktreesBase(basePath: string, delimiter: string): Promise<Worktree[] | null>;
-  loadWorktreesBase(basePath: string, delimiter: string): Promise<Worktree[]>;
+  loadCachedWorktreesBase(basePath: string): Promise<Worktree[] | null>;
+  loadWorktreesBase(basePath: string): Promise<Worktree[]>;
 };
 
 /**
  * 設定値を読み込む
  */
 async function loadSettingsFromInfra(
-  infra: Pick<ListWorktreesInfra, "loadBasePath" | "loadWorktreeNameDelimiter">,
+  infra: Pick<ListWorktreesInfra, "loadBasePath">,
   context: WorktreeDeckContext,
 ): Promise<WorktreeDeckSettings> {
   const basePath = await infra.loadBasePath(context);
-  const delimiter = await infra.loadWorktreeNameDelimiter(context);
-  return { basePath, delimiter };
+  return { basePath };
 }
 
 /**
@@ -60,11 +57,11 @@ export function createListWorktreesDependencies(infra: ListWorktreesInfra): List
     loadMappings() {
       return loadMappingsFromInfra(infra);
     },
-    loadCachedWorktrees(basePath, delimiter) {
-      return infra.loadCachedWorktreesBase(basePath, delimiter);
+    loadCachedWorktrees(basePath) {
+      return infra.loadCachedWorktreesBase(basePath);
     },
-    loadWorktrees(basePath, delimiter) {
-      return infra.loadWorktreesBase(basePath, delimiter);
+    loadWorktrees(basePath) {
+      return infra.loadWorktreesBase(basePath);
     },
   };
 }
@@ -75,7 +72,6 @@ export function createListWorktreesDependencies(infra: ListWorktreesInfra): List
 export function createDefaultListWorktreesDependencies(): ListWorktreesDependencies {
   return createListWorktreesDependencies({
     loadBasePath: loadBasePathInfra,
-    loadWorktreeNameDelimiter: loadWorktreeNameDelimiterInfra,
     loadRepositoryMappings: loadRepositoryMappingsInfra,
     loadCachedWorktreesBase: loadCachedWorktreesBaseInfra,
     loadWorktreesBase: loadWorktreesBaseInfra,

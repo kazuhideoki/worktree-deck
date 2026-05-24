@@ -9,7 +9,6 @@ import type {
   StartWorktreeAutoStartJobCommand,
   StartWorktreeAutoStartJobResult,
 } from "../application/start-worktree-auto-start-job.usecase";
-import { expandHomePath, normalizePathValue } from "../domain/path-utils";
 
 const AUTO_START_WORKER_FILE_NAME = "auto_start_worker.js";
 
@@ -62,54 +61,9 @@ async function writeAutoStartJobFailure(statePath: string, error: unknown): Prom
 }
 
 /**
- * .env から指定キーの値を読み込む
- */
-async function readEnvValue(envRoot: string | null | undefined, key: string): Promise<string | null> {
-  const fromProcess = process.env[key]?.trim();
-  if (fromProcess) {
-    return fromProcess;
-  }
-  const envRootValue = envRoot?.trim();
-  if (!envRootValue) {
-    return null;
-  }
-  const envPath = join(envRootValue, ".env");
-  if (!existsSync(envPath)) {
-    return null;
-  }
-  const { readFile } = await import("node:fs/promises");
-  const content = await readFile(envPath, "utf8");
-  for (const rawLine of content.split(/\r?\n/)) {
-    const trimmed = rawLine.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-    const line = trimmed.startsWith("export ") ? trimmed.slice("export ".length).trim() : trimmed;
-    const eqIndex = line.indexOf("=");
-    if (eqIndex === -1) {
-      continue;
-    }
-    const envKey = line.slice(0, eqIndex).trim();
-    if (envKey !== key) {
-      continue;
-    }
-    let value = line.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    return value.trim() || null;
-  }
-  return null;
-}
-
-/**
  * worktree-deck の storage ディレクトリを解決する
  */
-async function resolveStorageDir(envRoot: string | null | undefined): Promise<string> {
-  const configured = await readEnvValue(envRoot, "WORKTREE_DECK_STORAGE_DIR");
-  if (configured) {
-    return normalizePathValue(expandHomePath(configured, process.env.HOME?.trim() || homedir()));
-  }
+function resolveStorageDir(): string {
   return join(process.env.HOME?.trim() || homedir(), ".worktree-deck", "storage");
 }
 
@@ -166,7 +120,7 @@ export async function startWorktreeAutoStartJob(
   command: StartWorktreeAutoStartJobCommand,
 ): Promise<StartWorktreeAutoStartJobResult> {
   const jobId = randomUUID();
-  const jobDir = join(await resolveStorageDir(command.envRoot), "auto-start-jobs");
+  const jobDir = join(resolveStorageDir(), "auto-start-jobs");
   const statePath = join(jobDir, `${jobId}.json`);
   const payload: AutoStartJobPayload = {
     ...command,

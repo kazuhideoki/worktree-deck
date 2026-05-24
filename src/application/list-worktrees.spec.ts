@@ -26,7 +26,7 @@ function buildContext(): WorktreeDeckContext {
  */
 function buildDependencies(args?: { settings?: WorktreeDeckSettings }): ListWorktreesDependencies {
   return {
-    loadSettings: vi.fn(async () => args?.settings ?? { basePath: "/tmp/worktrees", delimiter: "~_~" }),
+    loadSettings: vi.fn(async () => args?.settings ?? { basePath: "/tmp/worktrees" }),
     loadMappings: vi.fn(async () => []),
     loadCachedWorktrees: vi.fn(async () => null),
     loadWorktrees: vi.fn(async () => []),
@@ -59,7 +59,6 @@ describe("list", () => {
     const result = await listWorktreesUsecase.list({ context, dependencies });
 
     expect(result.basePath).toBe("/tmp/worktrees");
-    expect(result.delimiter).toBe("~_~");
     expect(result.mappings).toEqual([
       { repoRoot: "/repos/app-a", mapValue: "app-a" },
       { repoRoot: "/repos/app-b", mapValue: "app-b" },
@@ -72,7 +71,7 @@ describe("list", () => {
         originPath: "/repos/app-a",
       },
     ]);
-    expect(dependencies.loadWorktrees).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
+    expect(dependencies.loadWorktrees).toHaveBeenCalledWith("/tmp/worktrees");
     expect(result.isCacheHit).toBe(false);
   });
 
@@ -163,6 +162,6 @@ describe("list", () => {
     await listWorktreesUsecase.list({ context, dependencies, options: { preferCache: false } });
 
     expect(dependencies.loadCachedWorktrees).not.toHaveBeenCalled();
-    expect(dependencies.loadWorktrees).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
+    expect(dependencies.loadWorktrees).toHaveBeenCalledWith("/tmp/worktrees");
   });
 });

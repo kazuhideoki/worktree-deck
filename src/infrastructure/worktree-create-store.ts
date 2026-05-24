@@ -15,7 +15,6 @@ const execFileAsync = promisify(execFile);
 const COPY_WORKER_FILE_NAME = "copy_untracked_worker.js";
 
 type RepositoryMapPaths = {
-  envRoot: string | null;
   scriptPath: string;
 };
 
@@ -44,40 +43,6 @@ type ExistingWorktreeMatchResult = {
 };
 
 /**
- * .env の存在を確認する
- */
-function hasEnvRoot(root: string): boolean {
-  return existsSync(join(root, ".env"));
-}
-
-/**
- * worktree-deck package root の .env ルートを解決する
- */
-function resolveEnvRoot(args: ResolveArgs): string | null {
-  const assetsPath = normalizePathValue(args.assetsPath);
-  if (hasEnvRoot(assetsPath)) {
-    return assetsPath;
-  }
-
-  const assetsRoot = normalizePathValue(dirname(args.assetsPath));
-  if (hasEnvRoot(assetsRoot)) {
-    return assetsRoot;
-  }
-
-  const packageRoot = normalizePathValue(args.packageDir);
-  if (hasEnvRoot(packageRoot)) {
-    return packageRoot;
-  }
-
-  const packageParentRoot = normalizePathValue(dirname(args.packageDir));
-  if (hasEnvRoot(packageParentRoot)) {
-    return packageParentRoot;
-  }
-
-  return null;
-}
-
-/**
  * worktree 作成スクリプトのパスを解決する
  */
 function resolveCreateScriptPath(assetsPath: string): string {
@@ -97,66 +62,24 @@ function resolveCreateScriptPath(assetsPath: string): string {
  */
 export async function resolveRepositoryMapPaths(args: ResolveArgs): Promise<RepositoryMapPaths> {
   const scriptPath = resolveCreateScriptPath(args.assetsPath);
-  const envRoot = resolveEnvRoot(args);
-  if (!envRoot) {
-    throw new Error(".env was not found. Place .env in assets.");
-  }
   return {
-    envRoot,
     scriptPath,
   };
 }
 
 /**
- * .env から指定キーの値を読み込む
+ * process env から指定キーの値を読み込む
  */
-async function readEnvValue(envRoot: string | null | undefined, key: string): Promise<string | null> {
+function readEnvValue(key: string): string | null {
   const fromProcess = process.env[key]?.trim();
-  if (fromProcess) {
-    return fromProcess;
-  }
-  const envRootValue = envRoot?.trim();
-  if (!envRootValue) {
-    return null;
-  }
-  const envPath = join(envRootValue, ".env");
-  if (!existsSync(envPath)) {
-    return null;
-  }
-  const { readFile } = await import("node:fs/promises");
-  const content = await readFile(envPath, "utf8");
-  for (const rawLine of content.split(/\r?\n/)) {
-    const trimmed = rawLine.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-    const line = trimmed.startsWith("export ") ? trimmed.slice("export ".length).trim() : trimmed;
-    const eqIndex = line.indexOf("=");
-    if (eqIndex === -1) {
-      continue;
-    }
-    const envKey = line.slice(0, eqIndex).trim();
-    if (envKey !== key) {
-      continue;
-    }
-    let value = line.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    return value.trim() || null;
-  }
-  return null;
+  return fromProcess || null;
 }
 
 /**
  * worktree 作成先パスを組み立てる
  */
-async function resolveWorktreeDestination(args: {
-  envRoot?: string | null;
-  mapValue?: string;
-  branch: string;
-}): Promise<string> {
-  const basePath = await readEnvValue(args.envRoot, "GIT_WORKTREE_PATH");
+async function resolveWorktreeDestination(args: { mapValue?: string; branch: string }): Promise<string> {
+  const basePath = readEnvValue("GIT_WORKTREE_PATH");
   if (!basePath) {
     throw new Error("GIT_WORKTREE_PATH is not set.");
   }
@@ -279,24 +202,16 @@ function resolveCopyWorkerPath(scriptPath: string): string {
 /**
  * worktree-deck の storage ディレクトリを解決する
  */
-async function resolveStorageDir(envRoot: string | null | undefined): Promise<string> {
-  const configured = await readEnvValue(envRoot, "WORKTREE_DECK_STORAGE_DIR");
-  if (configured) {
-    return normalizePathValue(expandHomePath(configured, process.env.HOME?.trim() || homedir()));
-  }
+function resolveStorageDir(): string {
   return join(process.env.HOME?.trim() || homedir(), ".worktree-deck", "storage");
 }
 
 /**
  * コピー job の状態ファイルパスを作成する
  */
-async function createCopyJobPayload(args: {
-  repoRoot: string;
-  destination: string;
-  envRoot?: string | null;
-}): Promise<CopyUntrackedJobPayload> {
+async function createCopyJobPayload(args: { repoRoot: string; destination: string }): Promise<CopyUntrackedJobPayload> {
   const id = randomUUID();
-  const jobDir = join(await resolveStorageDir(args.envRoot), "copy-jobs");
+  const jobDir = join(resolveStorageDir(), "copy-jobs");
   const statePath = join(jobDir, `${id}.json`);
   await mkdir(jobDir, { recursive: true });
   await writeFile(
@@ -328,14 +243,12 @@ async function createCopyJobPayload(args: {
 async function startUntrackedCopyWorker(args: {
   repoRoot: string;
   destination: string;
-  envRoot?: string | null;
   scriptPath: string;
 }): Promise<CopyWorkerStartResult> {
   try {
     const payload = await createCopyJobPayload({
       repoRoot: args.repoRoot,
       destination: args.destination,
-      envRoot: args.envRoot,
     });
     const child = spawn(process.execPath, [resolveCopyWorkerPath(args.scriptPath), JSON.stringify(payload)], {
       detached: true,
@@ -370,7 +283,6 @@ export async function createWorktree(args: {
   branch: string;
   scriptPath: string;
   startPoint?: string;
-  envRoot?: string | null;
   mapValue?: string;
   allowExistingWorktree?: boolean;
 }): Promise<{ createdPath: string | null; stdout: string; stderr: string; reusedExisting?: boolean }> {
@@ -397,7 +309,6 @@ export async function createWorktree(args: {
   const copyWorkerStartResult = await startUntrackedCopyWorker({
     repoRoot: args.repoRoot,
     destination,
-    envRoot: args.envRoot,
     scriptPath: args.scriptPath,
   });
   return {

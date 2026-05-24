@@ -1,7 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip/schema.json",
   "entry": [
-    "scripts/sync-env-asset.mjs",
     "assets/auto_start_worker.js",
     "assets/copy_untracked_worker.js",
     "assets/remove_worktree_worker.js"

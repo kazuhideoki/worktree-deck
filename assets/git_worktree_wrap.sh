@@ -40,26 +40,6 @@ resolve_script_root() {
     printf '%s' "${script_root}"
 }
 
-# スクリプトリポジトリのルートを解決する
-resolve_script_repo_root() {
-    local script_root="$1"
-    local repo_root
-    repo_root="$(git -C "${script_root}" rev-parse --show-toplevel 2>/dev/null)" || fail "Not a git repository: ${script_root}"
-    printf '%s' "${repo_root}"
-}
-
-# .env の基点を決める
-resolve_env_root() {
-    local script_root="$1"
-    local env_root="${WORKTREE_DECK_ROOT:-}"
-    if [[ -n "${env_root}" ]]; then
-        printf '%s' "${env_root}"
-        return
-    fi
-    env_root="$(resolve_script_repo_root "${script_root}")"
-    printf '%s' "${env_root}"
-}
-
 # 先頭の ~ を home path へ展開する
 expand_home_path() {
     local path="$1"
@@ -96,31 +76,16 @@ resolve_map_file() {
     fail "Missing mapping file: ${fallback}"
 }
 
-# .env からキーに対応する値を取得する
+# process env からキーに対応する値を取得する
 read_env_value() {
     local key="$1"
-    local env_file="$2"
-    local line value raw
-    [[ -f "${env_file}" ]] || fail "Missing .env file: ${env_file}"
-    while IFS= read -r line; do
-        [[ -z "${line//[[:space:]]/}" ]] && continue
-        [[ "${line}" =~ ^[[:space:]]*# ]] && continue
-        line="$(trim_spaces "${line}")"
-        if [[ "${line}" == export[[:space:]]* ]]; then
-            line="$(trim_spaces "${line#export}")"
-        fi
-        if [[ "${line}" == "${key}="* ]]; then
-            raw="${line#*=}"
-            raw="$(trim_spaces "${raw}")"
-            raw="${raw%\"}"
-            raw="${raw#\"}"
-            raw="${raw%\'}"
-            raw="${raw#\'}"
-            value="${raw}"
-        fi
-    done <"${env_file}"
-    [[ -n "${value:-}" ]] || fail "Missing ${key} in ${env_file}"
-    printf '%s' "${value}"
+    local from_env
+    from_env="${!key:-}"
+    if [[ -n "${from_env}" ]]; then
+        printf '%s' "${from_env}"
+        return
+    fi
+    printf ''
 }
 
 # worktree パス要素として使う文字列を正規化する
@@ -303,7 +268,7 @@ parse_args() {
 main() {
     local branch start_point map_value
     local invoke_dir repo_root
-    local script_root env_root env_file
+    local script_root
     local base_path dest created_status
     local parsed
 
@@ -313,10 +278,10 @@ main() {
     invoke_dir="$(resolve_invoke_dir)"
     repo_root="$(resolve_repo_root "${invoke_dir}")"
     script_root="$(resolve_script_root)"
-    env_root="$(resolve_env_root "${script_root}")"
-    env_file="${env_root}/.env"
 
-    base_path="$(expand_home_path "$(read_env_value "GIT_WORKTREE_PATH" "${env_file}")")"
+    base_path="$(read_env_value "GIT_WORKTREE_PATH")"
+    [[ -n "${base_path}" ]] || fail "GIT_WORKTREE_PATH is not set."
+    base_path="$(expand_home_path "${base_path}")"
     dest="$(build_worktree_path "${base_path}" "${map_value}" "${branch}")"
 
     ensure_parent_dir "${dest}"

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { listWorktreesUsecase } from "./application/list-worktrees.usecase";
 import { resolveWorktreeDeckCompositionRoot, type Worktree, type WorktreeTitle } from "./composition-root";
+import { applyRaycastPreferencesToProcessEnv } from "./raycast-preferences";
 import {
   worktreeMenuBarStatusService,
   type WorktreeMenuBarItem,
@@ -45,6 +46,8 @@ async function loadWorktreeMenuBarSummary(): Promise<{
   summary: WorktreeMenuBarStatusSummary;
   total: number;
 }> {
+  applyRaycastPreferencesToProcessEnv();
+
   const homeDir = process.env.HOME?.trim() ?? null;
   const listed = await listWorktreesUsecase.list({
     context: {

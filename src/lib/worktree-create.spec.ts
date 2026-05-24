@@ -3,7 +3,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, symlink, writeF
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createWorktree } from "../infrastructure/worktree-create-store";
 
@@ -32,23 +32,14 @@ async function createTestRepository(rootDir: string): Promise<string> {
 }
 
 /**
- * スクリプト実行用の .env を作成する
+ * worktree 作成用の環境変数を設定する
  */
-async function createEnvRoot(rootDir: string): Promise<{ envRoot: string; worktreeBasePath: string }> {
-  const envRoot = join(rootDir, "dev-flow-root");
+async function configureWorktreeEnvironment(rootDir: string): Promise<{ worktreeBasePath: string }> {
   const worktreeBasePath = join(rootDir, "worktrees");
-  const storagePath = join(rootDir, "storage");
-  await mkdir(envRoot, { recursive: true });
   await mkdir(worktreeBasePath, { recursive: true });
-  await writeFile(
-    join(envRoot, ".env"),
-    [`GIT_WORKTREE_PATH=${worktreeBasePath}`, `WORKTREE_DECK_STORAGE_DIR=${storagePath}`, ""].join("\n"),
-    "utf8",
-  );
-  return {
-    envRoot,
-    worktreeBasePath,
-  };
+  vi.stubEnv("GIT_WORKTREE_PATH", worktreeBasePath);
+  vi.stubEnv("HOME", rootDir);
+  return { worktreeBasePath };
 }
 
 /**
@@ -123,16 +114,17 @@ describe("createWorktree", () => {
   const createdRoots: string[] = [];
 
   afterEach(async () => {
-    await Promise.all(createdRoots.map((path) => waitForCopyJobsFinished(join(path, "storage"))));
+    await Promise.all(createdRoots.map((path) => waitForCopyJobsFinished(join(path, ".worktree-deck", "storage"))));
     await Promise.all(createdRoots.map((path) => rm(path, { recursive: true, force: true })));
     createdRoots.length = 0;
+    vi.unstubAllEnvs();
   });
 
   it("ベースブランチを指定して作成したら branch config に baseRef を保存する", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-lib-"));
     createdRoots.push(rootDir);
     const repoPath = await createTestRepository(rootDir);
-    const { envRoot } = await createEnvRoot(rootDir);
+    await configureWorktreeEnvironment(rootDir);
     const scriptPath = resolve(__dirname, "../../assets/git_worktree_wrap.sh");
 
     const result = await createWorktree({
@@ -140,7 +132,6 @@ describe("createWorktree", () => {
       branch: "feature/test",
       startPoint: "main",
       scriptPath,
-      envRoot,
       mapValue: "repo",
     });
 
@@ -153,14 +144,13 @@ describe("createWorktree", () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-lib-"));
     createdRoots.push(rootDir);
     const repoPath = await createTestRepository(rootDir);
-    const { envRoot } = await createEnvRoot(rootDir);
+    await configureWorktreeEnvironment(rootDir);
     const scriptPath = resolve(__dirname, "../../assets/git_worktree_wrap.sh");
 
     const result = await createWorktree({
       repoRoot: repoPath,
       branch: "feature/no-base",
       scriptPath,
-      envRoot,
       mapValue: "repo",
     });
 
@@ -173,7 +163,7 @@ describe("createWorktree", () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-lib-"));
     createdRoots.push(rootDir);
     const repoPath = await createTestRepository(rootDir);
-    const { envRoot } = await createEnvRoot(rootDir);
+    await configureWorktreeEnvironment(rootDir);
     const scriptPath = resolve(__dirname, "../../assets/git_worktree_wrap.sh");
 
     await execGit(repoPath, ["checkout", "-b", "develop"]);
@@ -187,7 +177,6 @@ describe("createWorktree", () => {
       branch: "feature/reuse",
       startPoint: "develop",
       scriptPath,
-      envRoot,
       mapValue: "repo",
     });
 
@@ -196,29 +185,18 @@ describe("createWorktree", () => {
     expect(storedBaseRef).toBe("main");
   }, 15000);
 
-  it("shell asset は GIT_WORKTREE_PATH の home path を展開する", async () => {
+  it("shell asset は process env の GIT_WORKTREE_PATH の home path を展開する", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-lib-"));
     createdRoots.push(rootDir);
     const repoPath = await createTestRepository(rootDir);
-    const envRoot = join(rootDir, "worktree-deck-root");
     const scriptPath = resolve(__dirname, "../../assets/git_worktree_wrap.sh");
-    await mkdir(envRoot, { recursive: true });
-    await writeFile(
-      join(envRoot, ".env"),
-      [
-        "GIT_WORKTREE_PATH=~/.worktree-deck/worktrees",
-        `WORKTREE_DECK_STORAGE_DIR=${join(rootDir, "storage")}`,
-        "",
-      ].join("\n"),
-      "utf8",
-    );
 
     const { stdout } = await execFileAsync(scriptPath, ["feature/home-path", "main", "--map-value", "repo"], {
       cwd: repoPath,
       env: {
         ...process.env,
         HOME: rootDir,
-        WORKTREE_DECK_ROOT: envRoot,
+        GIT_WORKTREE_PATH: "~/.worktree-deck/worktrees",
         WORKTREE_REPO_ROOT: repoPath,
       },
     });
@@ -234,7 +212,7 @@ describe("createWorktree", () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-lib-"));
     createdRoots.push(rootDir);
     const repoPath = await createTestRepository(rootDir);
-    const { envRoot, worktreeBasePath } = await createEnvRoot(rootDir);
+    const { worktreeBasePath } = await configureWorktreeEnvironment(rootDir);
     const scriptPath = resolve(__dirname, "../../assets/git_worktree_wrap.sh");
     await symlink("missing-target.txt", join(repoPath, "untracked-link"));
 
@@ -243,7 +221,6 @@ describe("createWorktree", () => {
       branch: "feature/symlink",
       startPoint: "main",
       scriptPath,
-      envRoot,
       mapValue: "repo",
     });
 
@@ -258,7 +235,7 @@ describe("createWorktree", () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-lib-"));
     createdRoots.push(rootDir);
     const repoPath = await createTestRepository(rootDir);
-    const { envRoot, worktreeBasePath } = await createEnvRoot(rootDir);
+    const { worktreeBasePath } = await configureWorktreeEnvironment(rootDir);
     const scriptPath = resolve(__dirname, "../../assets/git_worktree_wrap.sh");
     const longPathSegment = "long-path-segment-".repeat(12);
     const ignoredDir = join(repoPath, "ignored-large", longPathSegment, longPathSegment, longPathSegment);
@@ -275,7 +252,6 @@ describe("createWorktree", () => {
       branch: "feature/large-ignored",
       startPoint: "main",
       scriptPath,
-      envRoot,
       mapValue: "repo",
     });
 

@@ -1,7 +1,6 @@
 import { existsSync, promises as fs } from "node:fs";
 import { join, relative } from "node:path";
 
-import { DEFAULT_WORKTREE_NAME_DELIMITER } from "./worktree-config-store";
 import { resolveOriginRepoPath } from "./git-worktree-metadata-store";
 import {
   WORKTREE_DECK_CACHE_VERSION,
@@ -80,26 +79,6 @@ async function findWorktreeRoots(repoRoot: string): Promise<WorktreeRootsScanRes
 }
 
 /**
- * worktree 名を repo と branch に分割する
- */
-function splitWorktreeName(name: string, delimiter: string): { repo: string; branch: string } {
-  const index = name.indexOf(delimiter);
-  if (index === -1) {
-    return { repo: name, branch: "root" };
-  }
-  const repo = name.slice(0, index).trim() || name;
-  const branch = name.slice(index + delimiter.length).trim() || "root";
-  return { repo, branch };
-}
-
-/**
- * .git ディレクトリの有無を確認する
- */
-function hasGitDir(dir: string): boolean {
-  return existsSync(join(dir, ".git"));
-}
-
-/**
  * トップレベル配下のリポジトリ情報を収集する
  */
 async function loadTopLevelRepoInfos(basePath: string): Promise<TopLevelRepoInfo[]> {
@@ -122,42 +101,7 @@ async function loadTopLevelRepoInfos(basePath: string): Promise<TopLevelRepoInfo
 /**
  * 単一トップレベルディレクトリ配下から worktree 候補を読み取る
  */
-async function loadWorktreesFromTopLevelRepo(
-  args: TopLevelRepoInfo,
-  delimiter: string,
-): Promise<TopLevelRepoWorktreesResult> {
-  const defaultRepoState: CachedWorktreeRepoState = {
-    mtimeMs: args.mtimeMs,
-    directories: [{ relativePath: "", mtimeMs: args.mtimeMs }],
-    gitMarkers: [],
-  };
-  if (args.name.includes(delimiter)) {
-    if (!hasGitDir(args.path)) {
-      return {
-        worktrees: [],
-        repoState: defaultRepoState,
-      };
-    }
-    const split = splitWorktreeName(args.name, delimiter);
-    const originPath = await resolveOriginRepoPath(args.path);
-    return {
-      worktrees: [
-        {
-          repo: split.repo,
-          branch: split.branch,
-          path: args.path,
-          originPath: originPath ?? undefined,
-        },
-      ],
-      repoState: {
-        ...defaultRepoState,
-        gitMarkers: (await captureGitMarkers({ repoRoot: args.path, worktreePaths: [args.path] })).sort((left, right) =>
-          left.relativePath.localeCompare(right.relativePath),
-        ),
-      },
-    };
-  }
-
+async function loadWorktreesFromTopLevelRepo(args: TopLevelRepoInfo): Promise<TopLevelRepoWorktreesResult> {
   const scanResult = await findWorktreeRoots(args.path);
   const items: Worktree[] = [];
   for (const worktreePath of scanResult.roots) {
@@ -322,12 +266,9 @@ async function canReuseCachedRepoState(args: {
 /**
  * 保存済み scan cache から worktree 一覧を検証せずに読み込む
  */
-export async function loadCachedWorktreesBase(
-  basePath: string,
-  delimiter: string = DEFAULT_WORKTREE_NAME_DELIMITER,
-): Promise<Worktree[] | null> {
+export async function loadCachedWorktreesBase(basePath: string): Promise<Worktree[] | null> {
   const cached = await loadWorktreeDeckCache(basePath);
-  if (cached?.basePath !== basePath || cached.delimiter !== delimiter) {
+  if (cached?.basePath !== basePath) {
     return null;
   }
   return restoreWorktreesFromCache(cached.worktreesByRepo);
@@ -339,10 +280,7 @@ export async function loadCachedWorktreesBase(
 /**
  * basePath 配下から worktree 一覧を軽量に構築する
  */
-export async function loadWorktreesBase(
-  basePath: string,
-  delimiter: string = DEFAULT_WORKTREE_NAME_DELIMITER,
-): Promise<Worktree[]> {
+export async function loadWorktreesBase(basePath: string): Promise<Worktree[]> {
   if (!existsSync(basePath)) {
     // 初期実行時など未作成なら空の一覧として扱う
     return [];
@@ -354,7 +292,7 @@ export async function loadWorktreesBase(
   }
 
   const cached = await loadWorktreeDeckCache(basePath);
-  const hasValidCache = cached?.basePath === basePath && cached.delimiter === delimiter;
+  const hasValidCache = cached?.basePath === basePath;
   const cacheRepos = hasValidCache ? cached.repos : null;
   const cacheWorktreesByRepo = hasValidCache ? cached.worktreesByRepo : null;
   const repoInfos = await loadTopLevelRepoInfos(basePath);
@@ -386,7 +324,7 @@ export async function loadWorktreesBase(
       }
     }
 
-    const discovered = await loadWorktreesFromTopLevelRepo(repoInfo, delimiter);
+    const discovered = await loadWorktreesFromTopLevelRepo(repoInfo);
     for (const item of discovered.worktrees) {
       items.push(item);
     }
@@ -402,7 +340,6 @@ export async function loadWorktreesBase(
   await saveWorktreeDeckCache({
     version: WORKTREE_DECK_CACHE_VERSION,
     basePath,
-    delimiter,
     cachedAt: Date.now(),
     repos: nextRepos,
     worktreesByRepo: nextWorktreesByRepo,

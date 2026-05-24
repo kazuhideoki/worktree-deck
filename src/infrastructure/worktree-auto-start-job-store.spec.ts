@@ -21,23 +21,20 @@ import { startWorktreeAutoStartJob } from "./worktree-auto-start-job-store";
  */
 async function createAutoStartJobFixture(): Promise<{
   rootDir: string;
-  envRoot: string;
   storageDir: string;
   scriptPath: string;
   workerPath: string;
 }> {
   const rootDir = await mkdtemp(join(tmpdir(), "worktree-auto-start-job-"));
-  const envRoot = join(rootDir, "dev-flow");
-  const storageDir = join(rootDir, "storage");
+  const storageDir = join(rootDir, ".worktree-deck", "storage");
   const assetsDir = join(rootDir, "assets");
   const scriptPath = join(assetsDir, "git_worktree_wrap.sh");
   const workerPath = join(assetsDir, "auto_start_worker.js");
-  await mkdir(envRoot, { recursive: true });
   await mkdir(assetsDir, { recursive: true });
-  await writeFile(join(envRoot, ".env"), `WORKTREE_DECK_STORAGE_DIR=${storageDir}\n`, "utf8");
   await writeFile(scriptPath, "#!/bin/sh\n", "utf8");
   await writeFile(workerPath, "#!/usr/bin/env node\n", "utf8");
-  return { rootDir, envRoot, storageDir, scriptPath, workerPath };
+  vi.stubEnv("HOME", rootDir);
+  return { rootDir, storageDir, scriptPath, workerPath };
 }
 
 /**
@@ -57,6 +54,7 @@ describe("startWorktreeAutoStartJob", () => {
 
   afterEach(async () => {
     childProcessMocks.spawn.mockReset();
+    vi.unstubAllEnvs();
     await Promise.all(createdRoots.map((path) => rm(path, { recursive: true, force: true })));
     createdRoots.length = 0;
   });
@@ -72,7 +70,6 @@ describe("startWorktreeAutoStartJob", () => {
       initialPrompt: "a".repeat(5000),
       imagePaths: ["/tmp/design.png"],
       scriptPath: fixture.scriptPath,
-      envRoot: fixture.envRoot,
       mapValue: "app-a",
       openApp: "zed",
       metadata: {
@@ -119,7 +116,6 @@ describe("startWorktreeAutoStartJob", () => {
         baseBranch: "main",
         initialPrompt: "Fix startup error",
         scriptPath: fixture.scriptPath,
-        envRoot: fixture.envRoot,
         mapValue: "app-a",
         openApp: "zed",
         metadata: {

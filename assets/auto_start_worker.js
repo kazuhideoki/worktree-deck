@@ -6,7 +6,7 @@ const { mkdtemp, mkdir, readFile, rm, writeFile } = require("node:fs/promises");
 const { existsSync } = require("node:fs");
 const { get } = require("node:http");
 const { homedir, tmpdir } = require("node:os");
-const { delimiter, dirname, isAbsolute, join, normalize } = require("node:path");
+const { delimiter, dirname, join, normalize } = require("node:path");
 
 const AUTO_START_METADATA_GENERATION_PROMPT_HEADER = [
   "Generate concise metadata for this task.",
@@ -200,39 +200,11 @@ function notify(title, message) {
 }
 
 /**
- * .env から指定キーの値を読み込む
+ * process env から指定キーの値を読み込む
  */
-async function readEnvValue(envRoot, key) {
+function readEnvValue(key) {
   const fromProcess = process.env[key]?.trim();
-  if (fromProcess) {
-    return fromProcess;
-  }
-  const envPath = envRoot ? join(envRoot, ".env") : "";
-  if (!envPath || !existsSync(envPath)) {
-    return null;
-  }
-  const content = await readFile(envPath, "utf8");
-  for (const rawLine of content.split(/\r?\n/)) {
-    const trimmed = rawLine.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-    const line = trimmed.startsWith("export ") ? trimmed.slice("export ".length).trim() : trimmed;
-    const eqIndex = line.indexOf("=");
-    if (eqIndex === -1) {
-      continue;
-    }
-    const envKey = line.slice(0, eqIndex).trim();
-    if (envKey !== key) {
-      continue;
-    }
-    let value = line.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    return value.trim() || null;
-  }
-  return null;
+  return fromProcess || null;
 }
 
 /**
@@ -251,16 +223,7 @@ function expandHomePath(value) {
 /**
  * worktree-deck の storage ディレクトリを解決する
  */
-async function resolveStorageDir(payload) {
-  const configured = await readEnvValue(payload.envRoot, "WORKTREE_DECK_STORAGE_DIR");
-  if (configured) {
-    const expanded = expandHomePath(configured);
-    if (isAbsolute(expanded)) {
-      return normalize(expanded);
-    }
-    const envRoot = typeof payload.envRoot === "string" ? payload.envRoot.trim() : "";
-    return normalize(join(envRoot || process.cwd(), expanded));
-  }
+function resolveStorageDir() {
   return join(process.env.HOME?.trim() || homedir(), ".worktree-deck", "storage");
 }
 
@@ -287,7 +250,7 @@ async function writeStorageJson(path, value) {
  * worktree パスごとの baseRef を保存する
  */
 async function saveWorktreeBaseRef(payload, worktreePath, baseRef) {
-  const storagePath = join(await resolveStorageDir(payload), "worktree-base-branch.json");
+  const storagePath = join(resolveStorageDir(), "worktree-base-branch.json");
   const storage = await readStorageJson(storagePath);
   await writeStorageJson(storagePath, {
     ...storage,
@@ -300,7 +263,7 @@ async function saveWorktreeBaseRef(payload, worktreePath, baseRef) {
  */
 async function saveOpenApp(payload, worktreePath, openApp, threadId = null) {
   const normalizedOpenApp = openApp === "codex-app" ? "codex-app" : "zed";
-  const storagePath = join(await resolveStorageDir(payload), "worktree-open-app.json");
+  const storagePath = join(resolveStorageDir(), "worktree-open-app.json");
   const storage = await readStorageJson(storagePath);
   const storedThreadId = storage[worktreePath]?.threadId ?? null;
   await writeStorageJson(storagePath, {
@@ -318,7 +281,7 @@ async function saveSessionTitle(payload, worktreePath, threadId, title) {
   if (!normalizedThreadId || !worktreePath || !normalizedTitle) {
     return;
   }
-  const storagePath = join(await resolveStorageDir(payload), "worktree-session-titles.json");
+  const storagePath = join(resolveStorageDir(), "worktree-session-titles.json");
   const storage = await readStorageJson(storagePath);
   const now = new Date().toISOString();
   const existing = storage[normalizedThreadId];
@@ -613,7 +576,7 @@ function sanitizeWorktreePathSegment(value) {
  * worktree 作成先パスを組み立てる
  */
 async function resolveWorktreeDestination(payload, branch) {
-  const basePath = await readEnvValue(payload.envRoot, "GIT_WORKTREE_PATH");
+  const basePath = readEnvValue("GIT_WORKTREE_PATH");
   if (!basePath) {
     throw new Error("GIT_WORKTREE_PATH is not set.");
   }
@@ -642,7 +605,7 @@ async function localBranchExists(repoRoot, branch) {
  */
 async function startCopyWorker(payload, destination) {
   const id = `${payload.id}-copy`;
-  const statePath = join(await resolveStorageDir(payload), "copy-jobs", `${id}.json`);
+  const statePath = join(resolveStorageDir(), "copy-jobs", `${id}.json`);
   const copyPayload = {
     id,
     repoRoot: payload.repoRoot,

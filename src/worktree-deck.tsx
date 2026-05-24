@@ -84,6 +84,7 @@ import { worktreePullUsecase } from "./application/worktree-pull.usecase";
 import { worktreePullRequestUsecase } from "./application/worktree-pull-request.usecase";
 import { worktreeSessionFileUsecase } from "./application/worktree-session-file.usecase";
 import { worktreeOpenAppUsecase } from "./application/worktree-open-app.usecase";
+import { applyRaycastPreferencesToProcessEnv } from "./raycast-preferences";
 import {
   resolveWorktreeDeckCompositionRoot,
   type Worktree,
@@ -232,6 +233,8 @@ function formatCodexSessionSelectActionTitle(): string {
  * ワークツリー一覧の取得・表示・操作を行うメイン画面
  */
 export default function Command() {
+  applyRaycastPreferencesToProcessEnv();
+
   const { push } = useNavigation();
   /**
    * 計測ログを常に出力するか
@@ -312,7 +315,6 @@ export default function Command() {
     errorMessage,
     errorId,
     basePath,
-    worktreeNameDelimiter,
     titlesByPath,
     repositoryMappings,
     originLastCommitByPath,
@@ -1298,18 +1300,12 @@ export default function Command() {
           icon={Icon.PlusCircle}
           shortcut={createWorktreeAction.shortcut}
           onAction={() => {
-            push(
-              <CreateWorktreeForm
-                initialRepoRoot={initialRepoRoot}
-                onComplete={refreshWorktrees}
-                worktreeNameDelimiter={worktreeNameDelimiter}
-              />,
-            );
+            push(<CreateWorktreeForm initialRepoRoot={initialRepoRoot} onComplete={refreshWorktrees} />);
           }}
         />
       );
     },
-    [createWorktreeAction, push, refreshWorktrees, worktreeNameDelimiter],
+    [createWorktreeAction, push, refreshWorktrees],
   );
 
   /**

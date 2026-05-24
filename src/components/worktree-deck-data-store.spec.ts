@@ -79,7 +79,6 @@ function buildRequest(
     args.listWorktrees ??
     vi.fn(async () => ({
       basePath: "/worktrees",
-      delimiter: "~_~",
       mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
       worktrees: [worktree],
       isCacheHit: false,
@@ -142,7 +141,6 @@ describe("createWorktreeDeckDataStore", () => {
 
     deferred.resolve({
       basePath: "/worktrees",
-      delimiter: "~_~",
       mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
       worktrees: [buildWorktree("/worktrees/repo~_~feature-a")],
       isCacheHit: false,
@@ -199,7 +197,6 @@ describe("createWorktreeDeckDataStore", () => {
       .fn()
       .mockResolvedValueOnce({
         basePath: "/worktrees",
-        delimiter: "~_~",
         mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
         worktrees: [cachedWorktree],
         isCacheHit: true,
@@ -214,7 +211,6 @@ describe("createWorktreeDeckDataStore", () => {
     expect(request.dependencies.titlesSnapshot.loadTitlesForPaths).toHaveBeenCalledTimes(1);
     freshDeferred.resolve({
       basePath: "/worktrees",
-      delimiter: "~_~",
       mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
       worktrees: [freshWorktree],
       isCacheHit: false,
@@ -233,7 +229,6 @@ describe("createWorktreeDeckDataStore", () => {
       .fn()
       .mockResolvedValueOnce({
         basePath: "/worktrees",
-        delimiter: "~_~",
         mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
         worktrees: [cachedWorktree],
         isCacheHit: true,
@@ -261,7 +256,6 @@ describe("createWorktreeDeckDataStore", () => {
 
     deferred.resolve({
       basePath: "/worktrees",
-      delimiter: "~_~",
       mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
       worktrees: [buildWorktree("/worktrees/repo~_~feature-a")],
       isCacheHit: false,
@@ -286,7 +280,6 @@ describe("createWorktreeDeckDataStore", () => {
       .fn()
       .mockResolvedValueOnce({
         basePath: "/worktrees",
-        delimiter: "~_~",
         mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
         worktrees: [cachedWorktree],
         isCacheHit: true,
@@ -299,7 +292,6 @@ describe("createWorktreeDeckDataStore", () => {
     await store.ensureLoaded(expandedRequest);
     freshDeferred.resolve({
       basePath: "/worktrees",
-      delimiter: "~_~",
       mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
       worktrees: [freshWorktree],
       isCacheHit: false,
