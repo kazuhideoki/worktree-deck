@@ -693,41 +693,47 @@ export function CreateWorktreeForm({
       });
       setIsSubmitting(true);
       if (autoStart) {
-        try {
-          const result = await startWorktreeAutoStartJobUsecase.start({
-            command: {
-              repoRoot,
-              baseBranch,
-              initialPrompt: initialPrompt ?? "",
-              imagePaths,
-              scriptPath: scriptPath ?? "",
-              envRoot,
-              mapValue,
-              openApp: resolveCreateFormOpenApp(values.openApp),
-              metadata: buildCodexInitialSessionMetadata(values, customPermissionMetadataDraft),
-            },
-            dependencies: WORKTREE_DECK_COMPOSITION_ROOT.startWorktreeAutoStartJobDependencies,
-          });
-          await resetCreateWorktreeFormDraftStorage();
-          setAutoStartDraft(DEFAULT_CREATE_WORKTREE_AUTO_START);
-          setInitialPromptDraft("");
-          setImagePathsTextDraft("");
-          setBranchDraft("");
-          setOpenAppDraft(DEFAULT_CREATE_WORKTREE_OPEN_APP);
-          toast.style = Toast.Style.Success;
-          toast.title = "Auto Start job started";
-          toast.message = result.statePath;
-          setIsSubmitting(false);
-          onAttempt?.();
-          pop();
-          onComplete?.();
-        } catch (error) {
-          const message = formatExecErrorMessage(error);
-          toast.style = Toast.Style.Failure;
-          toast.title = "Failed to start Auto Start job";
-          toast.message = message;
-          setIsSubmitting(false);
-        }
+        onAttempt?.();
+        pop();
+        /**
+         * Auto Start job の開始完了通知とフォーム後処理を行う
+         */
+        const runAutoStart = async () => {
+          try {
+            const result = await startWorktreeAutoStartJobUsecase.start({
+              command: {
+                repoRoot,
+                baseBranch,
+                initialPrompt: initialPrompt ?? "",
+                imagePaths,
+                scriptPath: scriptPath ?? "",
+                envRoot,
+                mapValue,
+                openApp: resolveCreateFormOpenApp(values.openApp),
+                metadata: buildCodexInitialSessionMetadata(values, customPermissionMetadataDraft),
+              },
+              dependencies: WORKTREE_DECK_COMPOSITION_ROOT.startWorktreeAutoStartJobDependencies,
+            });
+            await resetCreateWorktreeFormDraftStorage();
+            setAutoStartDraft(DEFAULT_CREATE_WORKTREE_AUTO_START);
+            setInitialPromptDraft("");
+            setImagePathsTextDraft("");
+            setBranchDraft("");
+            setOpenAppDraft(DEFAULT_CREATE_WORKTREE_OPEN_APP);
+            toast.style = Toast.Style.Success;
+            toast.title = "Auto Start job started";
+            toast.message = result.statePath;
+          } catch (error) {
+            const message = formatExecErrorMessage(error);
+            toast.style = Toast.Style.Failure;
+            toast.title = "Failed to start Auto Start job";
+            toast.message = message;
+          } finally {
+            setIsSubmitting(false);
+            onComplete?.();
+          }
+        };
+        void runAutoStart();
         return;
       }
 
