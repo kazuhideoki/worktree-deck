@@ -144,6 +144,7 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
   let state = createInitialSnapshot();
   let hasLoadedInitialSnapshot = false;
   let loadSequence = 0;
+  let requestedIncludeOriginEntries = false;
   let lastIncludeOriginEntries: boolean | null = null;
   let initialLoadPromise: Promise<void> | null = null;
   let titleLoadTimer: ReturnType<typeof setTimeout> | null = null;
@@ -175,6 +176,19 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
     }
     clearTimeout(titleLoadTimer);
     titleLoadTimer = null;
+  };
+
+  /**
+   * 現在の表示モード要求に合わせた読み込み request を返す
+   */
+  const buildCurrentIncludeRequest = (request: WorktreeDeckDataStoreLoadRequest): WorktreeDeckDataStoreLoadRequest => {
+    if (request.includeOriginEntries === requestedIncludeOriginEntries) {
+      return request;
+    }
+    return {
+      ...request,
+      includeOriginEntries: requestedIncludeOriginEntries,
+    };
   };
 
   /**
@@ -228,9 +242,10 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
       if (loadId !== loadSequence) {
         return;
       }
-      applyInitialSnapshot(request, snapshot, loadId);
-      scheduleLoadTitles(request, snapshot.listedWorktrees, snapshot.mappings, loadId);
-      void loadDetails(request, snapshot.listedWorktrees, snapshot.mappings, loadId);
+      const currentRequest = buildCurrentIncludeRequest(request);
+      applyInitialSnapshot(currentRequest, snapshot, loadId);
+      scheduleLoadTitles(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
+      void loadDetails(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
     } catch {
       // cache-first 後の検証失敗は次回 reload で再試行する
     } finally {
@@ -244,6 +259,7 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
    * 初期 snapshot 読み込みを開始する
    */
   const loadInitial = async (request: WorktreeDeckDataStoreLoadRequest, force: boolean): Promise<void> => {
+    requestedIncludeOriginEntries = request.includeOriginEntries;
     if (initialLoadPromise !== null) {
       return initialLoadPromise;
     }
@@ -282,13 +298,14 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
         if (loadId !== loadSequence) {
           return;
         }
-        applyInitialSnapshot(request, snapshot, loadId);
+        const currentRequest = buildCurrentIncludeRequest(request);
+        applyInitialSnapshot(currentRequest, snapshot, loadId);
+        scheduleLoadTitles(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
+        void loadDetails(currentRequest, snapshot.listedWorktrees, snapshot.mappings, loadId);
         if (snapshot.isWorktreeListCacheHit) {
           void refreshInitialSnapshotFromFreshScan(request, loadId);
           return;
         }
-        scheduleLoadTitles(request, snapshot.listedWorktrees, snapshot.mappings, loadId);
-        void loadDetails(request, snapshot.listedWorktrees, snapshot.mappings, loadId);
       })
       .catch((error: unknown) => {
         if (loadId !== loadSequence) {
