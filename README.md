@@ -2,18 +2,6 @@
 
 Worktree Deck is a Raycast extension for tracking git worktrees and related Codex sessions. It is designed for local development workflows that use git worktree, Codex CLI/App, and optionally Zed.
 
-## Setup
-
-```sh
-npm install
-```
-
-```sh
-npm run dev
-```
-
-After Raycast loads the extension, set the required preferences when prompted, then run the commands from Raycast. `Worktree Status` is a menu bar command, so run it once from Raycast to enable the menu bar item.
-
 ## Commands
 
 - `Worktree Deck`: Lists git worktrees and related Codex sessions.
@@ -30,16 +18,27 @@ The extension reads configuration from Raycast Preferences > Extensions > Worktr
 
 Worktree Deck stores local state in `~/.worktree-deck/storage`.
 
-Process environment variables with the same names as the preferences can override those values in local development.
+Defaults are provided for the required preferences, so the extension can start without extra setup. Adjust them from Raycast Preferences only if your local paths differ. `Worktree Status` is a menu bar command, so run it once from Raycast to enable the menu bar item.
 
 ## Requirements
 
 - Raycast
-- Node.js / npm
 - git
 - gh, when using pull request actions
 - bash
 - rsync
+
+## Development
+
+```sh
+npm install
+```
+
+```sh
+npm run dev
+```
+
+Use Raycast Preferences > Extensions > Worktree Deck to adjust local development paths when needed.
 
 ## Privacy
 

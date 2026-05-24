@@ -17,7 +17,6 @@ const { saveBaseRefForBranchConfig, saveBaseRefForWorktreePath, saveOpenAppForWo
  * 復元画面で利用する作成パス情報
  */
 type RestoreWorktreePaths = {
-  envRoot: string | null;
   scriptPath: string;
 };
 
@@ -82,7 +81,6 @@ export function RestoreDeletedWorktreeView({ onComplete }: { onComplete?: () => 
             branch: entry.branch,
             startPoint: entry.baseRef ?? undefined,
             scriptPath: paths.scriptPath,
-            envRoot: paths.envRoot,
             mapValue: entry.mapValue?.trim() || entry.repoName,
             allowExistingWorktree: true,
           },

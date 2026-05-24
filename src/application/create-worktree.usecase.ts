@@ -15,7 +15,6 @@ export type WorktreeCreateContext = {
  * worktree 作成前に解決するパス情報
  */
 export type WorktreeCreatePaths = {
-  envRoot: string | null;
   scriptPath: string;
 };
 
@@ -27,7 +26,6 @@ export type CreateWorktreeCommand = {
   branch: string;
   scriptPath: string;
   startPoint?: string;
-  envRoot?: string | null;
   mapValue?: string;
   allowExistingWorktree?: boolean;
 };

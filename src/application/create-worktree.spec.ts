@@ -30,7 +30,6 @@ function buildCommand(): CreateWorktreeCommand {
     startPoint: "main",
     mapValue: "app-a",
     scriptPath: "/tmp/dev-flow/assets/git_worktree_wrap.sh",
-    envRoot: "/tmp/dev-flow",
   };
 }
 
@@ -40,7 +39,6 @@ function buildCommand(): CreateWorktreeCommand {
 function buildDependencies(): CreateWorktreeDependencies {
   return {
     resolvePaths: vi.fn(async () => ({
-      envRoot: "/tmp/dev-flow",
       scriptPath: "/tmp/dev-flow/assets/git_worktree_wrap.sh",
     })),
     executeCreateWorktree: vi.fn(async () => ({
@@ -60,7 +58,6 @@ describe("resolvePaths", () => {
 
     expect(dependencies.resolvePaths).toHaveBeenCalledWith(context);
     expect(result).toEqual({
-      envRoot: "/tmp/dev-flow",
       scriptPath: "/tmp/dev-flow/assets/git_worktree_wrap.sh",
     });
   });

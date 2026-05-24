@@ -33,21 +33,15 @@ vi.mock("node:child_process", () => {
 import { createWorktree, resolveRepositoryMapPaths } from "./worktree-create-store";
 
 /**
- * テスト用の env ファイルと作成先を準備する
+ * テスト用の worktree 作成先を準備する
  */
-async function createEnvFixture(): Promise<{ rootDir: string; envRoot: string; basePath: string }> {
+async function createWorktreeFixture(): Promise<{ rootDir: string; basePath: string }> {
   const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-store-"));
-  const envRoot = join(rootDir, "dev-flow");
   const basePath = join(rootDir, "worktrees");
-  const storagePath = join(rootDir, "storage");
-  await mkdir(envRoot, { recursive: true });
   await mkdir(basePath, { recursive: true });
-  await writeFile(
-    join(envRoot, ".env"),
-    [`GIT_WORKTREE_PATH=${basePath}`, `WORKTREE_DECK_STORAGE_DIR=${storagePath}`, ""].join("\n"),
-    "utf8",
-  );
-  return { rootDir, envRoot, basePath };
+  vi.stubEnv("GIT_WORKTREE_PATH", basePath);
+  vi.stubEnv("HOME", rootDir);
+  return { rootDir, basePath };
 }
 
 describe("createWorktree", () => {
@@ -77,14 +71,11 @@ describe("createWorktree", () => {
       packageName: "worktree-deck",
     });
 
-    expect(result).toEqual({
-      envRoot: null,
-      scriptPath,
-    });
+    expect(result).toEqual({ scriptPath });
   });
 
   it("新規ブランチなら git worktree add -b を呼ぶ", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     childProcessMocks.execFile.mockImplementation(
       (command: string, args: string[], options: unknown, callback: unknown) => {
@@ -104,7 +95,6 @@ describe("createWorktree", () => {
       branch: "feature/new",
       startPoint: "main",
       scriptPath: "",
-      envRoot: fixture.envRoot,
       mapValue: "app",
     });
 
@@ -127,7 +117,7 @@ describe("createWorktree", () => {
   });
 
   it("branch 名の特殊文字列と underscore を壊さず nested path を作る", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     childProcessMocks.execFile.mockImplementation(
       (command: string, args: string[], options: unknown, callback: unknown) => {
@@ -147,7 +137,6 @@ describe("createWorktree", () => {
       branch: "feature/add__name_with_under_score",
       startPoint: "main",
       scriptPath: "",
-      envRoot: fixture.envRoot,
       mapValue: "app",
     });
 
@@ -155,7 +144,7 @@ describe("createWorktree", () => {
   });
 
   it("worktree 作成後に未追跡ファイルコピーを detached worker へ逃がす", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     childProcessMocks.execFile.mockImplementation(
       (command: string, args: string[], options: unknown, callback: unknown) => {
@@ -175,7 +164,6 @@ describe("createWorktree", () => {
       branch: "feature/copy",
       startPoint: "main",
       scriptPath: join(fixture.rootDir, "assets", "git_worktree_wrap.sh"),
-      envRoot: fixture.envRoot,
       mapValue: "app",
     });
 
@@ -193,7 +181,7 @@ describe("createWorktree", () => {
   });
 
   it("未追跡ファイルコピー worker の起動に失敗しても worktree 作成結果を返す", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     childProcessMocks.execFile.mockImplementation(
       (command: string, args: string[], options: unknown, callback: unknown) => {
@@ -216,7 +204,6 @@ describe("createWorktree", () => {
       branch: "feature/spawn-failure",
       startPoint: "main",
       scriptPath: join(fixture.rootDir, "assets", "git_worktree_wrap.sh"),
-      envRoot: fixture.envRoot,
       mapValue: "app",
     });
 
@@ -225,7 +212,7 @@ describe("createWorktree", () => {
   });
 
   it("既存ブランチなら git worktree add を呼ぶ", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     childProcessMocks.execFile.mockImplementation(
       (command: string, args: string[], options: unknown, callback: unknown) => {
@@ -241,7 +228,6 @@ describe("createWorktree", () => {
       branch: "feature/existing",
       startPoint: "main",
       scriptPath: "",
-      envRoot: fixture.envRoot,
       mapValue: "app",
     });
 
@@ -254,7 +240,7 @@ describe("createWorktree", () => {
   });
 
   it("作成先が既に存在する場合は英語エラーで失敗する", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     const destination = join(fixture.basePath, "app", "feature", "exists");
     await mkdir(destination, { recursive: true });
@@ -265,7 +251,6 @@ describe("createWorktree", () => {
         branch: "feature/exists",
         startPoint: "main",
         scriptPath: "",
-        envRoot: fixture.envRoot,
         mapValue: "app",
       }),
     ).rejects.toThrow("Worktree destination already exists.");
@@ -275,7 +260,7 @@ describe("createWorktree", () => {
   });
 
   it("restore で作成先が一致する既存 worktree なら採用する", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     const destination = join(fixture.basePath, "app", "feature", "restored");
     await mkdir(destination, { recursive: true });
@@ -302,7 +287,6 @@ describe("createWorktree", () => {
       branch: "feature/restored",
       startPoint: "main",
       scriptPath: "",
-      envRoot: fixture.envRoot,
       mapValue: "app",
       allowExistingWorktree: true,
     });
@@ -317,7 +301,7 @@ describe("createWorktree", () => {
   });
 
   it("restore で作成先が別ブランチなら削除履歴を採用しない", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
     const destination = join(fixture.basePath, "app", "feature", "restored");
     await mkdir(destination, { recursive: true });
@@ -345,7 +329,6 @@ describe("createWorktree", () => {
         branch: "feature/restored",
         startPoint: "main",
         scriptPath: "",
-        envRoot: fixture.envRoot,
         mapValue: "app",
         allowExistingWorktree: true,
       }),
@@ -356,17 +339,9 @@ describe("createWorktree", () => {
   });
 
   it("GIT_WORKTREE_PATH の home path を展開して作成先を組み立てる", async () => {
-    const fixture = await createEnvFixture();
+    const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
-    await writeFile(
-      join(fixture.envRoot, ".env"),
-      [
-        `GIT_WORKTREE_PATH=~/.worktree-deck/worktrees`,
-        `WORKTREE_DECK_STORAGE_DIR=${join(fixture.rootDir, "storage")}`,
-        "",
-      ].join("\n"),
-      "utf8",
-    );
+    vi.stubEnv("GIT_WORKTREE_PATH", "~/.worktree-deck/worktrees");
     vi.stubEnv("HOME", fixture.rootDir);
     childProcessMocks.execFile.mockImplementation(
       (command: string, args: string[], options: unknown, callback: unknown) => {
@@ -386,7 +361,6 @@ describe("createWorktree", () => {
       branch: "feature/home-path",
       startPoint: "main",
       scriptPath: "",
-      envRoot: fixture.envRoot,
       mapValue: "app",
     });
 

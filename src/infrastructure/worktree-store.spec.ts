@@ -391,24 +391,24 @@ describe("loadWorktreesBase", () => {
 });
 
 describe("loadWorktreeMetadata", () => {
-  const originalStorageDir = process.env.WORKTREE_DECK_STORAGE_DIR;
+  const originalHome = process.env.HOME;
 
   beforeEach(() => {
     execFileMock.mockReset();
   });
 
   afterEach(() => {
-    if (originalStorageDir === undefined) {
-      delete process.env.WORKTREE_DECK_STORAGE_DIR;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
     } else {
-      process.env.WORKTREE_DECK_STORAGE_DIR = originalStorageDir;
+      process.env.HOME = originalHome;
     }
     vi.clearAllMocks();
   });
 
   it("remote baseRef が未同期でも同名ローカルブランチへ merge 済みなら synced にする", async () => {
     const storageDir = await mkdtemp(join(tmpdir(), "worktree-deck-storage-"));
-    process.env.WORKTREE_DECK_STORAGE_DIR = storageDir;
+    process.env.HOME = storageDir;
     execFileMock.mockImplementation((...args: unknown[]) => {
       const gitArgs = Array.isArray(args[1]) ? args[1] : [];
       const callback = args.at(-1);
@@ -472,7 +472,7 @@ describe("loadWorktreeMetadata", () => {
 
   it("commit 状態が未保存でも現在ブランチに履歴があれば merge 済みを synced にする", async () => {
     const storageDir = await mkdtemp(join(tmpdir(), "worktree-deck-storage-"));
-    process.env.WORKTREE_DECK_STORAGE_DIR = storageDir;
+    process.env.HOME = storageDir;
     execFileMock.mockImplementation((...args: unknown[]) => {
       const gitArgs = Array.isArray(args[1]) ? args[1] : [];
       const callback = args.at(-1);
@@ -523,7 +523,7 @@ describe("loadWorktreeMetadata", () => {
 
   it("commit 状態が未保存で現在ブランチに履歴がなければ no-commit にする", async () => {
     const storageDir = await mkdtemp(join(tmpdir(), "worktree-deck-storage-"));
-    process.env.WORKTREE_DECK_STORAGE_DIR = storageDir;
+    process.env.HOME = storageDir;
     execFileMock.mockImplementation((...args: unknown[]) => {
       const gitArgs = Array.isArray(args[1]) ? args[1] : [];
       const callback = args.at(-1);
@@ -574,7 +574,7 @@ describe("loadWorktreeMetadata", () => {
 
   it("スラッシュを含むローカル baseRef は同名ローカルブランチ確認を追加しない", async () => {
     const storageDir = await mkdtemp(join(tmpdir(), "worktree-deck-storage-"));
-    process.env.WORKTREE_DECK_STORAGE_DIR = storageDir;
+    process.env.HOME = storageDir;
     execFileMock.mockImplementation((...args: unknown[]) => {
       const gitArgs = Array.isArray(args[1]) ? args[1] : [];
       const callback = args.at(-1);

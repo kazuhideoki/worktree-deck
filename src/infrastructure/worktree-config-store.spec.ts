@@ -1,15 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-
-const readEnvValueFromEnvMock = vi.hoisted(() => vi.fn());
-const resolveRootEnvPathMock = vi.hoisted(() => vi.fn());
-
-vi.mock("./env/env-store", () => {
-  return {
-    loadEnvValue: vi.fn(async () => null),
-    readEnvValueFromEnv: readEnvValueFromEnvMock,
-    resolveRootEnvPath: resolveRootEnvPathMock,
-  };
-});
+import { describe, expect, it } from "vitest";
 
 import { loadBasePath } from "./worktree-config-store";
 
@@ -21,7 +10,6 @@ function buildArgs(args?: { env?: NodeJS.ProcessEnv }) {
     env: args?.env ?? {},
     cwd: "/tmp/current",
     homeDir: "/Users/tester",
-    assetsPath: "/tmp/app/assets",
     packageDir: "/tmp/app",
     packageName: "worktree-deck",
   };
@@ -34,12 +22,9 @@ describe("loadBasePath", () => {
     expect(result).toBe("/Users/tester/.worktree-deck/worktrees");
   });
 
-  it(".env の GIT_WORKTREE_PATH は home path を展開する", async () => {
-    resolveRootEnvPathMock.mockResolvedValue("/tmp/app/assets/.env");
-    readEnvValueFromEnvMock.mockResolvedValue("~/.worktree-deck/worktrees");
-
-    const result = await loadBasePath(buildArgs());
-
-    expect(result).toBe("/Users/tester/.worktree-deck/worktrees");
+  it("GIT_WORKTREE_PATH が未設定なら Raycast Preferences の入力を促す", async () => {
+    await expect(loadBasePath(buildArgs())).rejects.toThrow(
+      "GIT_WORKTREE_PATH is not set. Set it in Raycast Preferences.",
+    );
   });
 });

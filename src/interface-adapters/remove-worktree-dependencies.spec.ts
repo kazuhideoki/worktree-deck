@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { createRemoveWorktreeDependencies, createRemoveWorktreeInfra } from "./remove-worktree-dependencies";
 
 describe("createRemoveWorktreeDependencies", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("worktree remove コマンドを組み立てる", async () => {
     const runGit = vi.fn(async () => ({ stdout: "removed", stderr: "" }));
     const removeDirectory = vi.fn(async () => undefined);
@@ -88,13 +92,14 @@ describe("createRemoveWorktreeDependencies", () => {
 
   it("バックグラウンド削除 job を作成して worker を起動する", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "remove-worktree-job-"));
+    const storageDir = join(tempRoot, ".worktree-deck", "storage");
+    vi.stubEnv("HOME", tempRoot);
     const runGit = vi.fn(async () => ({ stdout: "", stderr: "" }));
     const removeDirectory = vi.fn(async () => undefined);
     const startWorker = vi.fn(() => undefined);
     const dependencies = createRemoveWorktreeDependencies({
       runGit,
       removeDirectory,
-      storageDir: tempRoot,
       startWorker,
       createId: () => "job-1",
       now: () => new Date("2026-04-28T00:00:00.000Z"),
@@ -110,11 +115,11 @@ describe("createRemoveWorktreeDependencies", () => {
 
     expect(result).toEqual({
       jobId: "job-1",
-      statePath: join(tempRoot, "remove-jobs", "job-1.json"),
+      statePath: join(storageDir, "remove-jobs", "job-1.json"),
     });
     expect(startWorker).toHaveBeenCalledWith(
       expect.objectContaining({
-        statePath: join(tempRoot, "remove-jobs", "job-1.json"),
+        statePath: join(storageDir, "remove-jobs", "job-1.json"),
       }),
     );
     await expect(readFile(result.statePath, "utf8")).resolves.toContain('"status": "pending"');
@@ -147,6 +152,7 @@ describe("createRemoveWorktreeDependencies", () => {
 
   it("assetsPath が指定された場合はそこから worker script を起動する", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "remove-worktree-assets-"));
+    vi.stubEnv("HOME", tempRoot);
     const assetsPath = join(tempRoot, "assets");
     const workerPath = join(assetsPath, "remove_worktree_worker.js");
     await mkdir(assetsPath);
@@ -157,7 +163,6 @@ describe("createRemoveWorktreeDependencies", () => {
     const dependencies = createRemoveWorktreeDependencies({
       runGit,
       removeDirectory,
-      storageDir: tempRoot,
       startWorker,
       createId: () => "job-assets",
       now: () => new Date("2026-04-28T00:00:00.000Z"),

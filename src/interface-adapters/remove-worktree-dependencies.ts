@@ -36,7 +36,6 @@ type RemoveWorktreeInfra = {
   removeDirectory(args: { repoRoot: string; path: string }): Promise<void>;
   validateWorktreeRemoval?(args: { repoRoot: string; worktreePath: string; force?: boolean }): Promise<void>;
   startBackgroundWorktreeRemove?(input: RemoveWorktreeInput): Promise<StartBackgroundRemoveWorktreeResult>;
-  storageDir?: string;
   startWorker?: StartWorker;
   createId?: () => string;
   now?: () => Date;
@@ -225,15 +224,7 @@ function resolveRemoveWorkerPath(assetsPath?: string): string {
 /**
  * worktree-deck の storage ディレクトリを解決する
  */
-function resolveStorageDir(storageDir?: string): string {
-  const configured = storageDir?.trim();
-  if (configured !== undefined && configured.length > 0) {
-    return configured;
-  }
-  const envStorageDir = process.env.WORKTREE_DECK_STORAGE_DIR?.trim();
-  if (envStorageDir !== undefined && envStorageDir.length > 0) {
-    return envStorageDir;
-  }
+function resolveStorageDir(): string {
   const homeDir = process.env.HOME?.trim();
   return join(homeDir !== undefined && homeDir.length > 0 ? homeDir : homedir(), ".worktree-deck", "storage");
 }
@@ -254,13 +245,12 @@ function startDetachedRemoveWorker(payload: RemoveWorktreeJobPayload): void {
  */
 async function createRemoveJob(args: {
   input: RemoveWorktreeInput;
-  storageDir?: string;
   startWorker?: StartWorker;
   createId?: () => string;
   now?: () => Date;
 }): Promise<StartBackgroundRemoveWorktreeResult> {
   const jobId = args.createId?.() ?? randomUUID();
-  const jobDir = join(resolveStorageDir(args.storageDir), "remove-jobs");
+  const jobDir = join(resolveStorageDir(), "remove-jobs");
   const statePath = join(jobDir, `${jobId}.json`);
   const now = args.now?.() ?? new Date();
   const payload: RemoveWorktreeJobPayload = {
@@ -335,7 +325,6 @@ export function createRemoveWorktreeDependencies(infra: RemoveWorktreeInfra): Re
         infra.startBackgroundWorktreeRemove?.(input) ??
         createRemoveJob({
           input,
-          storageDir: infra.storageDir,
           startWorker: infra.startWorker,
           createId: infra.createId,
           now: infra.now,

@@ -251,7 +251,6 @@ export function CreateWorktreeForm({
     DEFAULT_CREATE_WORKTREE_OPEN_APP,
   );
   const [scriptPath, setScriptPath] = useState<string | null>(null);
-  const [envRoot, setEnvRoot] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -323,7 +322,6 @@ export function CreateWorktreeForm({
         }
         setRepoOptions(options);
         setScriptPath(paths.scriptPath);
-        setEnvRoot(paths.envRoot);
         setSelectedRepo(initialRepo);
         setErrorMessage(null);
       } catch (error) {
@@ -700,7 +698,6 @@ export function CreateWorktreeForm({
               initialPrompt: initialPrompt ?? "",
               imagePaths,
               scriptPath: scriptPath ?? "",
-              envRoot,
               mapValue,
               openApp: resolveCreateFormOpenApp(values.openApp),
               metadata: buildCodexInitialSessionMetadata(values, customPermissionMetadataDraft),
@@ -743,7 +740,6 @@ export function CreateWorktreeForm({
               branch,
               startPoint: baseBranch,
               scriptPath: scriptPath ?? "",
-              envRoot,
               mapValue,
             },
             dependencies: WORKTREE_DECK_COMPOSITION_ROOT.createWorktreeDependencies,
@@ -808,7 +804,6 @@ export function CreateWorktreeForm({
     [
       baseBranchOptions,
       autoStartDraft,
-      envRoot,
       isBranchesLoading,
       isSubmitting,
       onAttempt,

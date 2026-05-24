@@ -33,7 +33,7 @@
       "title": "Worktree Status",
       "description": "Show worktree session status counts in the menu bar",
       "mode": "menu-bar",
-      "interval": "10s"
+      "interval": "1m"
     }
   ],
   "preferences": [
