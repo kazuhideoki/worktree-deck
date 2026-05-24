@@ -33,6 +33,7 @@ import {
   loadLatestSessionMessages,
   loadSessionMessages,
   loadTitlesForPaths,
+  loadCachedWorktreesBase,
   loadWorktreeMetadata,
   loadWorktreesBase,
   groupWorktrees,
@@ -190,6 +191,36 @@ describe("loadWorktreesBase", () => {
       expect(calls).not.toContain(fixture.nestedWorktreePath);
       expect(calls).not.toContain(fixture.nestedGitPath);
       expect(statSpy).toHaveBeenCalled();
+    } finally {
+      await rm(fixture.basePath, { recursive: true, force: true });
+    }
+  });
+
+  it("保存済み cache を検証せず worktree 一覧として返す", async () => {
+    const fixture = await buildFixture();
+    try {
+      await loadWorktreesBase(fixture.basePath, "~_~");
+      readdirSpy.mockClear();
+      statSpy.mockClear();
+
+      const result = await loadCachedWorktreesBase(fixture.basePath, "~_~");
+
+      expect(sortWorktreesByPath(result ?? [])).toEqual([
+        {
+          repo: "app",
+          branch: "feature-a",
+          path: fixture.directRepoPath,
+          originPath: undefined,
+        },
+        {
+          repo: "repo-b",
+          branch: "feature-x",
+          path: fixture.nestedWorktreePath,
+          originPath: undefined,
+        },
+      ]);
+      expect(readdirSpy).not.toHaveBeenCalled();
+      expect(statSpy).not.toHaveBeenCalled();
     } finally {
       await rm(fixture.basePath, { recursive: true, force: true });
     }
@@ -1970,6 +2001,10 @@ describe("loadTitlesForPaths", () => {
         }),
       );
       expect(first.get(pathA)?.[0]?.title).toBe("TitleA");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+      localStorageSetItemMock.mockClear();
 
       const brokenBody = `not-json-${"x".repeat(Math.max(0, validBody.length - "not-json-".length))}`;
       expect(Buffer.byteLength(brokenBody)).toBe(Buffer.byteLength(validBody));
@@ -1983,6 +2018,7 @@ describe("loadTitlesForPaths", () => {
         }),
       );
       expect(second.get(pathA)?.[0]?.title).toBe("TitleA");
+      expect(localStorageSetItemMock).not.toHaveBeenCalled();
     } finally {
       await rm(codexHome, { recursive: true, force: true });
     }

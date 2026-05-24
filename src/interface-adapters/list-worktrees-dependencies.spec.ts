@@ -24,6 +24,7 @@ describe("createListWorktreesDependencies", () => {
       loadBasePath: vi.fn(async () => "/tmp/worktrees"),
       loadWorktreeNameDelimiter: vi.fn(async () => "~_~"),
       loadRepositoryMappings: vi.fn(async () => []),
+      loadCachedWorktreesBase: vi.fn(async () => null),
       loadWorktreesBase: vi.fn(async () => []),
     });
 
@@ -39,6 +40,7 @@ describe("createListWorktreesDependencies", () => {
       loadRepositoryMappings: vi.fn(async () => {
         throw new Error("failed");
       }),
+      loadCachedWorktreesBase: vi.fn(async () => null),
       loadWorktreesBase: vi.fn(async () => []),
     });
 
@@ -57,12 +59,41 @@ describe("createListWorktreesDependencies", () => {
       loadBasePath: vi.fn(async () => "/tmp/worktrees"),
       loadWorktreeNameDelimiter: vi.fn(async () => "~_~"),
       loadRepositoryMappings: vi.fn(async () => []),
+      loadCachedWorktreesBase: vi.fn(async () => null),
       loadWorktreesBase,
     });
 
     const result = await dependencies.loadWorktrees("/tmp/worktrees", "~_~");
 
     expect(loadWorktreesBase).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
+    expect(result).toEqual([
+      {
+        repo: "app-a",
+        branch: "feature/a",
+        path: "/tmp/worktrees/app-a~_~feature-a",
+      },
+    ]);
+  });
+
+  it("worktree cache 読み込みを infra に委譲する", async () => {
+    const loadCachedWorktreesBase = vi.fn(async () => [
+      {
+        repo: "app-a",
+        branch: "feature/a",
+        path: "/tmp/worktrees/app-a~_~feature-a",
+      },
+    ]);
+    const dependencies = createListWorktreesDependencies({
+      loadBasePath: vi.fn(async () => "/tmp/worktrees"),
+      loadWorktreeNameDelimiter: vi.fn(async () => "~_~"),
+      loadRepositoryMappings: vi.fn(async () => []),
+      loadCachedWorktreesBase,
+      loadWorktreesBase: vi.fn(async () => []),
+    });
+
+    const result = await dependencies.loadCachedWorktrees("/tmp/worktrees", "~_~");
+
+    expect(loadCachedWorktreesBase).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
     expect(result).toEqual([
       {
         repo: "app-a",

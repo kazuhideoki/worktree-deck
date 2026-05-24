@@ -1222,6 +1222,9 @@ describe("loadTitlesForPaths", () => {
 
     expect(titles).toHaveLength(1);
     expect(titles[0]?.sessionPath).toBe(normalFile);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
     const savedCache = JSON.parse(String(mockedLocalStorage.setItem.mock.calls.at(-1)?.[1])) as {
       files: Record<string, { sessionKind?: string }>;
     };

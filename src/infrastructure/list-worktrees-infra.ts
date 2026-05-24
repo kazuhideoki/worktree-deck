@@ -2,7 +2,7 @@ import type { WorktreeDeckContext } from "../application/list-worktrees.usecase"
 import type { Worktree } from "../application/worktree.entity";
 import type { RepositoryMapping } from "../domain/repository-mapping.service";
 import { loadRepositoryMappings } from "./repository-mapping-store";
-import { loadBasePath, loadWorktreeNameDelimiter, loadWorktreesBase } from "./worktree-store";
+import { loadBasePath, loadCachedWorktreesBase, loadWorktreeNameDelimiter, loadWorktreesBase } from "./worktree-store";
 
 /**
  * worktree 一覧の base path を読み込む
@@ -30,4 +30,11 @@ export async function loadRepositoryMappingsInfra(): Promise<RepositoryMapping[]
  */
 export async function loadWorktreesBaseInfra(basePath: string, delimiter: string): Promise<Worktree[]> {
   return loadWorktreesBase(basePath, delimiter);
+}
+
+/**
+ * worktree 一覧 cache を検証せず読み込む
+ */
+export async function loadCachedWorktreesBaseInfra(basePath: string, delimiter: string): Promise<Worktree[] | null> {
+  return loadCachedWorktreesBase(basePath, delimiter);
 }

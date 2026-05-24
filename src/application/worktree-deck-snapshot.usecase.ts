@@ -25,7 +25,12 @@ export type RestoredWorktreeDeckSnapshot = {
  * 初期 snapshot 読み込みの依存ポート
  */
 export type LoadWorktreeDeckInitialSnapshotDependencies = {
-  listWorktrees(context: WorktreeDeckContext): Promise<ListWorktreesResult>;
+  listWorktrees(
+    context: WorktreeDeckContext,
+    options?: {
+      preferCache?: boolean;
+    },
+  ): Promise<ListWorktreesResult>;
   restoreDisplayCache(args: {
     worktrees: Worktree[];
     mappings: RepositoryMapping[];
@@ -43,6 +48,7 @@ type WorktreeDeckInitialSnapshot = {
   mappings: RepositoryMapping[];
   listedWorktrees: Worktree[];
   worktrees: Worktree[];
+  isWorktreeListCacheHit: boolean;
   titlesByPath: Map<string, WorktreeTitle[]>;
   originLastCommitByPath: Map<string, string | null>;
   originBranchByPath: Map<string, string | null>;
@@ -61,6 +67,8 @@ export type LoadWorktreeDeckTitlesSnapshotDependencies = {
     assetsPath: string;
     packageDir: string;
     packageName: string;
+    timingLabelPrefix?: string;
+    logTiming?: (label: string, elapsedMs: number) => void;
   }): Promise<Map<string, WorktreeTitle[]>>;
   attachWorktreeTitles(args: {
     worktrees: Worktree[];
@@ -151,17 +159,23 @@ function formatWorktreeTimingName(worktree: Worktree): string {
 /**
  * worktree と mapping から重複なしの表示対象パスを返す
  */
-function collectDisplayPaths(args: { worktrees: Worktree[]; mappings: RepositoryMapping[] }): string[] {
+function collectDisplayPaths(args: {
+  worktrees: Worktree[];
+  mappings: RepositoryMapping[];
+  includeOriginEntries: boolean;
+}): string[] {
   const paths = new Set<string>();
   for (const item of args.worktrees) {
     paths.add(item.path);
-    if (item.originPath != null && item.originPath.length > 0) {
+    if (args.includeOriginEntries && item.originPath != null && item.originPath.length > 0) {
       paths.add(item.originPath);
     }
   }
-  for (const mapping of args.mappings) {
-    if (mapping.repoRoot != null && mapping.repoRoot.length > 0) {
-      paths.add(mapping.repoRoot);
+  if (args.includeOriginEntries) {
+    for (const mapping of args.mappings) {
+      if (mapping.repoRoot != null && mapping.repoRoot.length > 0) {
+        paths.add(mapping.repoRoot);
+      }
     }
   }
   return Array.from(paths);
@@ -170,7 +184,14 @@ function collectDisplayPaths(args: { worktrees: Worktree[]; mappings: Repository
 /**
  * worktree と mapping から重複なしの origin パスを返す
  */
-function collectOriginPaths(args: { worktrees: Worktree[]; mappings: RepositoryMapping[] }): string[] {
+function collectOriginPaths(args: {
+  worktrees: Worktree[];
+  mappings: RepositoryMapping[];
+  includeOriginEntries: boolean;
+}): string[] {
+  if (!args.includeOriginEntries) {
+    return [];
+  }
   const paths = new Set<string>();
   for (const item of args.worktrees) {
     if (item.originPath != null && item.originPath.length > 0) {
@@ -192,14 +213,17 @@ async function loadInitialSnapshot(args: {
   context: WorktreeDeckContext;
   displayCache: unknown;
   dependencies: LoadWorktreeDeckInitialSnapshotDependencies;
+  preferCachedWorktrees?: boolean;
+  includeOriginEntries?: boolean;
   timingLabelPrefix?: string;
   logTiming?: WorktreeDeckSnapshotTimingLogger;
 }): Promise<WorktreeDeckInitialSnapshot> {
   const timingLabelPrefix = args.timingLabelPrefix ?? "loadInitialSnapshot";
+  const includeOriginEntries = args.includeOriginEntries ?? true;
   const listed = await measureSnapshotStep({
     label: `${timingLabelPrefix}:listWorktrees`,
     logTiming: args.logTiming,
-    task: () => args.dependencies.listWorktrees(args.context),
+    task: () => args.dependencies.listWorktrees(args.context, { preferCache: args.preferCachedWorktrees !== false }),
   });
   const restored = measureSnapshotSyncStep({
     label: `${timingLabelPrefix}:restoreDisplayCache(worktrees=${listed.worktrees.length})`,
@@ -213,7 +237,11 @@ async function loadInitialSnapshot(args: {
   });
   let openAppMetaByPath = restored.openAppMetaByPath;
   try {
-    const displayPaths = collectDisplayPaths({ worktrees: listed.worktrees, mappings: listed.mappings });
+    const displayPaths = collectDisplayPaths({
+      worktrees: listed.worktrees,
+      mappings: listed.mappings,
+      includeOriginEntries,
+    });
     openAppMetaByPath = await measureSnapshotStep({
       label: `${timingLabelPrefix}:loadOpenAppMetaByWorktreePath(paths=${displayPaths.length})`,
       logTiming: args.logTiming,
@@ -228,6 +256,7 @@ async function loadInitialSnapshot(args: {
     mappings: listed.mappings,
     listedWorktrees: listed.worktrees,
     worktrees: restored.worktrees,
+    isWorktreeListCacheHit: listed.isCacheHit,
     titlesByPath: restored.titlesByPath,
     originLastCommitByPath: restored.originLastCommitByPath,
     originBranchByPath: restored.originBranchByPath,
@@ -243,13 +272,19 @@ async function loadTitlesSnapshot(args: {
   worktrees: Worktree[];
   mappings: RepositoryMapping[];
   dependencies: LoadWorktreeDeckTitlesSnapshotDependencies;
+  includeOriginEntries?: boolean;
   timingLabelPrefix?: string;
   logTiming?: WorktreeDeckSnapshotTimingLogger;
 }): Promise<WorktreeDeckTitlesSnapshot> {
   const timingLabelPrefix = args.timingLabelPrefix ?? "loadTitlesSnapshot";
+  const includeOriginEntries = args.includeOriginEntries ?? true;
   let titlesByPath = new Map<string, WorktreeTitle[]>();
   try {
-    const displayPaths = collectDisplayPaths({ worktrees: args.worktrees, mappings: args.mappings });
+    const displayPaths = collectDisplayPaths({
+      worktrees: args.worktrees,
+      mappings: args.mappings,
+      includeOriginEntries,
+    });
     titlesByPath = await measureSnapshotStep({
       label: `${timingLabelPrefix}:loadTitlesForPaths(paths=${displayPaths.length})`,
       logTiming: args.logTiming,
@@ -262,6 +297,12 @@ async function loadTitlesSnapshot(args: {
           assetsPath: args.context.assetsPath,
           packageDir: args.context.packageDir,
           packageName: args.context.packageName,
+          ...(args.logTiming
+            ? {
+                timingLabelPrefix: `${timingLabelPrefix}:loadTitlesForPaths`,
+                logTiming: args.logTiming,
+              }
+            : {}),
         }),
     });
   } catch {
@@ -398,50 +439,79 @@ async function loadDetailsSnapshot(args: {
   worktrees: Worktree[];
   mappings: RepositoryMapping[];
   dependencies: LoadWorktreeDeckDetailsSnapshotDependencies;
+  includeOriginEntries?: boolean;
   timingLabelPrefix?: string;
   logTiming?: WorktreeDeckSnapshotTimingLogger;
 }): Promise<WorktreeDeckDetailsSnapshot> {
   const timingLabelPrefix = args.timingLabelPrefix ?? "loadDetailsSnapshot";
+  const includeOriginEntries = args.includeOriginEntries ?? true;
   let originLastCommitByPath = new Map<string, string | null>();
   let originBranchByPath = new Map<string, string | null>();
   let baseRefByPath = new Map<string, string>();
   let openAppMetaByPath = new Map<string, WorktreeOpenAppMeta>();
-  try {
-    const originPaths = collectOriginPaths({ worktrees: args.worktrees, mappings: args.mappings });
-    originLastCommitByPath = await measureSnapshotStep({
-      label: `${timingLabelPrefix}:loadLastCommitAtByPath(paths=${originPaths.length})`,
-      logTiming: args.logTiming,
-      task: () => args.dependencies.loadLastCommitAtByPath(originPaths),
-    });
-    originBranchByPath = await measureSnapshotStep({
-      label: `${timingLabelPrefix}:loadCurrentBranchByPath(paths=${originPaths.length})`,
-      logTiming: args.logTiming,
-      task: () => args.dependencies.loadCurrentBranchByPath(originPaths),
-    });
-  } catch {
-    originLastCommitByPath = new Map();
-    originBranchByPath = new Map();
-  }
-  try {
-    const worktreePaths = args.worktrees.map((item) => item.path);
-    baseRefByPath = await measureSnapshotStep({
-      label: `${timingLabelPrefix}:loadBaseRefByWorktreePath(paths=${worktreePaths.length})`,
-      logTiming: args.logTiming,
-      task: () => args.dependencies.loadBaseRefByWorktreePath(worktreePaths),
-    });
-  } catch {
-    baseRefByPath = new Map();
-  }
-  try {
-    const displayPaths = collectDisplayPaths({ worktrees: args.worktrees, mappings: args.mappings });
-    openAppMetaByPath = await measureSnapshotStep({
-      label: `${timingLabelPrefix}:loadOpenAppMetaByWorktreePath(paths=${displayPaths.length})`,
-      logTiming: args.logTiming,
-      task: () => args.dependencies.loadOpenAppMetaByWorktreePath(displayPaths),
-    });
-  } catch {
-    openAppMetaByPath = new Map();
-  }
+  const originPaths = collectOriginPaths({ worktrees: args.worktrees, mappings: args.mappings, includeOriginEntries });
+  const worktreePaths = args.worktrees.map((item) => item.path);
+  const displayPaths = collectDisplayPaths({
+    worktrees: args.worktrees,
+    mappings: args.mappings,
+    includeOriginEntries,
+  });
+  const originDataPromise = (async () => {
+    try {
+      const [lastCommitByPath, branchByPath] = await Promise.all([
+        measureSnapshotStep({
+          label: `${timingLabelPrefix}:loadLastCommitAtByPath(paths=${originPaths.length})`,
+          logTiming: args.logTiming,
+          task: () => args.dependencies.loadLastCommitAtByPath(originPaths),
+        }),
+        measureSnapshotStep({
+          label: `${timingLabelPrefix}:loadCurrentBranchByPath(paths=${originPaths.length})`,
+          logTiming: args.logTiming,
+          task: () => args.dependencies.loadCurrentBranchByPath(originPaths),
+        }),
+      ]);
+      return {
+        originLastCommitByPath: lastCommitByPath,
+        originBranchByPath: branchByPath,
+      };
+    } catch {
+      return {
+        originLastCommitByPath: new Map<string, string | null>(),
+        originBranchByPath: new Map<string, string | null>(),
+      };
+    }
+  })();
+  const baseRefPromise = (async () => {
+    try {
+      return await measureSnapshotStep({
+        label: `${timingLabelPrefix}:loadBaseRefByWorktreePath(paths=${worktreePaths.length})`,
+        logTiming: args.logTiming,
+        task: () => args.dependencies.loadBaseRefByWorktreePath(worktreePaths),
+      });
+    } catch {
+      return new Map<string, string>();
+    }
+  })();
+  const openAppMetaPromise = (async () => {
+    try {
+      return await measureSnapshotStep({
+        label: `${timingLabelPrefix}:loadOpenAppMetaByWorktreePath(paths=${displayPaths.length})`,
+        logTiming: args.logTiming,
+        task: () => args.dependencies.loadOpenAppMetaByWorktreePath(displayPaths),
+      });
+    } catch {
+      return new Map<string, WorktreeOpenAppMeta>();
+    }
+  })();
+  const [originData, loadedBaseRefByPath, loadedOpenAppMetaByPath] = await Promise.all([
+    originDataPromise,
+    baseRefPromise,
+    openAppMetaPromise,
+  ]);
+  originLastCommitByPath = originData.originLastCommitByPath;
+  originBranchByPath = originData.originBranchByPath;
+  baseRefByPath = loadedBaseRefByPath;
+  openAppMetaByPath = loadedOpenAppMetaByPath;
   const itemsWithMeta = await measureSnapshotStep({
     label: `${timingLabelPrefix}:loadWorktreeMetadata(worktrees=${args.worktrees.length})`,
     logTiming: args.logTiming,

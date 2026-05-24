@@ -329,6 +329,7 @@ export default function Command() {
         packageName: "worktree-deck",
       },
       displayCache: displayCacheRef.current,
+      includeOriginEntries: displayMode === "show-all",
       dependencies: {
         initialSnapshot: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckInitialSnapshotDependencies,
         titlesSnapshot: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckTitlesSnapshotDependencies,
@@ -338,7 +339,7 @@ export default function Command() {
       logTiming,
       logWorktreeNames,
     }),
-    [logTiming, logWorktreeNames],
+    [displayMode, logTiming, logWorktreeNames],
   );
   /**
    * 検索入力の更新をレンダリング外で反映する

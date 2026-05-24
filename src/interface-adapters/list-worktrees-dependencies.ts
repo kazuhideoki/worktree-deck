@@ -7,6 +7,7 @@ import type { Worktree } from "../application/worktree.entity";
 import type { RepositoryMapping } from "../domain/repository-mapping.service";
 import {
   loadBasePathInfra,
+  loadCachedWorktreesBaseInfra,
   loadRepositoryMappingsInfra,
   loadWorktreeNameDelimiterInfra,
   loadWorktreesBaseInfra,
@@ -19,6 +20,7 @@ type ListWorktreesInfra = {
   loadBasePath(context: WorktreeDeckContext): Promise<string>;
   loadWorktreeNameDelimiter(context: WorktreeDeckContext): Promise<string>;
   loadRepositoryMappings(): Promise<RepositoryMapping[]>;
+  loadCachedWorktreesBase(basePath: string, delimiter: string): Promise<Worktree[] | null>;
   loadWorktreesBase(basePath: string, delimiter: string): Promise<Worktree[]>;
 };
 
@@ -58,6 +60,9 @@ export function createListWorktreesDependencies(infra: ListWorktreesInfra): List
     loadMappings() {
       return loadMappingsFromInfra(infra);
     },
+    loadCachedWorktrees(basePath, delimiter) {
+      return infra.loadCachedWorktreesBase(basePath, delimiter);
+    },
     loadWorktrees(basePath, delimiter) {
       return infra.loadWorktreesBase(basePath, delimiter);
     },
@@ -72,6 +77,7 @@ export function createDefaultListWorktreesDependencies(): ListWorktreesDependenc
     loadBasePath: loadBasePathInfra,
     loadWorktreeNameDelimiter: loadWorktreeNameDelimiterInfra,
     loadRepositoryMappings: loadRepositoryMappingsInfra,
+    loadCachedWorktreesBase: loadCachedWorktreesBaseInfra,
     loadWorktreesBase: loadWorktreesBaseInfra,
   });
 }

@@ -30,6 +30,20 @@ type TopLevelRepoWorktreesResult = {
   repoState: CachedWorktreeRepoState;
 };
 
+/**
+ * キャッシュ保存形式から worktree 一覧を復元する
+ */
+function restoreWorktreesFromCache(worktreesByRepo: Record<string, CachedWorktreeEntry[]>): Worktree[] {
+  return Object.values(worktreesByRepo).flatMap((entries) =>
+    entries.map((entry) => ({
+      repo: entry.repo,
+      branch: entry.branch,
+      path: entry.path,
+      originPath: entry.originPath,
+    })),
+  );
+}
+
 async function findWorktreeRoots(repoRoot: string): Promise<WorktreeRootsScanResult> {
   const results: string[] = [];
   const directories: CachedWorktreeDirectoryState[] = [];
@@ -303,6 +317,20 @@ async function canReuseCachedRepoState(args: {
     }
   }
   return true;
+}
+
+/**
+ * 保存済み scan cache から worktree 一覧を検証せずに読み込む
+ */
+export async function loadCachedWorktreesBase(
+  basePath: string,
+  delimiter: string = DEFAULT_WORKTREE_NAME_DELIMITER,
+): Promise<Worktree[] | null> {
+  const cached = await loadWorktreeDeckCache(basePath);
+  if (cached?.basePath !== basePath || cached.delimiter !== delimiter) {
+    return null;
+  }
+  return restoreWorktreesFromCache(cached.worktreesByRepo);
 }
 
 /**

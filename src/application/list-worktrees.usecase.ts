@@ -28,6 +28,7 @@ export type WorktreeDeckSettings = {
 export type ListWorktreesDependencies = {
   loadSettings(context: WorktreeDeckContext): Promise<WorktreeDeckSettings>;
   loadMappings(): Promise<RepositoryMapping[]>;
+  loadCachedWorktrees(basePath: string, delimiter: string): Promise<Worktree[] | null>;
   loadWorktrees(basePath: string, delimiter: string): Promise<Worktree[]>;
 };
 
@@ -39,7 +40,39 @@ export type ListWorktreesResult = {
   delimiter: string;
   mappings: RepositoryMapping[];
   worktrees: Worktree[];
+  isCacheHit: boolean;
 };
+
+/**
+ * 一覧取得の実行オプション
+ */
+type ListWorktreesOptions = {
+  preferCache?: boolean;
+};
+
+/**
+ * mapping を適用した一覧取得結果を組み立てる
+ */
+function buildListWorktreesResult(args: {
+  settings: WorktreeDeckSettings;
+  mappings: RepositoryMapping[];
+  worktrees: Worktree[];
+  homeDir: string | null;
+  isCacheHit: boolean;
+}): ListWorktreesResult {
+  const filteredWorktrees = worktreeFilterService.filterByMappings({
+    worktrees: args.worktrees,
+    mappings: args.mappings,
+    homeDir: args.homeDir,
+  });
+  return {
+    basePath: args.settings.basePath,
+    delimiter: args.settings.delimiter,
+    mappings: args.mappings,
+    worktrees: filteredWorktrees,
+    isCacheHit: args.isCacheHit,
+  };
+}
 
 /**
  * worktree 一覧を取得し mapping で表示対象を絞り込む
@@ -47,21 +80,32 @@ export type ListWorktreesResult = {
 async function list(args: {
   context: WorktreeDeckContext;
   dependencies: ListWorktreesDependencies;
+  options?: ListWorktreesOptions;
 }): Promise<ListWorktreesResult> {
-  const settings = await args.dependencies.loadSettings(args.context);
-  const mappings = await args.dependencies.loadMappings();
+  const [settings, mappings] = await Promise.all([
+    args.dependencies.loadSettings(args.context),
+    args.dependencies.loadMappings(),
+  ]);
+  if (args.options?.preferCache !== false) {
+    const cachedWorktrees = await args.dependencies.loadCachedWorktrees(settings.basePath, settings.delimiter);
+    if (cachedWorktrees !== null) {
+      return buildListWorktreesResult({
+        settings,
+        mappings,
+        worktrees: cachedWorktrees,
+        homeDir: args.context.homeDir,
+        isCacheHit: true,
+      });
+    }
+  }
   const worktrees = await args.dependencies.loadWorktrees(settings.basePath, settings.delimiter);
-  const filteredWorktrees = worktreeFilterService.filterByMappings({
+  return buildListWorktreesResult({
+    settings,
+    mappings,
     worktrees,
-    mappings,
     homeDir: args.context.homeDir,
+    isCacheHit: false,
   });
-  return {
-    basePath: settings.basePath,
-    delimiter: settings.delimiter,
-    mappings,
-    worktrees: filteredWorktrees,
-  };
 }
 
 /**

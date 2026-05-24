@@ -28,6 +28,8 @@ type SessionTitleEntry = WorktreeTitle &
     sessionThreadId: string | null;
   };
 
+type TitlesTimingLogger = (label: string, elapsedMs: number) => void;
+
 type TitlesCacheFileEntry = {
   mtimeMs: number;
   size: number;
@@ -233,6 +235,56 @@ function logSessionTiming(label: string, elapsedMs: number): void {
   }
   const msText = Number.isFinite(elapsedMs) ? elapsedMs.toFixed(1) : "0.0";
   console.info(`[worktree-deck][session] ${label}: ${msText}ms`);
+}
+
+/**
+ * タイトル読み込み内の任意 step を計測する
+ */
+async function measureTitleStep<TValue>(args: {
+  label: string;
+  logTiming?: TitlesTimingLogger;
+  task: () => Promise<TValue>;
+}): Promise<TValue> {
+  const startMs = Date.now();
+  try {
+    return await args.task();
+  } finally {
+    args.logTiming?.(args.label, Date.now() - startMs);
+  }
+}
+
+/**
+ * タイトル読み込み内の同期 step を計測する
+ */
+function measureTitleSyncStep<TValue>(args: {
+  label: string;
+  logTiming?: TitlesTimingLogger;
+  task: () => TValue;
+}): TValue {
+  const startMs = Date.now();
+  try {
+    return args.task();
+  } finally {
+    args.logTiming?.(args.label, Date.now() - startMs);
+  }
+}
+
+/**
+ * タイトル cache 保存をタイトル反映後の後続処理として予約する
+ */
+function scheduleTitlesCacheStorageSave(args: {
+  label: string;
+  logTiming?: TitlesTimingLogger;
+  cacheKey: string;
+  storage: TitlesCacheStorage;
+}): void {
+  setTimeout(() => {
+    void measureTitleStep({
+      label: args.label,
+      logTiming: args.logTiming,
+      task: () => saveTitlesCacheStorage(args.cacheKey, args.storage),
+    });
+  }, 0);
 }
 
 /**
@@ -663,29 +715,67 @@ export async function loadTitlesForPaths(args: {
   assetsPath: string;
   packageDir: string;
   packageName: string;
+  timingLabelPrefix?: string;
+  logTiming?: TitlesTimingLogger;
 }): Promise<Map<string, WorktreeTitle[]>> {
   const startMs = Date.now();
   if (args.paths.length === 0) {
     return new Map();
   }
   const nowMs = Date.now();
-  const explicitTitles = await loadExplicitSessionTitlesForWorktreePaths(args);
-  const doneThresholdDays = await loadDoneThresholdDays(args);
+  const timingLabelPrefix = args.timingLabelPrefix ?? "loadTitlesForPaths";
+  const [explicitTitles, doneThresholdDays, codexHome, searchDays] = await Promise.all([
+    measureTitleStep({
+      label: `${timingLabelPrefix}:loadExplicitSessionTitlesForWorktreePaths(paths=${args.paths.length})`,
+      logTiming: args.logTiming,
+      task: () => loadExplicitSessionTitlesForWorktreePaths(args),
+    }),
+    measureTitleStep({
+      label: `${timingLabelPrefix}:loadDoneThresholdDays`,
+      logTiming: args.logTiming,
+      task: () => loadDoneThresholdDays(args),
+    }),
+    measureTitleStep({
+      label: `${timingLabelPrefix}:loadCodexHome`,
+      logTiming: args.logTiming,
+      task: () => loadCodexHome(args),
+    }),
+    measureTitleStep({
+      label: `${timingLabelPrefix}:loadSearchDays`,
+      logTiming: args.logTiming,
+      task: () => loadSearchDays(args),
+    }),
+  ]);
   const doneThresholdMs = doneThresholdDays != null ? doneThresholdDays * 24 * 60 * 60 * 1000 : null;
-  const codexHome = await loadCodexHome(args);
   if (!codexHome) {
-    return buildExplicitOnlyTitles({ paths: args.paths, explicitTitles, nowMs, doneThresholdMs });
+    return measureTitleSyncStep({
+      label: `${timingLabelPrefix}:buildExplicitOnlyTitles(paths=${args.paths.length})`,
+      logTiming: args.logTiming,
+      task: () => buildExplicitOnlyTitles({ paths: args.paths, explicitTitles, nowMs, doneThresholdMs }),
+    });
   }
 
-  const searchDays = await loadSearchDays(args);
   const cacheKey = buildTitlesCacheKey(codexHome);
-  const cachedStorage = await loadTitlesCacheStorage(cacheKey);
+  const cachedStorage = await measureTitleStep({
+    label: `${timingLabelPrefix}:loadTitlesCacheStorage`,
+    logTiming: args.logTiming,
+    task: () => loadTitlesCacheStorage(cacheKey),
+  });
   const canUseCache = cachedStorage != null && cachedStorage.searchDays >= searchDays;
   const cachedFiles = canUseCache ? cachedStorage.files : {};
 
+  const collectSessionFilesStartMs = Date.now();
   const sessionFiles = await collectSessionFiles(codexHome, searchDays);
+  args.logTiming?.(
+    `${timingLabelPrefix}:collectSessionFiles(days=${searchDays},files=${sessionFiles.length})`,
+    Date.now() - collectSessionFilesStartMs,
+  );
   if (sessionFiles.length === 0) {
-    return buildExplicitOnlyTitles({ paths: args.paths, explicitTitles, nowMs, doneThresholdMs });
+    return measureTitleSyncStep({
+      label: `${timingLabelPrefix}:buildExplicitOnlyTitles(paths=${args.paths.length})`,
+      logTiming: args.logTiming,
+      task: () => buildExplicitOnlyTitles({ paths: args.paths, explicitTitles, nowMs, doneThresholdMs }),
+    });
   }
 
   const pathEntries = sessionLogParserService.buildPathEntries(args.paths);
@@ -694,6 +784,10 @@ export async function loadTitlesForPaths(args: {
   const waitingForUserThreadIds = new Set<string>();
   const parentThreadIdByThreadId = new Map<string, string>();
   const nextCacheFiles: Record<string, TitlesCacheFileEntry> = {};
+  const processSessionFilesStartMs = Date.now();
+  let cacheHitCount = 0;
+  let cacheMissCount = 0;
+  let parseSessionFilesElapsedMs = 0;
 
   for (const sessionFile of sessionFiles) {
     try {
@@ -702,9 +796,13 @@ export async function loadTitlesForPaths(args: {
         cachedEntry != null && cachedEntry.mtimeMs === sessionFile.updatedAt && cachedEntry.size === sessionFile.size;
       let entry: TitlesCacheFileEntry | null = null;
       if (isCachedSame) {
+        cacheHitCount += 1;
         entry = cachedEntry;
       } else {
+        cacheMissCount += 1;
+        const parseSessionFileStartMs = Date.now();
         const parsed = await parseSessionFile(sessionFile.path, args.homeDir);
+        parseSessionFilesElapsedMs += Date.now() - parseSessionFileStartMs;
         entry = {
           mtimeMs: sessionFile.updatedAt,
           size: sessionFile.size,
@@ -793,75 +891,94 @@ export async function loadTitlesForPaths(args: {
       continue;
     }
   }
+  args.logTiming?.(`${timingLabelPrefix}:parseSessionFiles(cacheMisses=${cacheMissCount})`, parseSessionFilesElapsedMs);
+  args.logTiming?.(
+    `${timingLabelPrefix}:processSessionFiles(files=${sessionFiles.length},cacheHits=${cacheHitCount},cacheMisses=${cacheMissCount})`,
+    Date.now() - processSessionFilesStartMs,
+  );
 
-  for (const path of args.paths) {
-    const entries = explicitTitles.byWorktreePath.get(path) ?? [];
-    for (const explicitTitle of entries) {
-      if (matchedExplicitThreadIds.has(explicitTitle.threadId)) {
-        continue;
-      }
-      const updatedAt = parseExplicitTitleTimestamp(explicitTitle.updatedAt);
-      const startedAt = parseExplicitTitleTimestamp(explicitTitle.createdAt);
-      const titleEntry: SessionTitleEntry = {
-        title: explicitTitle.title,
-        status: resolveExplicitOnlyStatus({ updatedAt: updatedAt ?? nowMs, nowMs, doneThresholdMs }),
-        latestMessage: null,
-        updatedAt: updatedAt ?? nowMs,
-        startedAt,
-        sessionKind: "main",
-        isWaitingForUser: false,
-        sessionThreadId: explicitTitle.threadId,
-        titleTurnId: null,
-        reviewTurnIds: [],
-        sessionPath: undefined,
-        skillUsages: [],
-      };
-      const existing = titleEntries.get(path);
-      const titleKey = `${explicitTitle.threadId}::explicit`;
-      if (existing) {
-        existing.set(titleKey, titleEntry);
-      } else {
-        titleEntries.set(path, new Map([[titleKey, titleEntry]]));
-      }
-    }
-  }
-
-  const expandedWaitingForUserThreadIds = sessionLogParserService.expandWaitingForUserThreadIds({
-    waitingThreadIds: waitingForUserThreadIds,
-    parentThreadIdByThreadId,
-  });
-  const titles = new Map<string, WorktreeTitle[]>();
-  for (const [path, entries] of titleEntries) {
-    const dedupedEntries = sessionLogParserService.dedupeReviewParentEntries(Array.from(entries.values()));
-    titles.set(
-      path,
-      dedupedEntries
-        .sort((left, right) => {
-          if (right.updatedAt !== left.updatedAt) {
-            return right.updatedAt - left.updatedAt;
+  const titles = measureTitleSyncStep({
+    label: `${timingLabelPrefix}:finalizeTitles(paths=${args.paths.length})`,
+    logTiming: args.logTiming,
+    task: () => {
+      for (const path of args.paths) {
+        const entries = explicitTitles.byWorktreePath.get(path) ?? [];
+        for (const explicitTitle of entries) {
+          if (matchedExplicitThreadIds.has(explicitTitle.threadId)) {
+            continue;
           }
-          return right.title.localeCompare(left.title);
-        })
-        .map((entry) => ({
-          title: entry.title,
-          status: entry.status,
-          latestMessage: entry.latestMessage,
-          updatedAt: entry.updatedAt,
-          startedAt: entry.startedAt,
-          sessionPath: entry.sessionPath,
-          sessionKind: entry.sessionKind,
-          isWaitingForUser:
-            entry.isWaitingForUser ||
-            (entry.sessionThreadId ? expandedWaitingForUserThreadIds.has(entry.sessionThreadId) : false),
-          skillUsages: entry.skillUsages,
-        })),
-    );
-  }
-  await saveTitlesCacheStorage(cacheKey, {
-    searchDays,
-    cachedAt: nowMs,
-    files: nextCacheFiles,
+          const updatedAt = parseExplicitTitleTimestamp(explicitTitle.updatedAt);
+          const startedAt = parseExplicitTitleTimestamp(explicitTitle.createdAt);
+          const titleEntry: SessionTitleEntry = {
+            title: explicitTitle.title,
+            status: resolveExplicitOnlyStatus({ updatedAt: updatedAt ?? nowMs, nowMs, doneThresholdMs }),
+            latestMessage: null,
+            updatedAt: updatedAt ?? nowMs,
+            startedAt,
+            sessionKind: "main",
+            isWaitingForUser: false,
+            sessionThreadId: explicitTitle.threadId,
+            titleTurnId: null,
+            reviewTurnIds: [],
+            sessionPath: undefined,
+            skillUsages: [],
+          };
+          const existing = titleEntries.get(path);
+          const titleKey = `${explicitTitle.threadId}::explicit`;
+          if (existing) {
+            existing.set(titleKey, titleEntry);
+          } else {
+            titleEntries.set(path, new Map([[titleKey, titleEntry]]));
+          }
+        }
+      }
+
+      const expandedWaitingForUserThreadIds = sessionLogParserService.expandWaitingForUserThreadIds({
+        waitingThreadIds: waitingForUserThreadIds,
+        parentThreadIdByThreadId,
+      });
+      const nextTitles = new Map<string, WorktreeTitle[]>();
+      for (const [path, entries] of titleEntries) {
+        const dedupedEntries = sessionLogParserService.dedupeReviewParentEntries(Array.from(entries.values()));
+        nextTitles.set(
+          path,
+          dedupedEntries
+            .sort((left, right) => {
+              if (right.updatedAt !== left.updatedAt) {
+                return right.updatedAt - left.updatedAt;
+              }
+              return right.title.localeCompare(left.title);
+            })
+            .map((entry) => ({
+              title: entry.title,
+              status: entry.status,
+              latestMessage: entry.latestMessage,
+              updatedAt: entry.updatedAt,
+              startedAt: entry.startedAt,
+              sessionPath: entry.sessionPath,
+              sessionKind: entry.sessionKind,
+              isWaitingForUser:
+                entry.isWaitingForUser ||
+                (entry.sessionThreadId ? expandedWaitingForUserThreadIds.has(entry.sessionThreadId) : false),
+              skillUsages: entry.skillUsages,
+            })),
+        );
+      }
+      return nextTitles;
+    },
   });
+  if (!canUseCache || cacheMissCount > 0) {
+    scheduleTitlesCacheStorageSave({
+      label: `${timingLabelPrefix}:saveTitlesCacheStorage(files=${Object.keys(nextCacheFiles).length})`,
+      logTiming: args.logTiming,
+      cacheKey,
+      storage: {
+        searchDays,
+        cachedAt: nowMs,
+        files: nextCacheFiles,
+      },
+    });
+  }
   logSessionTiming("loadTitlesForPaths", Date.now() - startMs);
   return titles;
 }

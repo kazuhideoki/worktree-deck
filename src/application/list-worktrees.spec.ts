@@ -28,6 +28,7 @@ function buildDependencies(args?: { settings?: WorktreeDeckSettings }): ListWork
   return {
     loadSettings: vi.fn(async () => args?.settings ?? { basePath: "/tmp/worktrees", delimiter: "~_~" }),
     loadMappings: vi.fn(async () => []),
+    loadCachedWorktrees: vi.fn(async () => null),
     loadWorktrees: vi.fn(async () => []),
   };
 }
@@ -72,6 +73,7 @@ describe("list", () => {
       },
     ]);
     expect(dependencies.loadWorktrees).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
+    expect(result.isCacheHit).toBe(false);
   });
 
   it("mapping が空のときは空の一覧を返す", async () => {
@@ -118,5 +120,49 @@ describe("list", () => {
         path: "/Users/tester/dev/app-a",
       },
     ]);
+  });
+
+  it("cache 優先時は保存済み worktree 一覧を使い fresh scan を避ける", async () => {
+    const context = buildContext();
+    const dependencies = buildDependencies();
+    vi.mocked(dependencies.loadMappings).mockResolvedValueOnce([{ repoRoot: "/repos/app-a", mapValue: "app-a" }]);
+    vi.mocked(dependencies.loadCachedWorktrees).mockResolvedValueOnce([
+      {
+        repo: "app-a",
+        branch: "feature/a",
+        path: "/tmp/worktrees/app-a~_~feature-a",
+        originPath: "/repos/app-a",
+      },
+    ]);
+
+    const result = await listWorktreesUsecase.list({ context, dependencies });
+
+    expect(result.isCacheHit).toBe(true);
+    expect(result.worktrees).toEqual([
+      {
+        repo: "app-a",
+        branch: "feature/a",
+        path: "/tmp/worktrees/app-a~_~feature-a",
+        originPath: "/repos/app-a",
+      },
+    ]);
+    expect(dependencies.loadWorktrees).not.toHaveBeenCalled();
+  });
+
+  it("fresh 指定時は cache を使わずに worktree 一覧を取得する", async () => {
+    const context = buildContext();
+    const dependencies = buildDependencies();
+    vi.mocked(dependencies.loadCachedWorktrees).mockResolvedValueOnce([
+      {
+        repo: "app-a",
+        branch: "stale",
+        path: "/tmp/worktrees/app-a~_~stale",
+      },
+    ]);
+
+    await listWorktreesUsecase.list({ context, dependencies, options: { preferCache: false } });
+
+    expect(dependencies.loadCachedWorktrees).not.toHaveBeenCalled();
+    expect(dependencies.loadWorktrees).toHaveBeenCalledWith("/tmp/worktrees", "~_~");
   });
 });

@@ -61,7 +61,7 @@ function buildWorktree(path: string): Worktree {
  */
 async function flushAsyncTasks(): Promise<void> {
   await new Promise((resolve) => {
-    setTimeout(resolve, 0);
+    setTimeout(resolve, 250);
   });
 }
 
@@ -81,11 +81,13 @@ function buildRequest(
       delimiter: "~_~",
       mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
       worktrees: [worktree],
+      isCacheHit: false,
     }));
 
   return {
     context: buildContext(),
     displayCache: null,
+    includeOriginEntries: true,
     dependencies: {
       initialSnapshot: {
         listWorktrees,
@@ -142,6 +144,7 @@ describe("createWorktreeDeckDataStore", () => {
       delimiter: "~_~",
       mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
       worktrees: [buildWorktree("/worktrees/repo~_~feature-a")],
+      isCacheHit: false,
     });
     await Promise.all([first, second]);
 
@@ -157,6 +160,7 @@ describe("createWorktreeDeckDataStore", () => {
       expect.any(Number),
     );
     expect(request.logTiming).toHaveBeenCalledWith("loadWorktreesState", expect.any(Number));
+    await flushAsyncTasks();
   });
 
   it("読み込み済みの ensureLoaded では初期 snapshot を再取得しない", async () => {
@@ -166,6 +170,7 @@ describe("createWorktreeDeckDataStore", () => {
 
     await store.ensureLoaded(request);
     await store.ensureLoaded(request);
+    await flushAsyncTasks();
 
     expect(listWorktrees).toHaveBeenCalledTimes(1);
   });
@@ -177,8 +182,46 @@ describe("createWorktreeDeckDataStore", () => {
 
     await store.ensureLoaded(request);
     await store.reload(request);
+    await flushAsyncTasks();
 
     expect(listWorktrees).toHaveBeenCalledTimes(2);
+    expect(listWorktrees.mock.calls[0]?.[1]).toEqual({ preferCache: true });
+    expect(listWorktrees.mock.calls[1]?.[1]).toEqual({ preferCache: false });
+  });
+
+  it("cache hit の初期 snapshot 後に fresh scan でバックグラウンド更新する", async () => {
+    const store = createWorktreeDeckDataStore();
+    const cachedWorktree = buildWorktree("/worktrees/repo~_~cached");
+    const freshWorktree = buildWorktree("/worktrees/repo~_~fresh");
+    const freshDeferred = createDeferred<ListWorktreesResultForTest>();
+    const listWorktrees = vi
+      .fn()
+      .mockResolvedValueOnce({
+        basePath: "/worktrees",
+        delimiter: "~_~",
+        mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
+        worktrees: [cachedWorktree],
+        isCacheHit: true,
+      })
+      .mockReturnValueOnce(freshDeferred.promise);
+    const request = buildRequest({ listWorktrees });
+
+    await store.ensureLoaded(request);
+
+    expect(store.getSnapshot().listedWorktrees).toEqual([cachedWorktree]);
+    await flushAsyncTasks();
+    expect(request.dependencies.titlesSnapshot.loadTitlesForPaths).not.toHaveBeenCalled();
+    freshDeferred.resolve({
+      basePath: "/worktrees",
+      delimiter: "~_~",
+      mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
+      worktrees: [freshWorktree],
+      isCacheHit: false,
+    });
+    await flushAsyncTasks();
+    expect(store.getSnapshot().listedWorktrees).toEqual([freshWorktree]);
+    expect(listWorktrees.mock.calls[0]?.[1]).toEqual({ preferCache: true });
+    expect(listWorktrees.mock.calls[1]?.[1]).toEqual({ preferCache: false });
   });
 
   it("タイトルと詳細の後続ロードを store 状態へ反映する", async () => {
