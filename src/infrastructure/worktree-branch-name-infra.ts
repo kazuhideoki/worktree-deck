@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 import type { GenerateWorktreeBranchNameRequest } from "../application/generate-worktree-branch-name.usecase";
+import { normalizeExternalCommandError } from "./external-command-error";
 
 /**
  * branch 名生成で使う Codex モデル
@@ -96,7 +97,7 @@ async function runCodexExec(
       finishReject(error);
     });
     child.on("error", (error) => {
-      finishReject(error);
+      finishReject(normalizeExternalCommandError(error, "codex", "codex-action"));
     });
     child.on("close", (code, signal) => {
       if (settled) {

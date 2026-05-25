@@ -9,6 +9,7 @@ import {
   type WorktreeBaseRefInfra,
 } from "../interface-adapters/worktree-base-ref-dependencies";
 import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
+import { isMissingExternalCommandError, normalizeExternalCommandError } from "./external-command-error";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 
 /**
@@ -82,14 +83,15 @@ const WORKTREE_BASE_REF_INFRA: WorktreeBaseRefInfra = {
     }
     try {
       const key = worktreeBaseRefService.buildConfigKey(branch);
-      const { stdout } = await execFileAsync("git", ["-C", worktreePath, "config", "--get", key], {
-        cwd: worktreePath,
-      });
+      const { stdout } = await execGit(worktreePath, ["config", "--get", key]);
       const value = stdout.trim();
       if (value) {
         return value;
       }
-    } catch {
+    } catch (error) {
+      if (isMissingExternalCommandError(error)) {
+        throw error;
+      }
       return null;
     }
     return null;
@@ -121,7 +123,7 @@ const WORKTREE_BASE_REF_INFRA: WorktreeBaseRefInfra = {
       return;
     }
     const key = worktreeBaseRefService.buildConfigKey(branch);
-    await execFileAsync("git", ["-C", worktreePath, "config", key, baseRef], { cwd: worktreePath });
+    await execGit(worktreePath, ["config", key, baseRef]);
   },
   async saveWorktreeBaseRef(args) {
     const worktreePath = args.worktreePath.trim();
@@ -184,6 +186,18 @@ export async function saveBaseRefForWorktreePath(path: string, baseRef: string):
     },
     dependencies: SAVE_BASE_REF_DEPENDENCIES,
   });
+}
+
+/**
+ * git コマンドを worktree で実行する
+ */
+async function execGit(worktreePath: string, gitArgs: string[]): Promise<{ stdout: string; stderr: string }> {
+  try {
+    const { stdout, stderr } = await execFileAsync("git", ["-C", worktreePath, ...gitArgs], { cwd: worktreePath });
+    return { stdout, stderr };
+  } catch (error) {
+    throw normalizeExternalCommandError(error, "git", "git-worktree");
+  }
 }
 
 /**

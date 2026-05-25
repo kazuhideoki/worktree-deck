@@ -130,4 +130,19 @@ describe("deleted-worktree-store", () => {
       expect.any(Function),
     );
   });
+
+  it("git が見つからない場合はローカルブランチなし扱いにせず案内エラーで失敗する", async () => {
+    childProcessMocks.execFile.mockImplementation((_command, _args, _options, callback) => {
+      const error = Object.assign(new Error("spawn git ENOENT"), {
+        code: "ENOENT",
+        syscall: "spawn git",
+        path: "git",
+      });
+      callback(error);
+    });
+
+    await expect(
+      checkDeletedWorktreeLocalBranchExists({ repoRoot: "/repos/app", branch: "feature/a" }),
+    ).rejects.toThrow("Git is required to manage worktrees. Install Git and ensure it is available in PATH.");
+  });
 });

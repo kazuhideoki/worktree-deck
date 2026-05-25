@@ -39,6 +39,16 @@ function buildProcessError(command, args, code, stderr) {
 }
 
 /**
+ * spawn ENOENT を git 未導入の案内エラーへ変換する
+ */
+function normalizeGitCommandError(error) {
+  if (error && error.code === "ENOENT") {
+    return new Error("Git is required to manage worktrees. Install Git and ensure it is available in PATH.");
+  }
+  return error;
+}
+
+/**
  * git ls-files をバッファ上限なしで実行する
  */
 async function execGitLsFiles(repoRoot, gitArgs) {
@@ -54,7 +64,7 @@ async function execGitLsFiles(repoRoot, gitArgs) {
     child.stderr.on("data", (chunk) => {
       stderrChunks.push(chunk);
     });
-    child.on("error", reject);
+    child.on("error", (error) => reject(normalizeGitCommandError(error)));
     child.on("close", (code) => {
       if (code === 0) {
         resolve(Buffer.concat(stdoutChunks));

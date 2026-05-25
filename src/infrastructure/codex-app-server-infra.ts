@@ -14,6 +14,7 @@ import type {
   StartCodexInitialSessionCommand,
   StartCodexInitialSessionResult,
 } from "../application/start-codex-initial-session.usecase";
+import { normalizeExternalCommandError } from "./external-command-error";
 
 /**
  * app-server の既定ポート
@@ -142,16 +143,40 @@ async function ensureCodexAppServer(): Promise<string> {
   }
 
   const endpoint = buildAppServerEndpoint(port);
-  const child = spawn("codex", ["app-server", "--listen", endpoint], {
-    detached: true,
-    env: {
-      ...process.env,
-      PATH: buildCommandPath(process.env.PATH),
-    },
-    stdio: "ignore",
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const child = spawn("codex", ["app-server", "--listen", endpoint], {
+      detached: true,
+      env: {
+        ...process.env,
+        PATH: buildCommandPath(process.env.PATH),
+      },
+      stdio: "ignore",
+    });
+    child.once("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(normalizeExternalCommandError(error, "codex", "codex-action"));
+    });
+    child.unref();
+    waitForAppServerReady(port)
+      .then(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve();
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        reject(error);
+      });
   });
-  child.unref();
-  await waitForAppServerReady(port);
   return endpoint;
 }
 

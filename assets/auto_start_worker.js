@@ -111,6 +111,29 @@ function buildProcessError(command, args, code, stderr) {
 }
 
 /**
+ * 外部コマンド未導入時の英語案内文を返す
+ */
+function formatMissingCommandMessage(command) {
+  if (command === "git") {
+    return "Git is required to manage worktrees. Install Git and ensure it is available in PATH.";
+  }
+  if (command === "codex") {
+    return "Codex CLI is required for Codex actions. Install Codex and ensure it is available in PATH.";
+  }
+  return `${command} command was not found in PATH.`;
+}
+
+/**
+ * spawn ENOENT を明確な案内エラーへ変換する
+ */
+function normalizeMissingCommandError(error, command) {
+  if (error && error.code === "ENOENT") {
+    return new Error(formatMissingCommandMessage(command));
+  }
+  return error;
+}
+
+/**
  * child process を実行して stdout/stderr を返す
  */
 async function runProcess(command, args, options = {}) {
@@ -149,7 +172,7 @@ async function runProcess(command, args, options = {}) {
       if (timeout) {
         clearTimeout(timeout);
       }
-      reject(error);
+      reject(normalizeMissingCommandError(error, command));
     });
     child.on("close", (code) => {
       if (settled) {
@@ -742,7 +765,7 @@ async function ensureCodexAppServer() {
         return;
       }
       settled = true;
-      reject(error);
+      reject(normalizeMissingCommandError(error, "codex"));
     });
     child.unref();
     waitForAppServerReady(port)

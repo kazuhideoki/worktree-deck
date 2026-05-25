@@ -116,6 +116,35 @@ describe("createWorktree", () => {
     );
   });
 
+  it("git が見つからない場合は branch なし扱いにせず案内エラーで失敗する", async () => {
+    const fixture = await createWorktreeFixture();
+    createdRoots.push(fixture.rootDir);
+    childProcessMocks.execFile.mockImplementation(
+      (_command: string, _args: string[], _options: unknown, callback: unknown) => {
+        if (typeof callback !== "function") {
+          return;
+        }
+        const error = Object.assign(new Error("spawn git ENOENT"), {
+          code: "ENOENT",
+          syscall: "spawn git",
+          path: "git",
+        });
+        callback(error, "", "");
+      },
+    );
+
+    await expect(
+      createWorktree({
+        repoRoot: "/repos/app",
+        branch: "feature/missing-git",
+        startPoint: "main",
+        scriptPath: "",
+        mapValue: "app",
+      }),
+    ).rejects.toThrow("Git is required to manage worktrees. Install Git and ensure it is available in PATH.");
+    expect(childProcessMocks.spawn).not.toHaveBeenCalled();
+  });
+
   it("branch 名の特殊文字列と underscore を壊さず nested path を作る", async () => {
     const fixture = await createWorktreeFixture();
     createdRoots.push(fixture.rootDir);
