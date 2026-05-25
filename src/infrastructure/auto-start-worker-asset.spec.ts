@@ -31,6 +31,22 @@ describe("auto_start_worker.js", () => {
     expect(source).toContain('"Failed to set Codex thread title"');
   });
 
+  it("完了通知には worktree path ではなく branch と title を表示する", async () => {
+    const source = await readAutoStartWorkerAsset();
+
+    expect(source).toContain(
+      "function formatCompletionNotificationMessage(branch, sessionTitle, branchGenerationWarning)",
+    );
+    expect(source).toContain("Branch: ${branch}");
+    expect(source).toContain("Title: ${sessionTitle}");
+    expect(source).toContain(
+      'notify("Auto Start completed", formatCompletionNotificationMessage(branch, sessionTitle, branchGenerationWarning))',
+    );
+    expect(source).not.toContain(
+      'notify("Auto Start completed", branchGenerationWarning ? `Used fallback branch: ${branch}` : worktreePath)',
+    );
+  });
+
   it("外部依存未導入時の英語案内文を state に残せる", async () => {
     const source = await readAutoStartWorkerAsset();
 

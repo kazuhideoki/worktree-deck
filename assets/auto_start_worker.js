@@ -509,6 +509,14 @@ function buildFallbackSessionTitle(initialPrompt) {
 }
 
 /**
+ * Auto Start 完了通知に表示する branch と title を組み立てる
+ */
+function formatCompletionNotificationMessage(branch, sessionTitle, branchGenerationWarning) {
+  const branchLine = branchGenerationWarning ? `Fallback branch: ${branch}` : `Branch: ${branch}`;
+  return `${branchLine}\nTitle: ${sessionTitle}`;
+}
+
+/**
  * 既存 branch と衝突しない branch 名を選ぶ
  */
 function resolveAvailableBranchName(preferredBranch, existingBranches) {
@@ -998,7 +1006,7 @@ async function main() {
       warnings,
       finishedAt: new Date().toISOString(),
     });
-    notify("Auto Start completed", branchGenerationWarning ? `Used fallback branch: ${branch}` : worktreePath);
+    notify("Auto Start completed", formatCompletionNotificationMessage(branch, sessionTitle, branchGenerationWarning));
   } catch (error) {
     const message = extractErrorMessage(error);
     const patch = {
