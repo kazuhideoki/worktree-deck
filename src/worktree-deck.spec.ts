@@ -50,6 +50,7 @@ vi.mock("@raycast/api", () => {
     confirmAlert: vi.fn(),
     environment: { assetsPath: "" },
     open: vi.fn(),
+    openExtensionPreferences: vi.fn(),
     showToast: vi.fn(),
     useNavigation: () => ({ push: vi.fn(), pop: vi.fn() }),
   };

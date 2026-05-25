@@ -1,4 +1,4 @@
-import { Color, Icon, MenuBarExtra, environment } from "@raycast/api";
+import { Color, Icon, MenuBarExtra, environment, openExtensionPreferences } from "@raycast/api";
 import { useEffect, useState } from "react";
 
 import { listWorktreesUsecase } from "./application/list-worktrees.usecase";
@@ -148,6 +148,13 @@ export default function Command() {
           <MenuBarExtra.Item title={errorMessage} icon={{ source: Icon.Warning, tintColor: Color.Red }} />
         </MenuBarExtra.Section>
       ) : null}
+      <MenuBarExtra.Section title="Settings">
+        <MenuBarExtra.Item
+          title="Open Extension Preferences"
+          icon={Icon.Gear}
+          onAction={() => void openExtensionPreferences()}
+        />
+      </MenuBarExtra.Section>
     </MenuBarExtra>
   );
 }

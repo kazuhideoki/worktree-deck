@@ -9,6 +9,7 @@ describe("buildGlobalActionItems", () => {
       "create-worktree",
       "restore-deleted-worktree",
       "repository-settings",
+      "extension-preferences",
     ]);
   });
 
@@ -34,5 +35,11 @@ describe("buildGlobalActionItems", () => {
     const items = buildGlobalActionItems();
     const target = items.find((item) => item.id === "restore-deleted-worktree");
     expect(target?.shortcut).toEqual({ modifiers: ["cmd", "shift"], key: "r" });
+  });
+
+  it("Open Extension Preferences は Raycast 予約ショートカットを明示しない", () => {
+    const items = buildGlobalActionItems();
+    const target = items.find((item) => item.id === "extension-preferences");
+    expect(target?.shortcut).toBeUndefined();
   });
 });

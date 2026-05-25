@@ -8,6 +8,7 @@ import {
   closeMainWindow,
   confirmAlert,
   environment,
+  openExtensionPreferences,
   showToast,
   useNavigation,
 } from "@raycast/api";
@@ -428,6 +429,7 @@ export default function Command() {
   const createWorktreeAction = globalActionById.get("create-worktree");
   const restoreDeletedWorktreeAction = globalActionById.get("restore-deleted-worktree");
   const repositorySettingsAction = globalActionById.get("repository-settings");
+  const extensionPreferencesAction = globalActionById.get("extension-preferences");
   const hasVisibleContent = visibleSections.length > 0;
   const isRepositoryMappingOnboardingEmptyState = shouldShowRepositoryMappingOnboardingEmptyState({
     searchText,
@@ -1329,30 +1331,39 @@ export default function Command() {
               onAction={handleReloadWorktrees}
             />
           ) : null}
-          {!createWorktreeAction || !restoreDeletedWorktreeAction || !repositorySettingsAction ? null : (
-            <>
-              {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
-              <Action.Push
-                title={restoreDeletedWorktreeAction.title}
-                icon={Icon.ArrowClockwise}
-                shortcut={restoreDeletedWorktreeAction.shortcut}
-                target={<RestoreDeletedWorktreeView onComplete={refreshWorktrees} />}
-                onPop={handleCreatePop}
-              />
-              <Action.Push
-                title={repositorySettingsAction.title}
-                icon={Icon.Gear}
-                shortcut={repositorySettingsAction.shortcut}
-                target={<RepositoryMappingManager onChange={handleRepositoryMappingChange} />}
-                onPop={handleCreatePop}
-              />
-            </>
-          )}
+          {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
+          {restoreDeletedWorktreeAction ? (
+            <Action.Push
+              title={restoreDeletedWorktreeAction.title}
+              icon={Icon.ArrowClockwise}
+              shortcut={restoreDeletedWorktreeAction.shortcut}
+              target={<RestoreDeletedWorktreeView onComplete={refreshWorktrees} />}
+              onPop={handleCreatePop}
+            />
+          ) : null}
+          {repositorySettingsAction ? (
+            <Action.Push
+              title={repositorySettingsAction.title}
+              icon={Icon.Gear}
+              shortcut={repositorySettingsAction.shortcut}
+              target={<RepositoryMappingManager onChange={handleRepositoryMappingChange} />}
+              onPop={handleCreatePop}
+            />
+          ) : null}
+          {extensionPreferencesAction ? (
+            <Action
+              title={extensionPreferencesAction.title}
+              icon={Icon.Gear}
+              shortcut={extensionPreferencesAction.shortcut}
+              onAction={() => void openExtensionPreferences()}
+            />
+          ) : null}
         </>
       );
     },
     [
       createWorktreeAction,
+      extensionPreferencesAction,
       handleCreatePop,
       handleReloadWorktrees,
       handleRepositoryMappingChange,

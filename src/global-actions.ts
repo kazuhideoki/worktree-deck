@@ -5,7 +5,8 @@ export type GlobalActionId =
   | "reload-worktrees"
   | "create-worktree"
   | "restore-deleted-worktree"
-  | "repository-settings";
+  | "repository-settings"
+  | "extension-preferences";
 
 /**
  * グローバルアクションの定義
@@ -13,7 +14,7 @@ export type GlobalActionId =
 type GlobalActionItem = {
   id: GlobalActionId;
   title: string;
-  shortcut: { modifiers: ("cmd" | "shift" | "opt" | "ctrl")[]; key: string };
+  shortcut?: { modifiers: ("cmd" | "shift" | "opt" | "ctrl")[]; key: string };
 };
 
 /**
@@ -40,6 +41,10 @@ export function buildGlobalActionItems(): GlobalActionItem[] {
       id: "repository-settings",
       title: "Repository Settings",
       shortcut: { modifiers: ["cmd", "shift"], key: "," },
+    },
+    {
+      id: "extension-preferences",
+      title: "Open Extension Preferences",
     },
   ];
 }
