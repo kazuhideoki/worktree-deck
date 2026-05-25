@@ -6,6 +6,8 @@ worktrees
 AGENTS.override.md
 codex-merged
 .DS_Store
+store-screenshot-demo
+.store-screenshot-demo
 raycast-env.d.ts
 .raycast-swift-build
 .swiftpm
