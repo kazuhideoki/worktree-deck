@@ -7,7 +7,7 @@ import {
 import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 import { openCodexThreadInApp, openPathInCodexApp } from "./codex-app-infra";
-import { openPathInZedClassic } from "./worktree-zed-infra";
+import { openPathInConfiguredIde } from "./worktree-ide-app-store";
 
 /**
  * package.json の name と一致させる
@@ -179,6 +179,6 @@ export async function openPathInPreferredApp(
     return { preferenceSaved: savedMeta !== null, savedMeta };
   }
   const savedMeta = await trySaveOpenAppMetaForWorktreePath(worktreePath, resolvedOpenApp);
-  await openPathInZedClassic(worktreePath);
+  await openPathInConfiguredIde(worktreePath);
   return { preferenceSaved: savedMeta !== null, savedMeta };
 }

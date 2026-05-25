@@ -44,6 +44,7 @@ import {
   normalizeWorktreeBranchName,
 } from "./components/worktree-ui-utils";
 import { buildOpenAppAccessory, resolveOpenAppIcon } from "./components/worktree-open-app-icon";
+import { worktreeIdeAppService, type WorktreeIdeApp } from "./domain/worktree-ide-app.service";
 import { worktreeDeckDataStore } from "./components/worktree-deck-data-store";
 import {
   SCROLL_DETAIL_DOWN_SHORTCUT,
@@ -302,8 +303,8 @@ export function resolveOpenActionThreadId(args: {
 /**
  * 起動アプリに合わせたアクション名を返す
  */
-export function formatOpenActionTitle(openApp: WorktreeOpenApp): string {
-  return openApp === "codex-app" ? "Open in CA" : "Open in Zed";
+export function formatOpenActionTitle(openApp: WorktreeOpenApp, ideApp: WorktreeIdeApp = "zed"): string {
+  return openApp === "codex-app" ? "Open in CA" : `Open in ${worktreeIdeAppService.formatIdeAppLabel(ideApp)}`;
 }
 
 /**
@@ -341,6 +342,7 @@ export default function Command() {
     "worktree-deck.displayMode",
     "show-all",
   );
+  const [preferredIdeApp, setPreferredIdeApp] = useState<WorktreeIdeApp>("zed");
   const [displayCache, setDisplayCache] = useCachedState<WorktreeDeckDisplayCache | null>(
     "worktree-deck.display-cache",
     null,
@@ -354,6 +356,32 @@ export default function Command() {
   const lastShownErrorIdRef = useRef(0);
   const selectionSettlingSignatureRef = useRef<string | null>(null);
   const hasOpenedRepositoryMappingOnboardingRef = useRef(false);
+
+  /**
+   * General Settings の IDE 設定を読み込む
+   */
+  useEffect(() => {
+    let active = true;
+    async function loadPreferredIdeAppSetting(): Promise<void> {
+      try {
+        const loadedIdeApp = await WORKTREE_DECK_COMPOSITION_ROOT.generalSettingsStore.loadPreferredIdeApp();
+        if (active) {
+          setPreferredIdeApp(loadedIdeApp);
+        }
+      } catch (error) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to load IDE setting",
+          message: formatExecErrorMessage(error),
+        });
+      }
+    }
+    void loadPreferredIdeAppSetting();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   /**
    * 計測ログを有効にするか判定する
    */
@@ -1192,7 +1220,7 @@ export default function Command() {
   );
 
   /**
-   * 指定パスの最新セッションファイルを Zed で開く
+   * 指定パスの最新セッションファイルを IDE で開く
    */
   const openLatestSessionForPath = useCallback(async (path: string): Promise<void> => {
     const trimmedPath = path.trim();
@@ -1240,7 +1268,10 @@ export default function Command() {
    */
   const openPathInConfiguredApp = useCallback(
     async (path: string, openApp: WorktreeOpenApp, threadId?: string | null): Promise<void> => {
-      const label = worktreeOpenAppService.formatMetaLabel(openApp);
+      const label =
+        openApp === "codex-app"
+          ? worktreeOpenAppService.formatMetaLabel(openApp)
+          : worktreeIdeAppService.formatIdeAppLabel(preferredIdeApp);
       const toast = await showToast({ style: Toast.Style.Animated, title: `Opening in ${label}` });
       try {
         const result = await worktreeOpenAppUsecase.openPreferred({
@@ -1260,7 +1291,7 @@ export default function Command() {
         toast.message = formatExecErrorMessage(error);
       }
     },
-    [],
+    [preferredIdeApp],
   );
 
   /**
@@ -1334,7 +1365,7 @@ export default function Command() {
       if (!shouldSelectCodexSessionForOpenAction({ openApp: args.openApp, intent: args.intent })) {
         return (
           <Action
-            title={formatOpenActionTitle(args.openApp)}
+            title={formatOpenActionTitle(args.openApp, preferredIdeApp)}
             icon={resolveOpenAppIcon(args.openApp)}
             shortcut={resolveOpenActionShortcut(args.intent)}
             onAction={() => void openPathInConfiguredApp(args.path, args.openApp, args.threadId)}
@@ -1365,6 +1396,7 @@ export default function Command() {
                 onArchiveSession={archiveCodexSession}
                 onUnarchiveSession={unarchiveCodexSession}
                 onOpenSession={(threadId) => openPathInConfiguredApp(args.path, "codex-app", threadId)}
+                ideAppTitle={worktreeIdeAppService.formatIdeAppLabel(preferredIdeApp)}
                 onOpenWorktreeInZed={() => openPathInConfiguredApp(args.path, "zed", null)}
               />
             }
@@ -1375,14 +1407,20 @@ export default function Command() {
       const resolvedThreadId = plan.kind === "open-thread" ? plan.threadId : null;
       return (
         <Action
-          title={formatOpenActionTitle(args.openApp)}
+          title={formatOpenActionTitle(args.openApp, preferredIdeApp)}
           icon={resolveOpenAppIcon(args.openApp)}
           shortcut={resolveOpenActionShortcut(args.intent)}
           onAction={() => void openPathInConfiguredApp(args.path, args.openApp, resolvedThreadId)}
         />
       );
     },
-    [archiveCodexSession, archivedCodexSessionThreadIdSet, openPathInConfiguredApp, unarchiveCodexSession],
+    [
+      archiveCodexSession,
+      archivedCodexSessionThreadIdSet,
+      openPathInConfiguredApp,
+      preferredIdeApp,
+      unarchiveCodexSession,
+    ],
   );
 
   /**
@@ -1478,7 +1516,12 @@ export default function Command() {
               title={settingsAction.title}
               icon={Icon.Gear}
               shortcut={settingsAction.shortcut}
-              target={<SettingsView onRepositoryMappingChange={handleRepositoryMappingChange} />}
+              target={
+                <SettingsView
+                  onGeneralSettingsChange={setPreferredIdeApp}
+                  onRepositoryMappingChange={handleRepositoryMappingChange}
+                />
+              }
               onPop={handleCreatePop}
             />
           ) : null}
@@ -1505,6 +1548,7 @@ export default function Command() {
       settingsAction,
       restoreDeletedWorktreeAction,
       setDisplayMode,
+      setPreferredIdeApp,
     ],
   );
 
@@ -1669,7 +1713,7 @@ export default function Command() {
                         branch: entry.branch,
                       })}
                       icon={{ source: Icon.House, tintColor: statusTint }}
-                      accessories={buildOpenAppAccessory(openApp)}
+                      accessories={buildOpenAppAccessory(openApp, preferredIdeApp)}
                       detail={<List.Item.Detail markdown={detailMarkdown} />}
                       actions={
                         <ActionPanel>
@@ -1776,7 +1820,7 @@ export default function Command() {
                       branch: item.branch,
                     })}
                     icon={{ source: Icon.Folder, tintColor: statusTint }}
-                    accessories={buildOpenAppAccessory(openApp)}
+                    accessories={buildOpenAppAccessory(openApp, preferredIdeApp)}
                     detail={<List.Item.Detail markdown={detailMarkdown} />}
                     actions={
                       <ActionPanel>

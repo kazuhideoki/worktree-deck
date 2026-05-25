@@ -9,7 +9,7 @@ export type WorktreeSessionFileDependencies = {
   findFirstSessionFileByPath(args: WorktreeDeckContext & { path: string }): Promise<string | null>;
   findLatestSessionFileByPath(args: WorktreeDeckContext & { path: string }): Promise<string | null>;
   saveCodexThreadIdForWorktreePath(path: string, threadId: string): Promise<void>;
-  openPathInZedClassic(path: string): Promise<void>;
+  openPathInConfiguredIde(path: string): Promise<void>;
   loadLatestSessionMessages(args: { filePath: string; homeDir: string | null }): Promise<SessionMessage[]>;
   loadSessionMessages(args: { filePath: string; homeDir: string | null }): Promise<SessionMessage[]>;
 };
@@ -50,7 +50,7 @@ async function resolveAndSaveCodexThreadId(args: {
 }
 
 /**
- * 指定 worktree の最新 session file を Zed で開く
+ * 指定 worktree の最新 session file を IDE で開く
  */
 async function openLatestSessionFile(args: {
   worktreePath: string;
@@ -68,7 +68,7 @@ async function openLatestSessionFile(args: {
   if (sessionPath === null || sessionPath.length === 0) {
     return { status: "not-found" };
   }
-  await args.dependencies.openPathInZedClassic(sessionPath);
+  await args.dependencies.openPathInConfiguredIde(sessionPath);
   return { status: "opened", sessionPath };
 }
 

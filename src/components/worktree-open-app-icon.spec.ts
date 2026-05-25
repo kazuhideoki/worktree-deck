@@ -18,6 +18,7 @@ describe("worktree-open-app-icon", () => {
 
   it("フォーム表示向けタイトルは絵文字を含めない", () => {
     expect(resolveOpenAppTitle("zed")).toBe("Zed");
+    expect(resolveOpenAppTitle("zed", "vscode")).toBe("VS Code");
     expect(resolveOpenAppTitle("codex-app")).toBe("CA");
   });
 });

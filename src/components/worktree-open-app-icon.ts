@@ -1,4 +1,5 @@
 import { type Image, type List } from "@raycast/api";
+import { worktreeIdeAppService, type WorktreeIdeApp } from "../domain/worktree-ide-app.service";
 import { type WorktreeOpenApp } from "../domain/worktree-open-app.service";
 
 /**
@@ -8,7 +9,7 @@ const OPEN_APP_ICON_DEFINITIONS = {
   zed: {
     asset: "zed-icon.png",
     title: "Zed",
-    tooltip: "Zed Editor",
+    tooltip: "Configured IDE",
   },
   "codex-app": {
     asset: "codex-app-icon.png",
@@ -27,20 +28,26 @@ export function resolveOpenAppIcon(openApp: WorktreeOpenApp): Image.ImageLike {
 /**
  * 起動アプリの短い表示名を返す
  */
-export function resolveOpenAppTitle(openApp: WorktreeOpenApp): string {
+export function resolveOpenAppTitle(openApp: WorktreeOpenApp, ideApp: WorktreeIdeApp = "zed"): string {
+  if (openApp === "zed") {
+    return worktreeIdeAppService.formatIdeAppLabel(ideApp);
+  }
   return OPEN_APP_ICON_DEFINITIONS[openApp].title;
 }
 
 /**
  * 起動アプリの補足説明を返す
  */
-function resolveOpenAppTooltip(openApp: WorktreeOpenApp): string {
+function resolveOpenAppTooltip(openApp: WorktreeOpenApp, ideApp: WorktreeIdeApp = "zed"): string {
+  if (openApp === "zed") {
+    return `${worktreeIdeAppService.formatIdeAppLabel(ideApp)} IDE`;
+  }
   return OPEN_APP_ICON_DEFINITIONS[openApp].tooltip;
 }
 
 /**
  * リスト右端に表示する起動アプリアクセサリを返す
  */
-export function buildOpenAppAccessory(openApp: WorktreeOpenApp): List.Item.Accessory[] {
-  return [{ icon: resolveOpenAppIcon(openApp), tooltip: resolveOpenAppTooltip(openApp) }];
+export function buildOpenAppAccessory(openApp: WorktreeOpenApp, ideApp: WorktreeIdeApp = "zed"): List.Item.Accessory[] {
+  return [{ icon: resolveOpenAppIcon(openApp), tooltip: resolveOpenAppTooltip(openApp, ideApp) }];
 }

@@ -19,7 +19,7 @@ type SaveWorktreeOpenAppDependencies = {
  * worktree 起動依存ポート
  */
 type OpenWorktreeInAppDependencies = {
-  openPathInZedClassic(path: string): Promise<void>;
+  openPathInConfiguredIde(path: string): Promise<void>;
   openPathInCodexApp(path: string): Promise<void>;
 };
 
@@ -35,7 +35,7 @@ type OpenWorktreeInPreferredAppResult = {
  * 固定アプリ起動依存ポート
  */
 export type OpenWorktreeInPreferredAppDependencies = {
-  openPathInZedClassic(path: string): Promise<void>;
+  openPathInConfiguredIde(path: string): Promise<void>;
   openPathInCodexApp(path: string): Promise<void>;
   openCodexThreadInApp(threadId: string): Promise<void>;
   saveOpenAppMetaForWorktreePath(
@@ -113,7 +113,7 @@ async function open(args: {
     await args.dependencies.openPathInCodexApp(worktreePath);
     return;
   }
-  await args.dependencies.openPathInZedClassic(worktreePath);
+  await args.dependencies.openPathInConfiguredIde(worktreePath);
 }
 
 /**
@@ -174,7 +174,7 @@ async function openPreferred(args: {
     openApp,
     dependencies: args.dependencies,
   });
-  await args.dependencies.openPathInZedClassic(worktreePath);
+  await args.dependencies.openPathInConfiguredIde(worktreePath);
   return { preferenceSaved: savedMeta !== null, savedMeta };
 }
 

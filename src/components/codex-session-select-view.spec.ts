@@ -5,7 +5,7 @@ import {
   applyCodexSessionArchiveMove,
   applyCodexSessionArchiveRollback,
   buildCodexSessionEntries,
-  OPEN_WORKTREE_IN_ZED_ACTION_TITLE,
+  formatOpenWorktreeInIdeActionTitle,
   resolveCodexSessionOpenPlan,
   SELECT_CODEX_SESSION_ACTION_TITLE,
 } from "./codex-session-select-view";
@@ -260,8 +260,9 @@ describe("resolveCodexSessionOpenPlan", () => {
     expect(SELECT_CODEX_SESSION_ACTION_TITLE).toBe("Select CA Session");
   });
 
-  it("Zed 起動アクション名は一時起動を示さない", () => {
-    expect(OPEN_WORKTREE_IN_ZED_ACTION_TITLE).toBe("Open in Zed");
+  it("IDE 起動アクション名は一時起動を示さない", () => {
+    expect(formatOpenWorktreeInIdeActionTitle()).toBe("Open in Zed");
+    expect(formatOpenWorktreeInIdeActionTitle("Cursor")).toBe("Open in Cursor");
   });
 });
 
