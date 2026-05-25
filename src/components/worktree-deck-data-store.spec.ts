@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { WorktreeDeckContext } from "../application/list-worktrees.usecase";
 import type { Worktree } from "../application/worktree.entity";
+import type { WorktreeTitle } from "../application/worktree-title.entity";
 import type { WorktreeDeckDataStoreLoadRequest } from "./worktree-deck-data-store";
 import { createWorktreeDeckDataStore } from "./worktree-deck-data-store";
 
@@ -53,6 +54,25 @@ function buildWorktree(path: string): Worktree {
     branch: "feature/a",
     path,
     originPath: "/repo",
+  };
+}
+
+/**
+ * テスト用タイトルを作る
+ */
+function buildTitle(args: {
+  title: string;
+  sessionPath: string;
+  skillUsages?: WorktreeTitle["skillUsages"];
+}): WorktreeTitle {
+  return {
+    title: args.title,
+    status: "working",
+    latestMessage: null,
+    updatedAt: 1,
+    sessionPath: args.sessionPath,
+    sessionKind: "main",
+    skillUsages: args.skillUsages,
   };
 }
 
@@ -363,5 +383,41 @@ describe("createWorktreeDeckDataStore", () => {
       "loadWorktreeDetailsState:snapshot:attachWorktreeBaseDiffs(worktrees=1)",
       expect.any(Number),
     );
+  });
+
+  it("タイトル再取得で空のスキル履歴が返ってもキャッシュ済みの非空履歴を保持する", async () => {
+    const store = createWorktreeDeckDataStore();
+    const request = buildRequest();
+    const worktreePath = "/worktrees/repo~_~feature-a";
+    const sessionPath = "/sessions/session.jsonl";
+    const cachedTitle = buildTitle({
+      title: "Cached session",
+      sessionPath,
+      skillUsages: [{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" }],
+    });
+    const refreshedTitle = buildTitle({ title: "Cached session", sessionPath, skillUsages: [] });
+    const cachedWorktree = { ...buildWorktree(worktreePath), titleEntries: [cachedTitle] };
+
+    vi.mocked(request.dependencies.initialSnapshot.restoreDisplayCache).mockReturnValue({
+      worktrees: [cachedWorktree],
+      titlesByPath: new Map([[worktreePath, [cachedTitle]]]),
+      originLastCommitByPath: new Map(),
+      originBranchByPath: new Map(),
+      openAppMetaByPath: new Map(),
+    });
+    vi.mocked(request.dependencies.titlesSnapshot.loadTitlesForPaths).mockResolvedValueOnce(
+      new Map([[worktreePath, [refreshedTitle]]]),
+    );
+    vi.mocked(request.dependencies.titlesSnapshot.attachWorktreeTitles).mockResolvedValueOnce([
+      { ...buildWorktree(worktreePath), titleEntries: [refreshedTitle] },
+    ]);
+
+    await store.ensureLoaded(request);
+    expect(store.getSnapshot().worktrees[0]?.titleEntries?.[0]?.skillUsages).toEqual(cachedTitle.skillUsages);
+
+    await flushAsyncTasks();
+
+    expect(store.getSnapshot().titlesByPath.get(worktreePath)?.[0]?.skillUsages).toEqual(cachedTitle.skillUsages);
+    expect(store.getSnapshot().worktrees[0]?.titleEntries?.[0]?.skillUsages).toEqual(cachedTitle.skillUsages);
   });
 });

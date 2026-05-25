@@ -119,6 +119,60 @@ function mergeWorktreesByPath(current: Worktree[], updates: Worktree[]): Worktre
 }
 
 /**
+ * セッションタイトルの同一性を表すキーを作る
+ */
+function buildTitleEntryIdentity(entry: WorktreeTitle): string {
+  const sessionPath = entry.sessionPath?.trim();
+  if (sessionPath) {
+    return `path:${sessionPath}`;
+  }
+  return `fallback:${entry.sessionKind}:${entry.updatedAt}:${entry.title}`;
+}
+
+/**
+ * 空の再読込結果で既存のスキル履歴を一時的に消さないようにする
+ */
+function mergeTitleEntrySkillUsages(current: WorktreeTitle | undefined, update: WorktreeTitle): WorktreeTitle {
+  if ((update.skillUsages?.length ?? 0) > 0 || (current?.skillUsages?.length ?? 0) === 0) {
+    return update;
+  }
+  return { ...update, skillUsages: current?.skillUsages };
+}
+
+/**
+ * セッションタイトル配列を更新しつつ既存の非空スキル履歴を保持する
+ */
+function mergeTitleEntries(
+  current: WorktreeTitle[] | undefined,
+  updates: WorktreeTitle[] | undefined,
+): WorktreeTitle[] | undefined {
+  if (updates === undefined) {
+    return current;
+  }
+  if (updates.length === 0) {
+    return updates;
+  }
+  const currentByIdentity = new Map((current ?? []).map((entry) => [buildTitleEntryIdentity(entry), entry]));
+  return updates.map((entry) =>
+    mergeTitleEntrySkillUsages(currentByIdentity.get(buildTitleEntryIdentity(entry)), entry),
+  );
+}
+
+/**
+ * path 別タイトル一覧を更新しつつ既存の非空スキル履歴を保持する
+ */
+function mergeTitlesByPath(
+  current: Map<string, WorktreeTitle[]>,
+  updates: Map<string, WorktreeTitle[]>,
+): Map<string, WorktreeTitle[]> {
+  const next = new Map<string, WorktreeTitle[]>();
+  for (const [path, entries] of updates) {
+    next.set(path, mergeTitleEntries(current.get(path), entries) ?? []);
+  }
+  return next;
+}
+
+/**
  * path をキーにして titleEntries だけを既存一覧へ反映する
  */
 function mergeWorktreeTitlesByPath(current: Worktree[], updates: Worktree[]): Worktree[] {
@@ -131,7 +185,7 @@ function mergeWorktreeTitlesByPath(current: Worktree[], updates: Worktree[]): Wo
     if (!update) {
       return item;
     }
-    return { ...item, titleEntries: update.titleEntries };
+    return { ...item, titleEntries: mergeTitleEntries(item.titleEntries, update.titleEntries) };
   });
 }
 
@@ -364,7 +418,7 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
       }
       updateState((current) => ({
         ...current,
-        titlesByPath: snapshot.titlesByPath,
+        titlesByPath: mergeTitlesByPath(current.titlesByPath, snapshot.titlesByPath),
         worktrees: mergeWorktreeTitlesByPath(current.worktrees, snapshot.worktrees),
       }));
     } catch {
