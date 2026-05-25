@@ -89,6 +89,8 @@
     "dev": "RAY_Target=x ray develop",
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",
+    "screenshots:setup-demo": "node scripts/setup-store-screenshot-demo.mjs",
+    "screenshots:verify": "node scripts/verify-metadata-images.mjs",
     "unused": "knip",
     "test": "vitest",
     "test:run": "vitest run",
