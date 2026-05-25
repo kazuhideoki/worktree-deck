@@ -558,7 +558,7 @@ function formatBaseRefMetaLabel(
 }
 
 /**
- * 詳細表示用の固定タイトルエントリを解決する
+ * 詳細表示で最新状態を読むセッションエントリを解決する
  */
 function resolvePinnedTitleEntry(titles: WorktreeTitle[]): WorktreeTitle | null {
   const latest = titles[0];
@@ -569,6 +569,47 @@ function resolvePinnedTitleEntry(titles: WorktreeTitle[]): WorktreeTitle | null 
     (entry) => entry.sessionKind !== "review" && entry.sessionKind !== "reviewSubagent",
   );
   return latestNonReview ?? latest;
+}
+
+/**
+ * 詳細表示で固定タイトルとして使う初回通常セッションを解決する
+ */
+function resolveInitialMainTitleEntry(titles: WorktreeTitle[]): WorktreeTitle | null {
+  const mainTitles = titles.filter((entry) => entry.sessionKind === "main");
+  if (mainTitles.length === 0) {
+    return null;
+  }
+  return (
+    [...mainTitles].sort((left, right) => {
+      const leftStartedAt = left.startedAt ?? left.updatedAt;
+      const rightStartedAt = right.startedAt ?? right.updatedAt;
+      if (leftStartedAt !== rightStartedAt) {
+        return leftStartedAt - rightStartedAt;
+      }
+      if (left.updatedAt !== right.updatedAt) {
+        return left.updatedAt - right.updatedAt;
+      }
+      return left.title.localeCompare(right.title);
+    })[0] ?? null
+  );
+}
+
+/**
+ * 詳細表示用エントリを最新状態と初回タイトルから組み立てる
+ */
+function resolveDetailTitleEntry(titles: WorktreeTitle[]): WorktreeTitle | null {
+  const pinnedTitle = resolvePinnedTitleEntry(titles);
+  if (!pinnedTitle) {
+    return null;
+  }
+  const initialTitle = resolveInitialMainTitleEntry(titles);
+  if (!initialTitle || initialTitle.title === pinnedTitle.title) {
+    return pinnedTitle;
+  }
+  return {
+    ...pinnedTitle,
+    title: initialTitle.title,
+  };
 }
 
 /**
@@ -600,7 +641,7 @@ export function buildDetailMarkdown({
   useLastCommitSeparator?: boolean;
 }): string {
   void openApp;
-  const pinnedTitle = resolvePinnedTitleEntry(titles);
+  const detailTitle = resolveDetailTitleEntry(titles);
   const lines: string[] = [];
   if (mergeStatus != null) {
     const metaLine = formatWorktreeMetaLine({
@@ -622,8 +663,8 @@ export function buildDetailMarkdown({
     }
   }
   const gitStatus = lines.length > 0 ? lines.join("\n") : null;
-  if (pinnedTitle) {
-    return formatTitleEntry(pinnedTitle, gitStatus);
+  if (detailTitle) {
+    return formatTitleEntry(detailTitle, gitStatus);
   }
   return formatTitleEntry(
     {

@@ -20,6 +20,7 @@ function buildTitleEntry(args: {
   title: string;
   latestMessage: string | null;
   updatedAt: number;
+  startedAt?: number | null;
   status?: "working" | "done" | null;
   sessionKind?: WorktreeTitle["sessionKind"];
   isWaitingForUser?: boolean;
@@ -29,6 +30,7 @@ function buildTitleEntry(args: {
     title: args.title,
     latestMessage: args.latestMessage,
     updatedAt: args.updatedAt,
+    startedAt: args.startedAt,
     status: args.status ?? null,
     sessionKind: args.sessionKind ?? "main",
     isWaitingForUser: args.isWaitingForUser,
@@ -132,6 +134,40 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       ["| 📝 | Implement feature |", "| --- | --- |", "| 🌿 | No git status |", "| 🧰 | None |", "", "Done"].join("\n"),
+    );
+  });
+
+  it("複数通常セッションがある場合も詳細タイトルは初回タイトルを維持する", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [
+        buildTitleEntry({
+          title: "Second session title",
+          latestMessage: "New session is running",
+          updatedAt: 300,
+          startedAt: 200,
+          skillUsages: [{ name: "imagegen", timestamp: "2026-05-03T10:00:00.000Z" }],
+        }),
+        buildTitleEntry({
+          title: "First session title",
+          latestMessage: "Old message",
+          updatedAt: 150,
+          startedAt: 100,
+          skillUsages: [{ name: "github:yeet", timestamp: "2026-05-03T09:00:00.000Z" }],
+        }),
+      ],
+    });
+
+    expect(markdown).toBe(
+      [
+        "| 📝 | First session title |",
+        "| --- | --- |",
+        "| 🌿 | No git status |",
+        "| 🧰 | `imagegen` |",
+        "",
+        "New session is running",
+      ].join("\n"),
     );
   });
 
