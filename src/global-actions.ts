@@ -1,11 +1,7 @@
 /**
  * グローバルで使えるアクションの識別子
  */
-export type GlobalActionId =
-  | "reload-worktrees"
-  | "create-worktree"
-  | "restore-deleted-worktree"
-  | "repository-settings";
+export type GlobalActionId = "reload-worktrees" | "create-worktree" | "restore-deleted-worktree" | "settings";
 
 /**
  * グローバルアクションの定義
@@ -37,8 +33,8 @@ export function buildGlobalActionItems(): GlobalActionItem[] {
       shortcut: { modifiers: ["cmd", "shift"], key: "r" },
     },
     {
-      id: "repository-settings",
-      title: "Repository Settings",
+      id: "settings",
+      title: "Settings",
       shortcut: { modifiers: ["cmd", "shift"], key: "," },
     },
   ];

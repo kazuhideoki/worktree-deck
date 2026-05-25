@@ -29,6 +29,7 @@ import {
   resolveCodexSessionOpenPlan,
 } from "./components/codex-session-select-view";
 import { RepositoryMappingManager } from "./components/repository-mapping-manager";
+import { SettingsView } from "./components/settings-view";
 import {
   buildWorktreeDeckDisplayCache,
   hasWorktreeDeckDisplayCacheData,
@@ -427,7 +428,7 @@ export default function Command() {
   const reloadWorktreesAction = globalActionById.get("reload-worktrees");
   const createWorktreeAction = globalActionById.get("create-worktree");
   const restoreDeletedWorktreeAction = globalActionById.get("restore-deleted-worktree");
-  const repositorySettingsAction = globalActionById.get("repository-settings");
+  const settingsAction = globalActionById.get("settings");
   const hasVisibleContent = visibleSections.length > 0;
   const isRepositoryMappingOnboardingEmptyState = shouldShowRepositoryMappingOnboardingEmptyState({
     searchText,
@@ -1329,7 +1330,7 @@ export default function Command() {
               onAction={handleReloadWorktrees}
             />
           ) : null}
-          {!createWorktreeAction || !restoreDeletedWorktreeAction || !repositorySettingsAction ? null : (
+          {!createWorktreeAction || !restoreDeletedWorktreeAction || !settingsAction ? null : (
             <>
               {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
               <Action.Push
@@ -1340,10 +1341,10 @@ export default function Command() {
                 onPop={handleCreatePop}
               />
               <Action.Push
-                title={repositorySettingsAction.title}
+                title={settingsAction.title}
                 icon={Icon.Gear}
-                shortcut={repositorySettingsAction.shortcut}
-                target={<RepositoryMappingManager onChange={handleRepositoryMappingChange} />}
+                shortcut={settingsAction.shortcut}
+                target={<SettingsView onRepositoryMappingChange={handleRepositoryMappingChange} />}
                 onPop={handleCreatePop}
               />
             </>
@@ -1358,8 +1359,8 @@ export default function Command() {
       handleRepositoryMappingChange,
       refreshWorktrees,
       reloadWorktreesAction,
-      repositorySettingsAction,
       renderCreateWorktreeAction,
+      settingsAction,
       restoreDeletedWorktreeAction,
       setDisplayMode,
     ],
@@ -1369,7 +1370,7 @@ export default function Command() {
    * 初回 repository 追加アクションを描画する
    */
   const renderAddRepositoryMappingAction = useCallback(() => {
-    if (!repositorySettingsAction) {
+    if (!settingsAction) {
       return null;
     }
     return (
@@ -1380,7 +1381,7 @@ export default function Command() {
         onPop={handleCreatePop}
       />
     );
-  }, [handleCreatePop, handleRepositoryMappingChange, repositorySettingsAction]);
+  }, [handleCreatePop, handleRepositoryMappingChange, settingsAction]);
 
   /**
    * 選択中アイテムの詳細ペイン表示位置を更新する
