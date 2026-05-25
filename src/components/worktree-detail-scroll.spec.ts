@@ -77,4 +77,62 @@ describe("worktree detail scroll", () => {
   it("スクロール位置を反映した Markdown を返す", () => {
     expect(buildScrollableDetailMarkdown(DETAIL_MARKDOWN, 4)).toBe(["line 1", "line 2"].join("\n"));
   });
+
+  it("本文中の Markdown テーブル途中へスクロールしてもプレビュー用のヘッダーを残す", () => {
+    const markdown = [
+      "| 📝 | title |",
+      "| --- | --- |",
+      "| 🌿 | main |",
+      "",
+      "before",
+      "| 依存 | 扱い | 挙動 |",
+      "| --- | --- | --- |",
+      "| git | ほぼ必須 | Git is required. |",
+      "| gh | PR 作成時だけ必須 | GitHub CLI is required. |",
+      "",
+      "after",
+    ].join("\n");
+
+    expect(buildScrollableDetailMarkdown(markdown, 7)).toBe(
+      [
+        "| 依存 | 扱い | 挙動 |",
+        "| --- | --- | --- |",
+        "| git | ほぼ必須 | Git is required. |",
+        "| gh | PR 作成時だけ必須 | GitHub CLI is required. |",
+        "",
+        "after",
+      ].join("\n"),
+    );
+  });
+
+  it("本文中の Markdown テーブル区切り行へスクロールした場合は先頭データ行から表示する", () => {
+    const markdown = [
+      "before",
+      "| 依存 | 扱い | 挙動 |",
+      "| --- | --- | --- |",
+      "| git | ほぼ必須 | Git is required. |",
+    ].join("\n");
+
+    expect(buildScrollableDetailMarkdown(markdown, 2)).toBe(
+      ["| 依存 | 扱い | 挙動 |", "| --- | --- | --- |", "| git | ほぼ必須 | Git is required. |"].join("\n"),
+    );
+  });
+
+  it("外枠のない Markdown テーブル途中へスクロールしても表として表示する", () => {
+    const markdown = [
+      "before",
+      "依存 | 扱い | 挙動",
+      "--- | --- | ---",
+      "git | ほぼ必須 | Git is required.",
+      "gh | PR 作成時だけ必須 | GitHub CLI is required.",
+      "",
+      "after",
+    ].join("\n");
+
+    expect(buildScrollableDetailMarkdown(markdown, 4)).toBe(
+      ["依存 | 扱い | 挙動", "--- | --- | ---", "gh | PR 作成時だけ必須 | GitHub CLI is required.", "", "after"].join(
+        "\n",
+      ),
+    );
+  });
 });
