@@ -86,6 +86,14 @@ async function flushAsyncTasks(): Promise<void> {
 }
 
 /**
+ * Promise chain だけを進める
+ */
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+/**
  * store 読み込みリクエストを作る
  */
 function buildRequest(
@@ -262,6 +270,93 @@ describe("createWorktreeDeckDataStore", () => {
     expect(store.getSnapshot().listedWorktrees).toEqual([cachedWorktree]);
     expect(request.dependencies.titlesSnapshot.loadTitlesForPaths).toHaveBeenCalledTimes(1);
     expect(request.dependencies.detailsSnapshot.loadWorktreeMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  it("fresh scan の初期 snapshot で表示中の Git 状態を古い表示キャッシュへ巻き戻さない", async () => {
+    const store = createWorktreeDeckDataStore();
+    const worktreePath = "/worktrees/repo~_~feature-a";
+    const staleWorktree = {
+      ...buildWorktree(worktreePath),
+      mergeStatus: "dirty" as const,
+      baseRef: "stale-base",
+      aheadCount: null,
+      behindCount: null,
+    };
+    const freshWorktree = buildWorktree(worktreePath);
+    const freshListDeferred = createDeferred<ListWorktreesResultForTest>();
+    const secondDetailsDeferred = createDeferred<Worktree[]>();
+    const listWorktrees = vi
+      .fn()
+      .mockResolvedValueOnce({
+        basePath: "/worktrees",
+        mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
+        worktrees: [freshWorktree],
+        isCacheHit: true,
+      })
+      .mockReturnValueOnce(freshListDeferred.promise);
+    const request = buildRequest({ listWorktrees });
+    vi.mocked(request.dependencies.initialSnapshot.restoreDisplayCache).mockImplementation((input) => ({
+      worktrees: input.worktrees.map((item) => ({ ...item, ...staleWorktree })),
+      titlesByPath: new Map(),
+      originLastCommitByPath: new Map(),
+      originBranchByPath: new Map(),
+      openAppMetaByPath: new Map(),
+    }));
+    vi.mocked(request.dependencies.detailsSnapshot.loadWorktreeMetadata)
+      .mockResolvedValueOnce([
+        {
+          ...freshWorktree,
+          mergeStatus: "synced",
+          baseRef: "main",
+          lastCommitAt: "2026-05-24 10:00",
+        },
+      ])
+      .mockReturnValueOnce(secondDetailsDeferred.promise);
+    vi.mocked(request.dependencies.detailsSnapshot.loadAheadBehindCounts).mockResolvedValue({
+      aheadCount: 0,
+      behindCount: 0,
+    });
+
+    await store.ensureLoaded(request);
+    await flushAsyncTasks();
+
+    expect(store.getSnapshot().worktrees[0]).toMatchObject({
+      mergeStatus: "synced",
+      baseRef: "main",
+      aheadCount: 0,
+      behindCount: 0,
+    });
+
+    freshListDeferred.resolve({
+      basePath: "/worktrees",
+      mappings: [{ repoRoot: "/repo", mapValue: "repo" }],
+      worktrees: [freshWorktree],
+      isCacheHit: false,
+    });
+    await flushMicrotasks();
+
+    expect(store.getSnapshot().worktrees[0]).toMatchObject({
+      mergeStatus: "synced",
+      baseRef: "main",
+      aheadCount: 0,
+      behindCount: 0,
+    });
+
+    secondDetailsDeferred.resolve([
+      {
+        ...freshWorktree,
+        mergeStatus: "dirty",
+        baseRef: "main",
+      },
+    ]);
+    await flushAsyncTasks();
+
+    expect(store.getSnapshot().worktrees[0]).toMatchObject({
+      mergeStatus: "dirty",
+      baseRef: "main",
+      aheadCount: null,
+      behindCount: null,
+    });
   });
 
   it("初期ロード中に origin 表示へ切り替えた場合は origin 込みの後続ロードを実行する", async () => {

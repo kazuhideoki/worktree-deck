@@ -119,6 +119,33 @@ function mergeWorktreesByPath(current: Worktree[], updates: Worktree[]): Worktre
 }
 
 /**
+ * 値が未取得に戻る初期 snapshot で表示中の worktree 詳細を巻き戻さない
+ */
+function mergeInitialWorktreeDisplayState(current: Worktree[], updates: Worktree[]): Worktree[] {
+  if (current.length === 0 || updates.length === 0) {
+    return updates;
+  }
+  const currentByPath = new Map(current.map((item) => [item.path, item]));
+  return updates.map((item) => {
+    const currentItem = currentByPath.get(item.path);
+    if (!currentItem) {
+      return item;
+    }
+    return {
+      ...item,
+      titleEntries: currentItem.titleEntries !== undefined ? currentItem.titleEntries : item.titleEntries,
+      mergeStatus: currentItem.mergeStatus !== undefined ? currentItem.mergeStatus : item.mergeStatus,
+      mergeStatusError:
+        currentItem.mergeStatusError !== undefined ? currentItem.mergeStatusError : item.mergeStatusError,
+      lastCommitAt: currentItem.lastCommitAt !== undefined ? currentItem.lastCommitAt : item.lastCommitAt,
+      baseRef: currentItem.baseRef !== undefined ? currentItem.baseRef : item.baseRef,
+      aheadCount: currentItem.aheadCount !== undefined ? currentItem.aheadCount : item.aheadCount,
+      behindCount: currentItem.behindCount !== undefined ? currentItem.behindCount : item.behindCount,
+    };
+  });
+}
+
+/**
  * セッションタイトルの同一性を表すキーを作る
  */
 function buildTitleEntryIdentity(entry: WorktreeTitle): string {
@@ -168,6 +195,47 @@ function mergeTitlesByPath(
   const next = new Map<string, WorktreeTitle[]>();
   for (const [path, entries] of updates) {
     next.set(path, mergeTitleEntries(current.get(path), entries) ?? []);
+  }
+  return next;
+}
+
+/**
+ * 初期 snapshot で既存のタイトル表示を一時的に巻き戻さない
+ */
+function mergeInitialTitlesByPath(
+  current: Map<string, WorktreeTitle[]>,
+  updates: Map<string, WorktreeTitle[]>,
+): Map<string, WorktreeTitle[]> {
+  if (current.size === 0) {
+    return updates;
+  }
+  if (updates.size === 0) {
+    return current;
+  }
+  const next = new Map<string, WorktreeTitle[]>();
+  for (const [path, entries] of updates) {
+    const currentEntries = current.get(path);
+    next.set(path, currentEntries && currentEntries.length > 0 ? currentEntries : entries);
+  }
+  return next;
+}
+
+/**
+ * 初期 snapshot で既存の path 別メタ情報を一時的に巻き戻さない
+ */
+function mergeInitialMapByPath<TValue>(
+  current: Map<string, TValue>,
+  updates: Map<string, TValue>,
+): Map<string, TValue> {
+  if (current.size === 0) {
+    return updates;
+  }
+  if (updates.size === 0) {
+    return current;
+  }
+  const next = new Map<string, TValue>();
+  for (const [path, value] of updates) {
+    next.set(path, current.has(path) ? (current.get(path) as TValue) : value);
   }
   return next;
 }
@@ -257,19 +325,34 @@ export function createWorktreeDeckDataStore(): WorktreeDeckDataStore {
     hasLoadedInitialSnapshot = true;
     lastIncludeOriginEntries = request.includeOriginEntries;
     request.logWorktreeNames(snapshot.listedWorktrees);
-    updateState((current) => ({
-      ...current,
-      basePath: snapshot.basePath,
-      worktrees: snapshot.worktrees,
-      listedWorktrees: snapshot.listedWorktrees,
-      repositoryMappings: snapshot.mappings,
-      originLastCommitByPath: snapshot.originLastCommitByPath,
-      originBranchByPath: snapshot.originBranchByPath,
-      openAppMetaByPath: snapshot.openAppMetaByPath,
-      titlesByPath: snapshot.titlesByPath,
-      errorMessage: null,
-      isLoading: false,
-    }));
+    updateState((current) => {
+      const canPreserveDisplayState = current.basePath === snapshot.basePath;
+      return {
+        ...current,
+        basePath: snapshot.basePath,
+        worktrees: canPreserveDisplayState
+          ? mergeInitialWorktreeDisplayState(current.worktrees, snapshot.worktrees)
+          : snapshot.worktrees,
+        listedWorktrees: snapshot.listedWorktrees,
+        repositoryMappings: snapshot.mappings,
+        originLastCommitByPath: canPreserveDisplayState
+          ? mergeInitialMapByPath(current.originLastCommitByPath, snapshot.originLastCommitByPath)
+          : snapshot.originLastCommitByPath,
+        originBranchByPath: canPreserveDisplayState
+          ? mergeInitialMapByPath(current.originBranchByPath, snapshot.originBranchByPath)
+          : snapshot.originBranchByPath,
+        openAppMetaByPath: canPreserveDisplayState
+          ? snapshot.openAppMetaByPath.size > 0
+            ? snapshot.openAppMetaByPath
+            : current.openAppMetaByPath
+          : snapshot.openAppMetaByPath,
+        titlesByPath: canPreserveDisplayState
+          ? mergeInitialTitlesByPath(current.titlesByPath, snapshot.titlesByPath)
+          : snapshot.titlesByPath,
+        errorMessage: null,
+        isLoading: false,
+      };
+    });
   };
 
   /**
