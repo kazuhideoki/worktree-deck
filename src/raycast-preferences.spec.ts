@@ -72,10 +72,10 @@ describe("raycast-preferences", () => {
     });
   });
 
-  it("manifest の menu-bar interval は公開用の分単位にする", async () => {
+  it("manifest の menu-bar interval はセッション状態を素早く反映する", async () => {
     const manifest = await loadManifest();
     const command = manifest.commands.find((entry) => entry.name === "worktree-status-menu-bar");
 
-    expect(command?.interval).toBe("1m");
+    expect(command?.interval).toBe("10s");
   });
 });

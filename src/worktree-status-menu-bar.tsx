@@ -1,7 +1,8 @@
-import { Color, Icon, MenuBarExtra, environment, openExtensionPreferences } from "@raycast/api";
+import { Color, Icon, LocalStorage, MenuBarExtra, environment, openExtensionPreferences } from "@raycast/api";
 import { useEffect, useState } from "react";
 
 import { listWorktreesUsecase } from "./application/list-worktrees.usecase";
+import type { LoadWorktreeDeckTitlesSnapshotDependencies } from "./application/worktree-deck-snapshot.usecase";
 import { resolveWorktreeDeckCompositionRoot, type Worktree, type WorktreeTitle } from "./composition-root";
 import { applyRaycastPreferencesToProcessEnv } from "./raycast-preferences";
 import {
@@ -17,6 +18,28 @@ const EMPTY_SUMMARY: WorktreeMenuBarStatusSummary = {
   blue: 0,
   green: 0,
   yellow: 0,
+};
+
+/**
+ * メニューバーの直近正常値を保存する LocalStorage キー
+ */
+const LAST_SUMMARY_STORAGE_KEY = "worktree-deck.menu-bar.last-summary.v1";
+
+/**
+ * メニューバー状態の読み込み結果
+ */
+export type WorktreeMenuBarSummarySnapshot = {
+  summary: WorktreeMenuBarStatusSummary;
+  total: number;
+};
+
+/**
+ * メニューバー状態読み込みに必要な依存
+ */
+export type WorktreeMenuBarSummaryDependencies = {
+  listWorktrees: typeof listWorktreesUsecase.list;
+  loadTitlesForPaths: LoadWorktreeDeckTitlesSnapshotDependencies["loadTitlesForPaths"];
+  saveLastSummary(snapshot: WorktreeMenuBarSummarySnapshot): Promise<void>;
 };
 
 /**
@@ -40,16 +63,63 @@ function buildMenuBarItems(args: {
 }
 
 /**
+ * 保存済みメニューバー状態を型安全に正規化する
+ */
+export function normalizeStoredWorktreeMenuBarSummary(raw: unknown): WorktreeMenuBarSummarySnapshot | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const value = raw as Record<string, unknown>;
+  const summary = value.summary;
+  const total = value.total;
+  if (!summary || typeof summary !== "object" || Array.isArray(summary) || typeof total !== "number") {
+    return null;
+  }
+  const summaryValue = summary as Record<string, unknown>;
+  const blue = summaryValue.blue;
+  const green = summaryValue.green;
+  const yellow = summaryValue.yellow;
+  if (typeof blue !== "number" || typeof green !== "number" || typeof yellow !== "number") {
+    return null;
+  }
+  return {
+    summary: { blue, green, yellow },
+    total,
+  };
+}
+
+/**
+ * 直近正常値を保存する
+ */
+export async function saveStoredWorktreeMenuBarSummary(snapshot: WorktreeMenuBarSummarySnapshot): Promise<void> {
+  await LocalStorage.setItem(LAST_SUMMARY_STORAGE_KEY, JSON.stringify(snapshot));
+}
+
+/**
+ * 直近正常値を読み込む
+ */
+export async function loadStoredWorktreeMenuBarSummary(): Promise<WorktreeMenuBarSummarySnapshot | null> {
+  const raw = await LocalStorage.getItem<string>(LAST_SUMMARY_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeStoredWorktreeMenuBarSummary(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * メニューバーに表示する worktree 状態を取得する
  */
-async function loadWorktreeMenuBarSummary(): Promise<{
-  summary: WorktreeMenuBarStatusSummary;
-  total: number;
-}> {
+export async function loadWorktreeMenuBarSummaryWithDependencies(args: {
+  dependencies: WorktreeMenuBarSummaryDependencies;
+}): Promise<WorktreeMenuBarSummarySnapshot> {
   applyRaycastPreferencesToProcessEnv();
 
   const homeDir = process.env.HOME?.trim() ?? null;
-  const listed = await listWorktreesUsecase.list({
+  const listed = await args.dependencies.listWorktrees({
     context: {
       env: process.env,
       cwd: process.cwd(),
@@ -59,25 +129,40 @@ async function loadWorktreeMenuBarSummary(): Promise<{
       packageName: "worktree-deck",
     },
     dependencies: WORKTREE_DECK_COMPOSITION_ROOT.listWorktreesDependencies,
+    options: { preferCache: false },
   });
-  const titlesByPath =
-    await WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckTitlesSnapshotDependencies.loadTitlesForPaths({
-      paths: listed.worktrees.map((item) => item.path),
-      env: process.env,
-      cwd: process.cwd(),
-      homeDir,
-      assetsPath: environment.assetsPath,
-      packageDir: __dirname,
-      packageName: "worktree-deck",
-    });
+  const titlesByPath = await args.dependencies.loadTitlesForPaths({
+    paths: listed.worktrees.map((item) => item.path),
+    env: process.env,
+    cwd: process.cwd(),
+    homeDir,
+    assetsPath: environment.assetsPath,
+    packageDir: __dirname,
+    packageName: "worktree-deck",
+  });
   const menuBarItems = buildMenuBarItems({
     worktrees: listed.worktrees,
     titlesByPath,
   });
-  return {
+  const snapshot = {
     summary: worktreeMenuBarStatusService.summarize(menuBarItems),
     total: listed.worktrees.length,
   };
+  await args.dependencies.saveLastSummary(snapshot);
+  return snapshot;
+}
+
+/**
+ * 既定依存でメニューバー状態を取得する
+ */
+async function loadWorktreeMenuBarSummary(): Promise<WorktreeMenuBarSummarySnapshot> {
+  return loadWorktreeMenuBarSummaryWithDependencies({
+    dependencies: {
+      listWorktrees: listWorktreesUsecase.list,
+      loadTitlesForPaths: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckTitlesSnapshotDependencies.loadTitlesForPaths,
+      saveLastSummary: saveStoredWorktreeMenuBarSummary,
+    },
+  });
 }
 
 /**
@@ -101,13 +186,19 @@ export default function Command() {
         setTotal(result.total);
         setErrorMessage(null);
       })
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
         if (cancelled) {
           return;
         }
         const message = error instanceof Error ? error.message : "Unknown error";
-        setSummary(EMPTY_SUMMARY);
-        setTotal(0);
+        const lastLoaded = await loadStoredWorktreeMenuBarSummary();
+        if (cancelled) {
+          return;
+        }
+        if (lastLoaded) {
+          setSummary(lastLoaded.summary);
+          setTotal(lastLoaded.total);
+        }
         setErrorMessage(message);
       })
       .finally(() => {
