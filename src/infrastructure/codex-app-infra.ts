@@ -2,11 +2,12 @@ import { execFile } from "node:child_process";
 import { delimiter } from "node:path";
 import { promisify } from "node:util";
 import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
+import { normalizeExternalCommandError } from "./external-command-error";
 
 /**
  * execFile を Promise 化した互換関数
  */
-type ExecFileImpl = (file: string, args: string[]) => Promise<unknown>;
+type ExecFileImpl = (file: string, args: string[], options?: Parameters<typeof execFileAsync>[2]) => Promise<unknown>;
 
 /**
  * codex コマンドを Promise で扱うラッパー
@@ -32,19 +33,23 @@ function buildCommandPath(currentPath?: string): string {
 /**
  * Codex App で指定パスを開く
  */
-export async function openPathInCodexApp(path: string): Promise<void> {
+export async function openPathInCodexApp(path: string, execFileImpl: ExecFileImpl = execFileAsync): Promise<void> {
   const trimmedPath = path.trim();
   if (!trimmedPath) {
     throw new Error("Worktree path is required.");
   }
   const envPath = buildCommandPath(process.env.PATH);
-  await execFileAsync("codex", ["app", trimmedPath], {
-    cwd: trimmedPath,
-    env: {
-      ...process.env,
-      PATH: envPath,
-    },
-  });
+  try {
+    await execFileImpl("codex", ["app", trimmedPath], {
+      cwd: trimmedPath,
+      env: {
+        ...process.env,
+        PATH: envPath,
+      },
+    });
+  } catch (error) {
+    throw normalizeExternalCommandError(error, "codex", "codex-action");
+  }
 }
 
 /**

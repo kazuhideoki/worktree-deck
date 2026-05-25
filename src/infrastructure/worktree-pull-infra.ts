@@ -11,6 +11,7 @@ import {
   createPullWorktreeDependencies,
   type WorktreePullInfra,
 } from "../interface-adapters/worktree-pull-dependencies";
+import { isMissingExternalCommandError, normalizeExternalCommandError } from "./external-command-error";
 
 /**
  * git コマンドを Promise で扱うラッパー
@@ -94,11 +95,14 @@ export async function pullWorktree(plan: WorktreePullPlan): Promise<WorktreePull
  */
 async function readCurrentBranch(worktreePath: string): Promise<string | null> {
   try {
-    const result = await execFileAsync("git", ["-C", worktreePath, "symbolic-ref", "--quiet", "--short", "HEAD"]);
+    const result = await execGit(worktreePath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
     const { stdout } = normalizeExecResult(result);
     const ref = stdout.trim();
     return ref || null;
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return null;
   }
 }
@@ -108,18 +112,14 @@ async function readCurrentBranch(worktreePath: string): Promise<string | null> {
  */
 async function readUpstreamTrackingRef(worktreePath: string): Promise<string | null> {
   try {
-    const result = await execFileAsync("git", [
-      "-C",
-      worktreePath,
-      "rev-parse",
-      "--abbrev-ref",
-      "--symbolic-full-name",
-      "@{u}",
-    ]);
+    const result = await execGit(worktreePath, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
     const { stdout } = normalizeExecResult(result);
     const ref = stdout.trim();
     return ref || null;
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return null;
   }
 }
@@ -128,5 +128,16 @@ async function readUpstreamTrackingRef(worktreePath: string): Promise<string | n
  * worktree で pull を実行する
  */
 async function pullFromUpstream(worktreePath: string): Promise<void> {
-  await execFileAsync("git", ["-C", worktreePath, "pull"], { cwd: worktreePath });
+  await execGit(worktreePath, ["pull"]);
+}
+
+/**
+ * git コマンドを worktree で実行する
+ */
+async function execGit(worktreePath: string, gitArgs: string[]): Promise<unknown> {
+  try {
+    return await execFileAsync("git", ["-C", worktreePath, ...gitArgs], { cwd: worktreePath });
+  } catch (error) {
+    throw normalizeExternalCommandError(error, "git", "git-worktree");
+  }
 }

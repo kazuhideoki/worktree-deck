@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { expandHomePath, normalizePathValue } from "../domain/path-utils";
 import { worktreeBaseRefService } from "../domain/worktree-base-ref.service";
 import { worktreeCreateService } from "../domain/worktree-create.service";
+import { isMissingExternalCommandError, normalizeExternalCommandError } from "./external-command-error";
 import { resolveOriginRepoPath } from "./git-worktree-metadata-store";
 
 const execFileAsync = promisify(execFile);
@@ -98,8 +99,12 @@ async function resolveWorktreeDestination(args: { mapValue?: string; branch: str
  * git コマンドを対象リポジトリで実行する
  */
 async function execGit(repoRoot: string, gitArgs: string[]): Promise<{ stdout: string; stderr: string }> {
-  const { stdout, stderr } = await execFileAsync("git", ["-C", repoRoot, ...gitArgs], { cwd: repoRoot });
-  return { stdout, stderr };
+  try {
+    const { stdout, stderr } = await execFileAsync("git", ["-C", repoRoot, ...gitArgs], { cwd: repoRoot });
+    return { stdout, stderr };
+  } catch (error) {
+    throw normalizeExternalCommandError(error, "git", "git-worktree");
+  }
 }
 
 /**
@@ -187,7 +192,10 @@ async function localBranchExists(args: { repoRoot: string; branch: string }): Pr
   try {
     await execGit(args.repoRoot, ["show-ref", "--verify", `refs/heads/${args.branch}`]);
     return true;
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return false;
   }
 }
@@ -322,11 +330,7 @@ export async function createWorktree(args: {
  * ローカルブランチ一覧を取得してソートする
  */
 export async function listLocalBranches(repoRoot: string): Promise<string[]> {
-  const { stdout } = await execFileAsync(
-    "git",
-    ["-C", repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads"],
-    { cwd: repoRoot },
-  );
+  const { stdout } = await execGit(repoRoot, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]);
   return stdout
     .split(/\r?\n/)
     .map((entry) => entry.trim())

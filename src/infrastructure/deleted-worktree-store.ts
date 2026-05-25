@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import type { DeletedWorktreeEntry } from "../application/deleted-worktrees.usecase";
 import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
 import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
+import { isMissingExternalCommandError, normalizeExternalCommandError } from "./external-command-error";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 
 const execFileAsync = promisify(execFile);
@@ -149,11 +150,23 @@ export async function checkDeletedWorktreeLocalBranchExists(args: {
   branch: string;
 }): Promise<boolean> {
   try {
-    await execFileAsync("git", ["-C", args.repoRoot, "show-ref", "--verify", `refs/heads/${args.branch}`], {
-      cwd: args.repoRoot,
-    });
+    await execGit(args.repoRoot, ["show-ref", "--verify", `refs/heads/${args.branch}`]);
     return true;
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return false;
+  }
+}
+
+/**
+ * git コマンドを対象リポジトリで実行する
+ */
+async function execGit(repoRoot: string, gitArgs: string[]): Promise<void> {
+  try {
+    await execFileAsync("git", ["-C", repoRoot, ...gitArgs], { cwd: repoRoot });
+  } catch (error) {
+    throw normalizeExternalCommandError(error, "git", "git-worktree");
   }
 }

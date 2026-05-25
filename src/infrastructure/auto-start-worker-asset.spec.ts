@@ -30,4 +30,14 @@ describe("auto_start_worker.js", () => {
     expect(source).toContain("name: normalizedTitle");
     expect(source).toContain('"Failed to set Codex thread title"');
   });
+
+  it("外部依存未導入時の英語案内文を state に残せる", async () => {
+    const source = await readAutoStartWorkerAsset();
+
+    expect(source).toContain("Git is required to manage worktrees. Install Git and ensure it is available in PATH.");
+    expect(source).toContain(
+      "Codex CLI is required for Codex actions. Install Codex and ensure it is available in PATH.",
+    );
+    expect(source).toContain("normalizeMissingCommandError(error, command)");
+  });
 });

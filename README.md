@@ -23,10 +23,12 @@ Defaults are provided for the required preferences, so the extension can start w
 ## Requirements
 
 - Raycast
-- git
-- gh, when using pull request actions
-- bash
-- rsync
+- Git, for worktree listing and worktree operations
+- Codex CLI, when using Auto Start or Codex App actions
+- GitHub CLI (`gh`), when creating pull requests
+- Zed, VS Code, or Cursor, only when opening a worktree in that IDE
+
+Missing optional tools are reported when you use the related action. The main worktree list does not require `gh` or an IDE to be installed.
 
 ## Development
 

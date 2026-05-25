@@ -3,9 +3,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resolveFirstCommitTitle } from "./worktree-pr-infra";
+import { createDefaultCreateWorktreePullRequestDependencies, resolveFirstCommitTitle } from "./worktree-pr-infra";
 
 /**
  * execFile を Promise 化したもの
@@ -88,5 +88,30 @@ describe("resolveFirstCommitTitle", () => {
     const title = await resolveFirstCommitTitle({ repoRoot, baseRef: "main", headRef: "feature/empty" });
 
     expect(title).toBeNull();
+  });
+});
+
+describe("createWorktreePullRequest", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("gh が見つからない場合は PR 作成用の案内エラーで失敗する", async () => {
+    vi.stubEnv("PATH", "/path/without-gh");
+    const dependencies = createDefaultCreateWorktreePullRequestDependencies();
+
+    await expect(
+      dependencies.createWorktreePullRequest({
+        repoRoot: "/repos/app",
+        worktreePath: "/worktrees/app",
+        baseRef: "origin/main",
+        baseBranch: "main",
+        headBranch: "feature/test",
+        remoteName: "origin",
+        title: "Test PR",
+        description: "",
+        draft: true,
+      }),
+    ).rejects.toThrow("GitHub CLI (gh) is required to create pull requests. Install gh and run gh auth login.");
   });
 });

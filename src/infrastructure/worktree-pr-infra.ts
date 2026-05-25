@@ -13,6 +13,7 @@ import {
   createResolvePullRequestHeadBranchDependencies,
   type WorktreePullRequestInfra,
 } from "../interface-adapters/worktree-pull-request-dependencies";
+import { isMissingExternalCommandError, normalizeExternalCommandError } from "./external-command-error";
 import { resolveMergeTargetRef } from "./worktree-store";
 
 /**
@@ -124,15 +125,23 @@ async function createWorktreePullRequest(plan: WorktreePullRequestPlan): Promise
   const envPath = buildCommandPath(process.env.PATH);
   const command = resolveGhCommand(envPath);
   if (!command) {
-    throw new Error("gh command was not found in PATH.");
+    throw normalizeExternalCommandError({ code: "ENOENT", path: "gh" }, "gh", "pull-request");
   }
-  const { stdout, stderr } = await execFileAsync(command, callArgs, {
-    cwd: plan.repoRoot,
-    env: {
-      ...process.env,
-      PATH: envPath,
-    },
-  });
+  let stdout: string;
+  let stderr: string;
+  try {
+    const result = await execFileAsync(command, callArgs, {
+      cwd: plan.repoRoot,
+      env: {
+        ...process.env,
+        PATH: envPath,
+      },
+    });
+    stdout = result.stdout;
+    stderr = result.stderr;
+  } catch (error) {
+    throw normalizeExternalCommandError(error, "gh", "pull-request");
+  }
   return {
     url: parsePullRequestUrl(stdout),
     stdout,
@@ -156,9 +165,7 @@ async function countCommitsBetween(args: { repoRoot: string; baseRef: string; he
   if (!headRef) {
     throw new Error("Head ref is required.");
   }
-  const { stdout } = await execFileAsync("git", ["-C", repoRoot, "rev-list", "--count", `${baseRef}..${headRef}`], {
-    cwd: repoRoot,
-  });
+  const { stdout } = await execGit(repoRoot, ["rev-list", "--count", `${baseRef}..${headRef}`]);
   const count = Number.parseInt(stdout.trim(), 10);
   return Number.isNaN(count) ? 0 : count;
 }
@@ -183,11 +190,7 @@ export async function resolveFirstCommitTitle(args: {
   if (!headRef) {
     throw new Error("Head ref is required.");
   }
-  const { stdout } = await execFileAsync(
-    "git",
-    ["-C", repoRoot, "log", "--reverse", "--format=%s", `${baseRef}..${headRef}`],
-    { cwd: repoRoot },
-  );
+  const { stdout } = await execGit(repoRoot, ["log", "--reverse", "--format=%s", `${baseRef}..${headRef}`]);
   const firstLine = stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -210,11 +213,12 @@ async function checkRemoteBranchExists(args: {
     return false;
   }
   try {
-    await execFileAsync("git", ["-C", repoRoot, "show-ref", "--verify", `refs/remotes/${remoteName}/${branch}`], {
-      cwd: repoRoot,
-    });
+    await execGit(repoRoot, ["show-ref", "--verify", `refs/remotes/${remoteName}/${branch}`]);
     return true;
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return false;
   }
 }
@@ -235,7 +239,7 @@ async function pushRemoteBranch(args: { repoRoot: string; remoteName: string; br
   if (!branch) {
     throw new Error("Branch is required.");
   }
-  await execFileAsync("git", ["-C", repoRoot, "push", "-u", remoteName, branch], { cwd: repoRoot });
+  await execGit(repoRoot, ["push", "-u", remoteName, branch]);
 }
 
 /**
@@ -314,10 +318,13 @@ function resolveExecutablePath(command: string, envPath: string): string | null 
  */
 async function readCurrentBranch(worktreePath: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", worktreePath, "symbolic-ref", "--quiet", "--short", "HEAD"]);
+    const { stdout } = await execGit(worktreePath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
     const ref = stdout.trim();
     return ref || null;
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return null;
   }
 }
@@ -327,9 +334,12 @@ async function readCurrentBranch(worktreePath: string): Promise<string | null> {
  */
 async function checkLocalBranchExists(repoRoot: string, branch: string): Promise<boolean> {
   try {
-    await execFileAsync("git", ["-C", repoRoot, "show-ref", "--verify", `refs/heads/${branch}`], { cwd: repoRoot });
+    await execGit(repoRoot, ["show-ref", "--verify", `refs/heads/${branch}`]);
     return true;
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return false;
   }
 }
@@ -339,12 +349,27 @@ async function checkLocalBranchExists(repoRoot: string, branch: string): Promise
  */
 async function listRemotes(repoRoot: string): Promise<string[]> {
   try {
-    const { stdout } = await execFileAsync("git", ["-C", repoRoot, "remote"], { cwd: repoRoot });
+    const { stdout } = await execGit(repoRoot, ["remote"]);
     return stdout
       .split(/\r?\n/)
       .map((entry) => entry.trim())
       .filter(Boolean);
-  } catch {
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      throw error;
+    }
     return [];
+  }
+}
+
+/**
+ * git コマンドを対象リポジトリで実行する
+ */
+async function execGit(repoRoot: string, gitArgs: string[]): Promise<{ stdout: string; stderr: string }> {
+  try {
+    const { stdout, stderr } = await execFileAsync("git", ["-C", repoRoot, ...gitArgs], { cwd: repoRoot });
+    return { stdout, stderr };
+  } catch (error) {
+    throw normalizeExternalCommandError(error, "git", "git-worktree");
   }
 }
