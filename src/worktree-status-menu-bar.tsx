@@ -1,15 +1,27 @@
-import { Color, Icon, LocalStorage, MenuBarExtra, environment, openExtensionPreferences } from "@raycast/api";
-import { useEffect, useState } from "react";
+import {
+  Alert,
+  Color,
+  Icon,
+  MenuBarExtra,
+  Toast,
+  confirmAlert,
+  environment,
+  openExtensionPreferences,
+  showToast,
+} from "@raycast/api";
+import { useCallback, useEffect, useState } from "react";
 
 import { listWorktreesUsecase } from "./application/list-worktrees.usecase";
 import type { LoadWorktreeDeckTitlesSnapshotDependencies } from "./application/worktree-deck-snapshot.usecase";
+import { worktreeMenuBarLifecycleUsecase } from "./application/worktree-menu-bar-lifecycle.usecase";
 import { resolveWorktreeDeckCompositionRoot, type Worktree, type WorktreeTitle } from "./composition-root";
-import { applyRaycastPreferencesToProcessEnv } from "./raycast-preferences";
+import type { WorktreeMenuBarSummarySnapshot } from "./domain/worktree-menu-bar-summary.service";
 import {
   worktreeMenuBarStatusService,
   type WorktreeMenuBarItem,
   type WorktreeMenuBarStatusSummary,
 } from "./domain/worktree-menu-bar-status.service";
+import { applyRaycastPreferencesToProcessEnv } from "./raycast-preferences";
 
 /**
  * メニューバー表示用の初期件数
@@ -18,19 +30,6 @@ const EMPTY_SUMMARY: WorktreeMenuBarStatusSummary = {
   blue: 0,
   green: 0,
   yellow: 0,
-};
-
-/**
- * メニューバーの直近正常値を保存する LocalStorage キー
- */
-const LAST_SUMMARY_STORAGE_KEY = "worktree-deck.menu-bar.last-summary.v1";
-
-/**
- * メニューバー状態の読み込み結果
- */
-export type WorktreeMenuBarSummarySnapshot = {
-  summary: WorktreeMenuBarStatusSummary;
-  total: number;
 };
 
 /**
@@ -60,54 +59,6 @@ function buildMenuBarItems(args: {
       isWaitingForUser: entry.isWaitingForUser === true,
     })),
   }));
-}
-
-/**
- * 保存済みメニューバー状態を型安全に正規化する
- */
-export function normalizeStoredWorktreeMenuBarSummary(raw: unknown): WorktreeMenuBarSummarySnapshot | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return null;
-  }
-  const value = raw as Record<string, unknown>;
-  const summary = value.summary;
-  const total = value.total;
-  if (!summary || typeof summary !== "object" || Array.isArray(summary) || typeof total !== "number") {
-    return null;
-  }
-  const summaryValue = summary as Record<string, unknown>;
-  const blue = summaryValue.blue;
-  const green = summaryValue.green;
-  const yellow = summaryValue.yellow;
-  if (typeof blue !== "number" || typeof green !== "number" || typeof yellow !== "number") {
-    return null;
-  }
-  return {
-    summary: { blue, green, yellow },
-    total,
-  };
-}
-
-/**
- * 直近正常値を保存する
- */
-export async function saveStoredWorktreeMenuBarSummary(snapshot: WorktreeMenuBarSummarySnapshot): Promise<void> {
-  await LocalStorage.setItem(LAST_SUMMARY_STORAGE_KEY, JSON.stringify(snapshot));
-}
-
-/**
- * 直近正常値を読み込む
- */
-export async function loadStoredWorktreeMenuBarSummary(): Promise<WorktreeMenuBarSummarySnapshot | null> {
-  const raw = await LocalStorage.getItem<string>(LAST_SUMMARY_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    return normalizeStoredWorktreeMenuBarSummary(JSON.parse(raw));
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -160,8 +111,18 @@ async function loadWorktreeMenuBarSummary(): Promise<WorktreeMenuBarSummarySnaps
     dependencies: {
       listWorktrees: listWorktreesUsecase.list,
       loadTitlesForPaths: WORKTREE_DECK_COMPOSITION_ROOT.loadWorktreeDeckTitlesSnapshotDependencies.loadTitlesForPaths,
-      saveLastSummary: saveStoredWorktreeMenuBarSummary,
+      saveLastSummary: WORKTREE_DECK_COMPOSITION_ROOT.worktreeMenuBarSummaryStore.saveLastSummary,
     },
+  });
+}
+
+/**
+ * worktree status メニューバーの起動時描画可否を判定する
+ */
+async function resolveWorktreeStatusMenuBarStartup(): Promise<boolean> {
+  return worktreeMenuBarLifecycleUsecase.resolveStartup({
+    launchType: environment.launchType,
+    dependencies: WORKTREE_DECK_COMPOSITION_ROOT.worktreeMenuBarLifecycleDependencies,
   });
 }
 
@@ -173,13 +134,27 @@ export default function Command() {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [shouldRender, setShouldRender] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    void loadWorktreeMenuBarSummary()
-      .then((result) => {
+    void resolveWorktreeStatusMenuBarStartup()
+      .then(async (shouldRenderStartup) => {
         if (cancelled) {
+          return;
+        }
+        setShouldRender(shouldRenderStartup);
+        if (!shouldRenderStartup) {
+          setSummary(EMPTY_SUMMARY);
+          setTotal(0);
+          setErrorMessage(null);
+          return;
+        }
+        return loadWorktreeMenuBarSummary();
+      })
+      .then((result) => {
+        if (cancelled || !result) {
           return;
         }
         setSummary(result.summary);
@@ -191,7 +166,7 @@ export default function Command() {
           return;
         }
         const message = error instanceof Error ? error.message : "Unknown error";
-        const lastLoaded = await loadStoredWorktreeMenuBarSummary();
+        const lastLoaded = await WORKTREE_DECK_COMPOSITION_ROOT.worktreeMenuBarSummaryStore.loadLastSummary();
         if (cancelled) {
           return;
         }
@@ -210,6 +185,34 @@ export default function Command() {
       cancelled = true;
     };
   }, []);
+
+  const endWorktreeStatus = useCallback(() => {
+    void (async () => {
+      const confirmed = await confirmAlert({
+        title: "End Worktree Status?",
+        message: "The menu bar item will be hidden until you launch Worktree Status again.",
+        primaryAction: {
+          title: "End",
+          style: Alert.ActionStyle.Destructive,
+        },
+      });
+      if (!confirmed) {
+        return;
+      }
+      await worktreeMenuBarLifecycleUsecase.stop({
+        dependencies: WORKTREE_DECK_COMPOSITION_ROOT.worktreeMenuBarLifecycleDependencies,
+      });
+      setShouldRender(false);
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Worktree Status ended",
+      });
+    })();
+  }, []);
+
+  if (!shouldRender) {
+    return null;
+  }
 
   const title = worktreeMenuBarStatusService.formatTitle(summary);
   const tooltip = errorMessage ? `Failed to load worktree status: ${errorMessage}` : `Worktrees: ${total}`;
@@ -234,16 +237,18 @@ export default function Command() {
         />
         <MenuBarExtra.Item title="Total" subtitle={`${total}`} icon={Icon.List} />
       </MenuBarExtra.Section>
-      {errorMessage ? (
-        <MenuBarExtra.Section title="Error">
-          <MenuBarExtra.Item title={errorMessage} icon={{ source: Icon.Warning, tintColor: Color.Red }} />
-        </MenuBarExtra.Section>
-      ) : null}
       <MenuBarExtra.Section title="Settings">
         <MenuBarExtra.Item
           title="Open Extension Preferences"
           icon={Icon.Gear}
           onAction={() => void openExtensionPreferences()}
+        />
+      </MenuBarExtra.Section>
+      <MenuBarExtra.Section title="Actions">
+        <MenuBarExtra.Item
+          title="End Worktree Status"
+          icon={{ source: Icon.XMarkCircle, tintColor: Color.Red }}
+          onAction={endWorktreeStatus}
         />
       </MenuBarExtra.Section>
     </MenuBarExtra>

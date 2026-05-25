@@ -28,6 +28,8 @@ import type {
 } from "./application/worktree-pull-request.usecase";
 import type { WorktreeSessionFileDependencies } from "./application/worktree-session-file.usecase";
 import type { OpenWorktreeInPreferredAppDependencies } from "./application/worktree-open-app.usecase";
+import type { WorktreeMenuBarLifecycleDependencies } from "./application/worktree-menu-bar-lifecycle.usecase";
+import type { WorktreeMenuBarSummaryStore } from "./interface-adapters/worktree-menu-bar-summary-dependencies";
 import type { SessionMessage } from "./domain/session-detail.service";
 import type { Worktree } from "./application/worktree.entity";
 import type { WorktreeTitle } from "./application/worktree-title.entity";
@@ -41,6 +43,8 @@ import { createDefaultWorktreeAutoStartJobDependencies } from "./interface-adapt
 import { createDefaultAutoStartImageInputDependencies } from "./interface-adapters/auto-start-image-input-dependencies";
 import { createDefaultStartCodexInitialSessionDependencies } from "./interface-adapters/start-codex-initial-session-dependencies";
 import { createDefaultWorktreeRenameDependencies } from "./interface-adapters/worktree-rename-dependencies";
+import { createDefaultWorktreeMenuBarLifecycleDependencies } from "./interface-adapters/worktree-menu-bar-lifecycle-dependencies";
+import { createDefaultWorktreeMenuBarSummaryStore } from "./interface-adapters/worktree-menu-bar-summary-dependencies";
 import { listWorktreesUsecase } from "./application/list-worktrees.usecase";
 import { applyWorktreeDeckDisplayCache } from "./application/worktree-deck-display-cache";
 import {
@@ -136,6 +140,8 @@ type WorktreeDeckCompositionRoot = {
   worktreeMergeTargetOptionsDependencies: WorktreeMergeTargetOptionsDependencies;
   worktreeSessionFileDependencies: WorktreeSessionFileDependencies;
   openWorktreeInPreferredAppDependencies: OpenWorktreeInPreferredAppDependencies;
+  worktreeMenuBarLifecycleDependencies: WorktreeMenuBarLifecycleDependencies;
+  worktreeMenuBarSummaryStore: WorktreeMenuBarSummaryStore;
   worktreeMergePreviewDependencies: {
     loadDefaultBaseRef: typeof loadDefaultBaseRef;
     loadAheadBehindCounts: typeof loadAheadBehindCounts;
@@ -209,6 +215,8 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
       openCodexThreadInApp,
       saveOpenAppMetaForWorktreePath,
     },
+    worktreeMenuBarLifecycleDependencies: createDefaultWorktreeMenuBarLifecycleDependencies(),
+    worktreeMenuBarSummaryStore: createDefaultWorktreeMenuBarSummaryStore(),
     worktreeMergePreviewDependencies: {
       loadDefaultBaseRef,
       loadAheadBehindCounts,

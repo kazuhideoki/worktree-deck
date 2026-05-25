@@ -3,13 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { ListWorktreesResult } from "./application/list-worktrees.usecase";
 import type { WorktreeTitle } from "./application/worktree-title.entity";
 
-const raycastMocks = vi.hoisted(() => {
-  return {
-    localStorageGetItem: vi.fn<() => Promise<string | null>>(),
-    localStorageSetItem: vi.fn<(_key: string, _value: string) => Promise<void>>(),
-  };
-});
-
 vi.mock("@raycast/api", () => {
   return {
     Color: {
@@ -24,10 +17,6 @@ vi.mock("@raycast/api", () => {
         get: () => "icon",
       },
     ),
-    LocalStorage: {
-      getItem: raycastMocks.localStorageGetItem,
-      setItem: raycastMocks.localStorageSetItem,
-    },
     MenuBarExtra: Object.assign(
       vi.fn(() => null),
       {
@@ -41,13 +30,8 @@ vi.mock("@raycast/api", () => {
   };
 });
 
-import {
-  loadStoredWorktreeMenuBarSummary,
-  loadWorktreeMenuBarSummaryWithDependencies,
-  normalizeStoredWorktreeMenuBarSummary,
-  saveStoredWorktreeMenuBarSummary,
-  type WorktreeMenuBarSummarySnapshot,
-} from "./worktree-status-menu-bar";
+import { loadWorktreeMenuBarSummaryWithDependencies } from "./worktree-status-menu-bar";
+import type { WorktreeMenuBarSummarySnapshot } from "./domain/worktree-menu-bar-summary.service";
 
 /**
  * テスト用セッションタイトルを作成する
@@ -103,26 +87,5 @@ describe("loadWorktreeMenuBarSummaryWithDependencies", () => {
       total: 3,
     });
     expect(saveLastSummary).toHaveBeenCalledWith(result);
-  });
-});
-
-describe("stored worktree menu bar summary", () => {
-  it("直近正常値を Raycast LocalStorage に保存して復元する", async () => {
-    const snapshot: WorktreeMenuBarSummarySnapshot = {
-      summary: { blue: 2, green: 3, yellow: 1 },
-      total: 6,
-    };
-    raycastMocks.localStorageSetItem.mockResolvedValue();
-
-    await saveStoredWorktreeMenuBarSummary(snapshot);
-
-    const storedValue = raycastMocks.localStorageSetItem.mock.calls[0]?.[1] ?? "";
-    raycastMocks.localStorageGetItem.mockResolvedValue(storedValue);
-    await expect(loadStoredWorktreeMenuBarSummary()).resolves.toEqual(snapshot);
-  });
-
-  it("不正な保存値は復元しない", () => {
-    expect(normalizeStoredWorktreeMenuBarSummary({ summary: { blue: 1, green: 0 }, total: 1 })).toBeNull();
-    expect(normalizeStoredWorktreeMenuBarSummary({ summary: { blue: 1, green: 0, yellow: 0 }, total: "1" })).toBeNull();
   });
 });
