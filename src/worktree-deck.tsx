@@ -63,6 +63,7 @@ import {
   resolveEntryItemId,
   resolveWorktreeStatus,
   toggleDisplayMode,
+  type SectionEntryOrder,
   type WorktreeDeckDisplayMode,
 } from "./components/worktree-deck-view-model";
 import {
@@ -118,6 +119,16 @@ const DISPLAY_MODE_DROPDOWN_ID = "worktree-deck.display-mode";
  * Codex App セッションアーカイブの保存キー
  */
 const CODEX_SESSION_ARCHIVE_CACHE_KEY = "worktree-deck.codex-session-archive.thread-ids.v1";
+
+/**
+ * 初期表示時の一覧順を保持する状態
+ */
+type PinnedListOrder = {
+  basePath: string | null;
+  displayMode: WorktreeDeckDisplayMode;
+  sectionOrder: Map<string, number>;
+  entryOrder: SectionEntryOrder;
+};
 
 /**
  * セッション詳細表示アクションのショートカット
@@ -192,6 +203,77 @@ export function buildOpenActionPlans(args: {
 }
 
 /**
+ * section の現在順を rank 化する
+ */
+function buildSectionOrder(sections: ReturnType<typeof buildSectionsWithMappings>): Map<string, number> {
+  return new Map(sections.map((section, index) => [section.repo, index]));
+}
+
+/**
+ * section entry の現在順を rank 化する
+ */
+function buildSectionEntryOrder(args: {
+  sections: ReturnType<typeof buildSectionsWithMappings>;
+  titlesByPath: Map<string, WorktreeTitle[]>;
+  originLastCommitByPath: Map<string, string | null>;
+  originBranchByPath: Map<string, string | null>;
+  includeOrigin: boolean;
+}): SectionEntryOrder {
+  const order: SectionEntryOrder = new Map();
+  let index = 0;
+  for (const section of args.sections) {
+    const entries = buildSortedSectionEntries({
+      items: section.items,
+      titlesByPath: args.titlesByPath,
+      mappedOrigins: section.mappedOrigins,
+      originLastCommitByPath: args.originLastCommitByPath,
+      originBranchByPath: args.originBranchByPath,
+      includeOrigin: args.includeOrigin,
+    });
+    for (const entry of entries) {
+      order.set(resolveEntryItemId(entry), index);
+      index += 1;
+    }
+  }
+  return order;
+}
+
+/**
+ * 現在表示されている自然順を固定順として保存する
+ */
+function buildPinnedListOrder(args: {
+  basePath: string | null;
+  displayMode: WorktreeDeckDisplayMode;
+  sections: ReturnType<typeof buildSectionsWithMappings>;
+  titlesByPath: Map<string, WorktreeTitle[]>;
+  originLastCommitByPath: Map<string, string | null>;
+  originBranchByPath: Map<string, string | null>;
+}): PinnedListOrder {
+  return {
+    basePath: args.basePath,
+    displayMode: args.displayMode,
+    sectionOrder: buildSectionOrder(args.sections),
+    entryOrder: buildSectionEntryOrder({
+      sections: args.sections,
+      titlesByPath: args.titlesByPath,
+      originLastCommitByPath: args.originLastCommitByPath,
+      originBranchByPath: args.originBranchByPath,
+      includeOrigin: args.displayMode === "show-all",
+    }),
+  };
+}
+
+/**
+ * pinned order が現在の表示条件で使えるか判定する
+ */
+function isPinnedListOrderApplicable(
+  pinnedOrder: PinnedListOrder | null,
+  args: { basePath: string | null; displayMode: WorktreeDeckDisplayMode },
+): pinnedOrder is PinnedListOrder {
+  return pinnedOrder?.basePath === args.basePath && pinnedOrder.displayMode === args.displayMode;
+}
+
+/**
  * CA 起動時にセッション選択を挟むか判定する
  */
 export function shouldSelectCodexSessionForOpenAction(args: {
@@ -254,6 +336,7 @@ export default function Command() {
   const [persistedSelection, setPersistedSelection] = useState<PersistedSelectionState | null>(null);
   const [selectionPhase, setSelectionPhase] = useState<SelectionRestorePhase>("loading-storage");
   const [searchText, setSearchText] = useState("");
+  const [pinnedListOrder, setPinnedListOrder] = useState<PinnedListOrder | null>(null);
   const [displayMode, setDisplayMode] = useCachedState<WorktreeDeckDisplayMode>(
     "worktree-deck.displayMode",
     "show-all",
@@ -368,9 +451,20 @@ export default function Command() {
     () => filterVisibleWorktrees({ worktrees, hiddenPaths: hiddenWorktreePaths }),
     [hiddenWorktreePaths, worktrees],
   );
-  const sections = useMemo(
+  const rawSections = useMemo(
     () => buildSectionsWithMappings(visibleWorktrees, repositoryMappings, displayMode, { titlesByPath }),
     [displayMode, visibleWorktrees, repositoryMappings, titlesByPath],
+  );
+  const applicablePinnedListOrder = isPinnedListOrderApplicable(pinnedListOrder, { basePath, displayMode })
+    ? pinnedListOrder
+    : null;
+  const sections = useMemo(
+    () =>
+      buildSectionsWithMappings(visibleWorktrees, repositoryMappings, displayMode, {
+        titlesByPath,
+        sectionOrder: applicablePinnedListOrder?.sectionOrder,
+      }),
+    [applicablePinnedListOrder?.sectionOrder, displayMode, visibleWorktrees, repositoryMappings, titlesByPath],
   );
   const visibleSections = useMemo(() => {
     return sections
@@ -382,12 +476,21 @@ export default function Command() {
           originLastCommitByPath,
           originBranchByPath,
           includeOrigin: displayMode === "show-all",
+          entryOrder: applicablePinnedListOrder?.entryOrder,
         });
         const filteredEntries = filterEntriesBySearchText(entries, section.repo, searchTerms);
         return { section, entries: filteredEntries };
       })
       .filter((entry) => entry.entries.length > 0);
-  }, [displayMode, originBranchByPath, originLastCommitByPath, searchTerms, sections, titlesByPath]);
+  }, [
+    applicablePinnedListOrder?.entryOrder,
+    displayMode,
+    originBranchByPath,
+    originLastCommitByPath,
+    searchTerms,
+    sections,
+    titlesByPath,
+  ]);
   const selectionIndex = useMemo(() => buildSelectionIndex(visibleSections), [visibleSections]);
   /**
    * 表示中の選択 ID を保持し、起動復元完了後だけ永続化する
@@ -468,6 +571,33 @@ export default function Command() {
   useEffect(() => {
     displayCacheRef.current = displayCache;
   }, [displayCache]);
+  useEffect(() => {
+    if (isLoading || rawSections.length === 0) {
+      return;
+    }
+    if (isPinnedListOrderApplicable(pinnedListOrder, { basePath, displayMode })) {
+      return;
+    }
+    setPinnedListOrder(
+      buildPinnedListOrder({
+        basePath,
+        displayMode,
+        sections: rawSections,
+        titlesByPath,
+        originLastCommitByPath,
+        originBranchByPath,
+      }),
+    );
+  }, [
+    basePath,
+    displayMode,
+    isLoading,
+    originBranchByPath,
+    originLastCommitByPath,
+    pinnedListOrder,
+    rawSections,
+    titlesByPath,
+  ]);
   useEffect(() => {
     void worktreeDeckDataStore.ensureLoaded(buildDataStoreLoadRequest());
   }, [buildDataStoreLoadRequest]);
@@ -610,6 +740,7 @@ export default function Command() {
     worktrees,
   ]);
   const refreshWorktrees = useCallback(async () => {
+    setPinnedListOrder(null);
     await worktreeDeckDataStore.reload(buildDataStoreLoadRequest());
   }, [buildDataStoreLoadRequest]);
 

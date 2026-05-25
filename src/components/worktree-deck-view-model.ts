@@ -30,7 +30,13 @@ type WorktreeSectionWithMappings = WorktreeSection & {
  */
 type BuildSectionsWithMappingsOptions = {
   titlesByPath?: Map<string, WorktreeTitle[]>;
+  sectionOrder?: Map<string, number>;
 };
+
+/**
+ * section entry の表示順を固定するための rank
+ */
+export type SectionEntryOrder = Map<string, number>;
 
 /**
  * セッション状態の優先順位
@@ -147,6 +153,10 @@ export function buildSectionsWithMappings(
   }
   const titlesByPath = options.titlesByPath ?? new Map<string, WorktreeTitle[]>();
   return Array.from(sectionMap.values()).sort((left, right) => {
+    const pinnedDiff = comparePinnedOrder(left.repo, right.repo, options.sectionOrder);
+    if (pinnedDiff !== null) {
+      return pinnedDiff;
+    }
     const leftUpdatedAt = resolveSectionLatestSessionUpdatedAt(left, titlesByPath);
     const rightUpdatedAt = resolveSectionLatestSessionUpdatedAt(right, titlesByPath);
     if (leftUpdatedAt != null && rightUpdatedAt != null) {
@@ -326,6 +336,27 @@ export function resolveEntryItemId(entry: SectionEntry): string {
 }
 
 /**
+ * pinned order の比較結果を返す
+ */
+function comparePinnedOrder(leftId: string, rightId: string, order?: Map<string, number>): number | null {
+  if (!order) {
+    return null;
+  }
+  const leftOrder = order.get(leftId);
+  const rightOrder = order.get(rightId);
+  if (leftOrder != null && rightOrder != null) {
+    return leftOrder - rightOrder;
+  }
+  if (leftOrder != null) {
+    return -1;
+  }
+  if (rightOrder != null) {
+    return 1;
+  }
+  return null;
+}
+
+/**
  * origin と worktree を結合して並べ替えた一覧を作る
  */
 export function buildSortedSectionEntries(args: {
@@ -335,6 +366,7 @@ export function buildSortedSectionEntries(args: {
   originLastCommitByPath: Map<string, string | null>;
   originBranchByPath: Map<string, string | null>;
   includeOrigin?: boolean;
+  entryOrder?: SectionEntryOrder;
 }): SectionEntry[] {
   const includeOrigin = args.includeOrigin ?? true;
   const originEntries = includeOrigin
@@ -348,6 +380,10 @@ export function buildSortedSectionEntries(args: {
     : [];
   const worktreeEntries = args.items.map((item) => ({ kind: "worktree" as const, item }));
   return [...originEntries, ...worktreeEntries].sort((left, right) => {
+    const pinnedDiff = comparePinnedOrder(resolveEntryItemId(left), resolveEntryItemId(right), args.entryOrder);
+    if (pinnedDiff !== null) {
+      return pinnedDiff;
+    }
     const leftStatusPriority = resolveEntryStatusPriority(left);
     const rightStatusPriority = resolveEntryStatusPriority(right);
     if (leftStatusPriority !== rightStatusPriority) {

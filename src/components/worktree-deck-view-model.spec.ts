@@ -260,6 +260,68 @@ describe("worktree-deck-view-model", () => {
     expect(sections.map((section) => section.repo)).toEqual(["repo-with-session", "repo-without-session"]);
   });
 
+  it("pinned section order があると session 更新時刻では並び替えない", () => {
+    const sections = buildSectionsWithMappings(
+      [
+        buildWorktree({
+          repo: "repo-old",
+          path: "/tmp/repo-old~_~feature-a",
+          branch: "feature-a",
+          titleEntries: [buildTitleEntry({ title: "old", latestMessage: "old", updatedAt: 100 })],
+        }),
+        buildWorktree({
+          repo: "repo-new",
+          path: "/tmp/repo-new~_~feature-a",
+          branch: "feature-a",
+          titleEntries: [buildTitleEntry({ title: "new", latestMessage: "new", updatedAt: 900 })],
+        }),
+      ],
+      [],
+      "show-all",
+      {
+        sectionOrder: new Map([
+          ["repo-old", 0],
+          ["repo-new", 1],
+        ]),
+      },
+    );
+
+    expect(sections.map((section) => section.repo)).toEqual(["repo-old", "repo-new"]);
+  });
+
+  it("pinned section entry order があると実データ更新後も既存 entry の順番を維持する", () => {
+    const entries = buildSortedSectionEntries({
+      items: [
+        buildWorktree({
+          repo: "repo-a",
+          path: "/tmp/repo-a~_~feature-old",
+          branch: "feature-old",
+          titleEntries: [buildTitleEntry({ title: "old", latestMessage: "old", status: "done", updatedAt: 100 })],
+        }),
+        buildWorktree({
+          repo: "repo-a",
+          path: "/tmp/repo-a~_~feature-new",
+          branch: "feature-new",
+          titleEntries: [buildTitleEntry({ title: "new", latestMessage: "new", status: "working", updatedAt: 900 })],
+        }),
+      ],
+      titlesByPath: new Map(),
+      mappedOrigins: [],
+      originLastCommitByPath: new Map(),
+      originBranchByPath: new Map(),
+      includeOrigin: true,
+      entryOrder: new Map([
+        ["worktree:/tmp/repo-a~_~feature-old", 0],
+        ["worktree:/tmp/repo-a~_~feature-new", 1],
+      ]),
+    });
+
+    expect(entries.map((entry) => (entry.kind === "worktree" ? entry.item.branch : entry.originPath))).toEqual([
+      "feature-old",
+      "feature-new",
+    ]);
+  });
+
   it("includeOrigin=false のとき origin エントリを含めない", () => {
     const entries = buildSortedSectionEntries({
       items: [
