@@ -7,7 +7,7 @@ import { worktreeOpenAppUsecase, type OpenWorktreeInPreferredAppDependencies } f
  */
 function buildDependencies(): OpenWorktreeInPreferredAppDependencies {
   return {
-    openPathInZedClassic: vi.fn(async () => undefined),
+    openPathInConfiguredIde: vi.fn(async () => undefined),
     openPathInCodexApp: vi.fn(async () => undefined),
     openCodexThreadInApp: vi.fn(async () => undefined),
     saveOpenAppMetaForWorktreePath: vi.fn(async (_path, openApp, threadId) => ({
@@ -41,7 +41,7 @@ describe("openPreferred", () => {
     );
   });
 
-  it("Zed で開く場合は起動前に thread id を渡さず固定アプリを保存する", async () => {
+  it("IDE で開く場合は起動前に thread id を渡さず固定アプリを保存する", async () => {
     const dependencies = buildDependencies();
 
     await worktreeOpenAppUsecase.openPreferred({
@@ -49,10 +49,10 @@ describe("openPreferred", () => {
       dependencies,
     });
 
-    expect(dependencies.openPathInZedClassic).toHaveBeenCalledWith("/repo/wt");
+    expect(dependencies.openPathInConfiguredIde).toHaveBeenCalledWith("/repo/wt");
     expect(dependencies.saveOpenAppMetaForWorktreePath).toHaveBeenCalledWith("/repo/wt", "zed", undefined);
     expect(vi.mocked(dependencies.saveOpenAppMetaForWorktreePath).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(dependencies.openPathInZedClassic).mock.invocationCallOrder[0],
+      vi.mocked(dependencies.openPathInConfiguredIde).mock.invocationCallOrder[0],
     );
   });
 

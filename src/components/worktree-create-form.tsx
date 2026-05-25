@@ -39,6 +39,7 @@ import {
 import { worktreeOpenAppUsecase } from "../application/worktree-open-app.usecase";
 import { resolveWorktreeDeckCompositionRoot } from "../composition-root";
 import { type RepositoryMapping } from "../domain/repository-mapping.service";
+import { type WorktreeIdeApp } from "../domain/worktree-ide-app.service";
 import { type WorktreeOpenApp } from "../domain/worktree-open-app.service";
 import { resolveOpenAppIcon, resolveOpenAppTitle } from "./worktree-open-app-icon";
 import { buildBranchOptions, formatExecErrorMessage, type BranchOption } from "./worktree-ui-utils";
@@ -250,6 +251,7 @@ export function CreateWorktreeForm({
     CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.openApp,
     DEFAULT_CREATE_WORKTREE_OPEN_APP,
   );
+  const [preferredIdeApp, setPreferredIdeApp] = useState<WorktreeIdeApp>("zed");
   const [scriptPath, setScriptPath] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -264,6 +266,31 @@ export function CreateWorktreeForm({
   const repoRootRef = useRef<Form.Dropdown>(null);
   const baseBranchRef = useRef<Form.Dropdown>(null);
   const openAppRef = useRef<Form.Dropdown>(null);
+
+  /**
+   * General Settings の IDE 設定を読み込む
+   */
+  useEffect(() => {
+    let active = true;
+    async function loadPreferredIdeAppSetting(): Promise<void> {
+      try {
+        const loadedIdeApp = await WORKTREE_DECK_COMPOSITION_ROOT.generalSettingsStore.loadPreferredIdeApp();
+        if (active) {
+          setPreferredIdeApp(loadedIdeApp);
+        }
+      } catch (error) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to load IDE setting",
+          message: formatExecErrorMessage(error),
+        });
+      }
+    }
+    void loadPreferredIdeAppSetting();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const recordFocusedFormItem = useCallback((itemId: CreateWorktreeFocusableItemId) => {
     focusedFormItemIdRef.current = itemId;
@@ -1078,7 +1105,11 @@ export function CreateWorktreeForm({
                   onChange={(value) => setOpenAppDraft(resolveCreateFormOpenApp(value))}
                   onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.openApp)}
                 >
-                  <Form.Dropdown.Item value="zed" title={resolveOpenAppTitle("zed")} icon={resolveOpenAppIcon("zed")} />
+                  <Form.Dropdown.Item
+                    value="zed"
+                    title={resolveOpenAppTitle("zed", preferredIdeApp)}
+                    icon={resolveOpenAppIcon("zed")}
+                  />
                   <Form.Dropdown.Item
                     value="codex-app"
                     title={resolveOpenAppTitle("codex-app")}
@@ -1469,7 +1500,7 @@ export function resolveCreateWorktreeFormImagePaths(args: { pickerValue?: string
 }
 
 /**
- * worktree の準備を待って Zed で開く
+ * worktree の準備を待って固定アプリで開く
  */
 type OpenWorktreeWhenReadyDependencies = {
   delay: (ms: number) => Promise<void>;

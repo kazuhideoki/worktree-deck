@@ -10,7 +10,7 @@ describe("worktreeOpenAppUsecase", () => {
         loadWorktreeOpenApp: vi.fn(async () => null),
         loadOpenAppByWorktreePaths: vi.fn(async () => new Map()),
         saveWorktreeOpenApp: vi.fn(async () => undefined),
-        openPathInZedClassic: vi.fn(async () => undefined),
+        openPathInConfiguredIde: vi.fn(async () => undefined),
         openPathInCodexApp: vi.fn(async () => undefined),
       },
     });
@@ -27,7 +27,7 @@ describe("worktreeOpenAppUsecase", () => {
         loadWorktreeOpenApp: vi.fn(async () => null),
         loadOpenAppByWorktreePaths: vi.fn(async () => new Map()),
         saveWorktreeOpenApp,
-        openPathInZedClassic: vi.fn(async () => undefined),
+        openPathInConfiguredIde: vi.fn(async () => undefined),
         openPathInCodexApp: vi.fn(async () => undefined),
       },
     });
@@ -39,7 +39,7 @@ describe("worktreeOpenAppUsecase", () => {
   });
 
   it("Codex App が選択されている場合は Codex App で開く", async () => {
-    const openPathInZedClassic = vi.fn(async () => undefined);
+    const openPathInConfiguredIde = vi.fn(async () => undefined);
     const openPathInCodexApp = vi.fn(async () => undefined);
 
     await worktreeOpenAppUsecase.open({
@@ -48,13 +48,13 @@ describe("worktreeOpenAppUsecase", () => {
         loadWorktreeOpenApp: vi.fn(async () => null),
         loadOpenAppByWorktreePaths: vi.fn(async () => new Map()),
         saveWorktreeOpenApp: vi.fn(async () => undefined),
-        openPathInZedClassic,
+        openPathInConfiguredIde,
         openPathInCodexApp,
       },
     });
 
     expect(openPathInCodexApp).toHaveBeenCalledWith("/worktrees/app-a");
-    expect(openPathInZedClassic).not.toHaveBeenCalled();
+    expect(openPathInConfiguredIde).not.toHaveBeenCalled();
   });
 
   it("CA で開き直したら固定アプリとして保存する", async () => {
@@ -64,7 +64,7 @@ describe("worktreeOpenAppUsecase", () => {
     const result = await worktreeOpenAppUsecase.openPreferred({
       command: { worktreePath: "/worktrees/app-a", openApp: "codex-app", threadId: null },
       dependencies: {
-        openPathInZedClassic: vi.fn(async () => undefined),
+        openPathInConfiguredIde: vi.fn(async () => undefined),
         openPathInCodexApp,
         openCodexThreadInApp: vi.fn(async () => undefined),
         saveOpenAppMetaForWorktreePath,

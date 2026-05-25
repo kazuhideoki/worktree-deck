@@ -567,6 +567,7 @@ describe("worktree action shortcuts", () => {
 
   it("Open アクション名は一時起動を示さない", () => {
     expect(formatOpenActionTitle("zed")).toBe("Open in Zed");
+    expect(formatOpenActionTitle("zed", "cursor")).toBe("Open in Cursor");
     expect(formatOpenActionTitle("codex-app")).toBe("Open in CA");
   });
 });

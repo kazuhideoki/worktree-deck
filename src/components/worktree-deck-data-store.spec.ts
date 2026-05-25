@@ -117,7 +117,7 @@ function buildRequest(
         findFirstSessionFileByPath: vi.fn(async () => null),
         findLatestSessionFileByPath: vi.fn(async () => null),
         saveCodexThreadIdForWorktreePath: vi.fn(async () => undefined),
-        openPathInZedClassic: vi.fn(async () => undefined),
+        openPathInConfiguredIde: vi.fn(async () => undefined),
         loadLatestSessionMessages: vi.fn(async () => []),
         loadSessionMessages: vi.fn(async () => []),
       },

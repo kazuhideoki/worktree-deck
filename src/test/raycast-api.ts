@@ -14,6 +14,7 @@ function createPassthroughComponent(_name: string) {
  */
 export const Action = {
   Push: createPassthroughComponent("Action.Push"),
+  SubmitForm: createPassthroughComponent("Action.SubmitForm"),
 } as const;
 
 /**
@@ -25,7 +26,9 @@ export const ActionPanel = createPassthroughComponent("ActionPanel");
  * テスト用の Icon モック
  */
 export const Icon = {
+  Gear: "gear",
   Folder: "folder",
+  SaveDocument: "saveDocument",
 } as const;
 
 /**
@@ -35,6 +38,41 @@ export const List = Object.assign(createPassthroughComponent("List"), {
   Section: createPassthroughComponent("List.Section"),
   Item: createPassthroughComponent("List.Item"),
 });
+
+/**
+ * テスト用の Form モック
+ */
+export const Form = Object.assign(createPassthroughComponent("Form"), {
+  Dropdown: Object.assign(createPassthroughComponent("Form.Dropdown"), {
+    Item: createPassthroughComponent("Form.Dropdown.Item"),
+  }),
+});
+
+/**
+ * テスト用の Toast モック
+ */
+export const Toast = {
+  Style: {
+    Failure: "failure",
+    Success: "success",
+  },
+} as const;
+
+/**
+ * テスト用の toast 表示関数
+ */
+export async function showToast(_args: unknown): Promise<void> {
+  void _args;
+}
+
+/**
+ * テスト用の navigation hook
+ */
+export function useNavigation() {
+  return {
+    pop: () => undefined,
+  };
+}
 
 /**
  * テスト用の LocalStorage モック

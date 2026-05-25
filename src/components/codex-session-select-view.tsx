@@ -9,9 +9,11 @@ import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
 export const SELECT_CODEX_SESSION_ACTION_TITLE = "Select CA Session";
 
 /**
- * ワークツリーを Zed で開くアクションのタイトル
+ * ワークツリーを IDE で開くアクションのタイトルを返す
  */
-export const OPEN_WORKTREE_IN_ZED_ACTION_TITLE = "Open in Zed";
+export function formatOpenWorktreeInIdeActionTitle(ideAppTitle = "Zed"): string {
+  return `Open in ${ideAppTitle}`;
+}
 
 /**
  * Codex App セッション選択肢
@@ -218,6 +220,7 @@ type CodexSessionSelectViewProps = {
   worktreePath: string;
   entries: CodexSessionEntry[];
   archivedEntries: CodexSessionEntry[];
+  ideAppTitle?: string;
   onArchiveSession: (threadId: string) => Promise<void>;
   onUnarchiveSession: (threadId: string) => Promise<void>;
   onOpenSession: (threadId: string) => Promise<void>;
@@ -232,6 +235,7 @@ export function CodexSessionSelectView({
   worktreePath,
   entries,
   archivedEntries,
+  ideAppTitle = "Zed",
   onArchiveSession,
   onUnarchiveSession,
   onOpenSession,
@@ -261,7 +265,7 @@ export function CodexSessionSelectView({
       await showToast({
         style: Toast.Style.Failure,
         title: "Failed to open worktree",
-        message: "Could not open the worktree in Zed.",
+        message: `Could not open the worktree in ${ideAppTitle}.`,
       });
     }
   }, [onOpenWorktreeInZed]);
@@ -333,6 +337,7 @@ export function CodexSessionSelectView({
             worktreePath={worktreePath}
             onOpenSession={handleOpenSession}
             onOpenWorktreeInZed={handleOpenWorktreeInZed}
+            ideAppTitle={ideAppTitle}
             onArchiveSession={handleArchiveSession}
             onUnarchiveSession={handleUnarchiveSession}
             onBack={pop}
@@ -348,6 +353,7 @@ export function CodexSessionSelectView({
               worktreePath={worktreePath}
               onOpenSession={handleOpenSession}
               onOpenWorktreeInZed={handleOpenWorktreeInZed}
+              ideAppTitle={ideAppTitle}
               onArchiveSession={handleArchiveSession}
               onUnarchiveSession={handleUnarchiveSession}
               onBack={pop}
@@ -374,6 +380,7 @@ type CodexSessionListItemProps = {
   worktreePath: string;
   onOpenSession: (threadId: string) => Promise<void>;
   onOpenWorktreeInZed: () => Promise<void>;
+  ideAppTitle: string;
   onArchiveSession: (threadId: string) => Promise<void>;
   onUnarchiveSession: (threadId: string) => Promise<void>;
   onBack: () => void;
@@ -387,6 +394,7 @@ function CodexSessionListItem({
   worktreePath,
   onOpenSession,
   onOpenWorktreeInZed,
+  ideAppTitle,
   onArchiveSession,
   onUnarchiveSession,
   onBack,
@@ -403,7 +411,7 @@ function CodexSessionListItem({
         <ActionPanel>
           <Action title="Open in CA" icon={Icon.Terminal} onAction={() => void onOpenSession(entry.threadId)} />
           <Action
-            title={OPEN_WORKTREE_IN_ZED_ACTION_TITLE}
+            title={formatOpenWorktreeInIdeActionTitle(ideAppTitle)}
             icon={Icon.Code}
             onAction={() => void onOpenWorktreeInZed()}
           />

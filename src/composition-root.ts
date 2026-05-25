@@ -73,7 +73,11 @@ import {
   loadLatestSessionMessages,
   loadSessionMessages,
 } from "./infrastructure/codex-session-file-store";
-import { openPathInZedClassic } from "./infrastructure/worktree-zed-infra";
+import {
+  loadPreferredIdeApp,
+  openPathInConfiguredIde,
+  savePreferredIdeApp,
+} from "./infrastructure/worktree-ide-app-store";
 import {
   createDefaultBuildWorktreePullPlanDependencies,
   createDefaultPullWorktreeDependencies,
@@ -154,6 +158,10 @@ type WorktreeDeckCompositionRoot = {
     loadRepositoryMappings: typeof loadRepositoryMappings;
     saveRepositoryMappings: typeof saveRepositoryMappings;
   };
+  generalSettingsStore: {
+    loadPreferredIdeApp: typeof loadPreferredIdeApp;
+    savePreferredIdeApp: typeof savePreferredIdeApp;
+  };
   selectionStore: {
     loadPersistedSelection: typeof loadPersistedSelectionFromStorage;
     savePersistedSelection: typeof savePersistedSelectionToStorage;
@@ -199,12 +207,12 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
       findFirstSessionFileByPath,
       findLatestSessionFileByPath,
       saveCodexThreadIdForWorktreePath,
-      openPathInZedClassic,
+      openPathInConfiguredIde,
       loadLatestSessionMessages,
       loadSessionMessages,
     },
     openWorktreeInPreferredAppDependencies: {
-      openPathInZedClassic,
+      openPathInConfiguredIde,
       openPathInCodexApp,
       openCodexThreadInApp,
       saveOpenAppMetaForWorktreePath,
@@ -253,6 +261,10 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
     repositoryMappingStore: {
       loadRepositoryMappings,
       saveRepositoryMappings,
+    },
+    generalSettingsStore: {
+      loadPreferredIdeApp,
+      savePreferredIdeApp,
     },
     selectionStore: {
       loadPersistedSelection: loadPersistedSelectionFromStorage,

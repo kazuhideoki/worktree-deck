@@ -4,7 +4,7 @@ const readStorageMock = vi.hoisted(() => vi.fn());
 const writeStorageMock = vi.hoisted(() => vi.fn());
 const openPathInCodexAppMock = vi.hoisted(() => vi.fn());
 const openCodexThreadInAppMock = vi.hoisted(() => vi.fn());
-const openPathInZedClassicMock = vi.hoisted(() => vi.fn());
+const openPathInConfiguredIdeMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./storage/json-file-storage", () => {
   return {
@@ -20,9 +20,9 @@ vi.mock("./codex-app-infra", () => {
   };
 });
 
-vi.mock("./worktree-zed-infra", () => {
+vi.mock("./worktree-ide-app-store", () => {
   return {
-    openPathInZedClassic: openPathInZedClassicMock,
+    openPathInConfiguredIde: openPathInConfiguredIdeMock,
   };
 });
 
@@ -34,16 +34,16 @@ describe("worktree-open-app-store", () => {
     writeStorageMock.mockReset();
     openPathInCodexAppMock.mockReset();
     openCodexThreadInAppMock.mockReset();
-    openPathInZedClassicMock.mockReset();
+    openPathInConfiguredIdeMock.mockReset();
 
     readStorageMock.mockResolvedValue({});
     writeStorageMock.mockResolvedValue(undefined);
     openPathInCodexAppMock.mockResolvedValue(undefined);
     openCodexThreadInAppMock.mockResolvedValue(undefined);
-    openPathInZedClassicMock.mockResolvedValue(undefined);
+    openPathInConfiguredIdeMock.mockResolvedValue(undefined);
   });
 
-  it("Zed 起動前に次回 Enter の起動先を Zed に保存する", async () => {
+  it("IDE 起動前に次回 Enter の起動先を IDE に保存する", async () => {
     readStorageMock.mockResolvedValue({
       "/worktrees/app-a": {
         openApp: "codex-app",
@@ -53,9 +53,9 @@ describe("worktree-open-app-store", () => {
 
     const result = await openPathInPreferredApp("/worktrees/app-a", "zed", null);
 
-    expect(openPathInZedClassicMock).toHaveBeenCalledWith("/worktrees/app-a");
+    expect(openPathInConfiguredIdeMock).toHaveBeenCalledWith("/worktrees/app-a");
     expect(writeStorageMock.mock.invocationCallOrder[0]).toBeLessThan(
-      openPathInZedClassicMock.mock.invocationCallOrder[0],
+      openPathInConfiguredIdeMock.mock.invocationCallOrder[0],
     );
     expect(writeStorageMock).toHaveBeenCalledWith(expect.anything(), "worktree-open-app.json", {
       "/worktrees/app-a": {
@@ -164,12 +164,12 @@ describe("worktree-open-app-store", () => {
       savedMeta: null,
     });
 
-    expect(openPathInZedClassicMock).toHaveBeenCalledWith("/worktrees/app-a");
+    expect(openPathInConfiguredIdeMock).toHaveBeenCalledWith("/worktrees/app-a");
     expect(writeStorageMock).toHaveBeenCalled();
   });
 
   it("起動に失敗しても次回 Enter の起動先は保存済みにする", async () => {
-    openPathInZedClassicMock.mockRejectedValue(new Error("failed to open"));
+    openPathInConfiguredIdeMock.mockRejectedValue(new Error("failed to open"));
 
     await expect(openPathInPreferredApp("/worktrees/app-a", "zed", null)).rejects.toThrow("failed to open");
 

@@ -11,7 +11,7 @@ function buildDependencies(): WorktreeSessionFileDependencies {
     findFirstSessionFileByPath: vi.fn(async () => null),
     findLatestSessionFileByPath: vi.fn(async () => null),
     saveCodexThreadIdForWorktreePath: vi.fn(async () => undefined),
-    openPathInZedClassic: vi.fn(async () => undefined),
+    openPathInConfiguredIde: vi.fn(async () => undefined),
     loadLatestSessionMessages: vi.fn(async () => []),
     loadSessionMessages: vi.fn(async () => []),
   };
@@ -71,7 +71,7 @@ describe("resolveAndSaveCodexThreadId", () => {
 });
 
 describe("openLatestSessionFile", () => {
-  it("最新 session file を Zed で開く", async () => {
+  it("最新 session file を IDE で開く", async () => {
     const dependencies = buildDependencies();
     vi.mocked(dependencies.findLatestSessionFileByPath).mockResolvedValueOnce("/tmp/latest.jsonl");
 
@@ -82,7 +82,7 @@ describe("openLatestSessionFile", () => {
         dependencies,
       }),
     ).resolves.toEqual({ status: "opened", sessionPath: "/tmp/latest.jsonl" });
-    expect(dependencies.openPathInZedClassic).toHaveBeenCalledWith("/tmp/latest.jsonl");
+    expect(dependencies.openPathInConfiguredIde).toHaveBeenCalledWith("/tmp/latest.jsonl");
   });
 
   it("path が空なら session 探索を行わない", async () => {
