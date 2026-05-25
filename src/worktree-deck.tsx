@@ -429,12 +429,8 @@ export default function Command() {
   const reloadWorktreesAction = globalActionById.get("reload-worktrees");
   const createWorktreeAction = globalActionById.get("create-worktree");
   const restoreDeletedWorktreeAction = globalActionById.get("restore-deleted-worktree");
-<<<<<<< HEAD
-  const repositorySettingsAction = globalActionById.get("repository-settings");
-  const extensionPreferencesAction = globalActionById.get("extension-preferences");
-=======
   const settingsAction = globalActionById.get("settings");
->>>>>>> migrate-repo-settings-to-raycast-preference
+  const extensionPreferencesAction = globalActionById.get("extension-preferences");
   const hasVisibleContent = visibleSections.length > 0;
   const isRepositoryMappingOnboardingEmptyState = shouldShowRepositoryMappingOnboardingEmptyState({
     searchText,
@@ -1336,7 +1332,6 @@ export default function Command() {
               onAction={handleReloadWorktrees}
             />
           ) : null}
-<<<<<<< HEAD
           {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
           {restoreDeletedWorktreeAction ? (
             <Action.Push
@@ -1347,12 +1342,12 @@ export default function Command() {
               onPop={handleCreatePop}
             />
           ) : null}
-          {repositorySettingsAction ? (
+          {settingsAction ? (
             <Action.Push
-              title={repositorySettingsAction.title}
+              title={settingsAction.title}
               icon={Icon.Gear}
-              shortcut={repositorySettingsAction.shortcut}
-              target={<RepositoryMappingManager onChange={handleRepositoryMappingChange} />}
+              shortcut={settingsAction.shortcut}
+              target={<SettingsView onRepositoryMappingChange={handleRepositoryMappingChange} />}
               onPop={handleCreatePop}
             />
           ) : null}
@@ -1364,27 +1359,6 @@ export default function Command() {
               onAction={() => void openExtensionPreferences()}
             />
           ) : null}
-=======
-          {!createWorktreeAction || !restoreDeletedWorktreeAction || !settingsAction ? null : (
-            <>
-              {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
-              <Action.Push
-                title={restoreDeletedWorktreeAction.title}
-                icon={Icon.ArrowClockwise}
-                shortcut={restoreDeletedWorktreeAction.shortcut}
-                target={<RestoreDeletedWorktreeView onComplete={refreshWorktrees} />}
-                onPop={handleCreatePop}
-              />
-              <Action.Push
-                title={settingsAction.title}
-                icon={Icon.Gear}
-                shortcut={settingsAction.shortcut}
-                target={<SettingsView onRepositoryMappingChange={handleRepositoryMappingChange} />}
-                onPop={handleCreatePop}
-              />
-            </>
-          )}
->>>>>>> migrate-repo-settings-to-raycast-preference
         </>
       );
     },

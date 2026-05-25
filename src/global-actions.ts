@@ -1,16 +1,12 @@
 /**
  * グローバルで使えるアクションの識別子
  */
-<<<<<<< HEAD
 export type GlobalActionId =
   | "reload-worktrees"
   | "create-worktree"
   | "restore-deleted-worktree"
-  | "repository-settings"
+  | "settings"
   | "extension-preferences";
-=======
-export type GlobalActionId = "reload-worktrees" | "create-worktree" | "restore-deleted-worktree" | "settings";
->>>>>>> migrate-repo-settings-to-raycast-preference
 
 /**
  * グローバルアクションの定義

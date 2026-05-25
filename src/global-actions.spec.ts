@@ -8,12 +8,8 @@ describe("buildGlobalActionItems", () => {
       "reload-worktrees",
       "create-worktree",
       "restore-deleted-worktree",
-<<<<<<< HEAD
-      "repository-settings",
-      "extension-preferences",
-=======
       "settings",
->>>>>>> migrate-repo-settings-to-raycast-preference
+      "extension-preferences",
     ]);
   });
 
