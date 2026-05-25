@@ -3,7 +3,7 @@
   "name": "worktree-deck",
   "version": "0.1.0",
   "title": "Worktree Deck",
-  "description": "Track git worktrees and Codex sessions from Raycast",
+  "description": "Browse git worktrees and Codex session status from Raycast",
   "icon": "worktree-deck-icon.png",
   "author": "kazuhide",
   "categories": [
@@ -25,13 +25,13 @@
     {
       "name": "worktree-deck",
       "title": "Worktree Deck",
-      "description": "List git worktrees and Codex sessions",
+      "description": "Browse git worktrees, related Codex sessions, and repository actions",
       "mode": "view"
     },
     {
       "name": "worktree-status-menu-bar",
       "title": "Worktree Status",
-      "description": "Show worktree session status counts in the menu bar",
+      "description": "Monitor worktree session status counts in the menu bar",
       "mode": "menu-bar",
       "interval": "10s"
     }
@@ -40,7 +40,7 @@
     {
       "name": "GIT_WORKTREE_PATH",
       "title": "Worktree Directory (~/.worktree-deck/worktrees)",
-      "description": "Home-relative directory where git worktrees are created.",
+      "description": "Directory where Worktree Deck creates and scans git worktrees.",
       "type": "directory",
       "required": true,
       "default": "~/.worktree-deck/worktrees"
@@ -48,7 +48,7 @@
     {
       "name": "CODEX_HOME",
       "title": "Codex Home (~/.codex)",
-      "description": "Home-relative directory where Codex stores sessions and configuration.",
+      "description": "Directory where Codex stores sessions and configuration.",
       "type": "directory",
       "required": true,
       "default": "~/.codex"

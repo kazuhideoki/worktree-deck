@@ -1,24 +1,44 @@
 # Worktree Deck
 
-Worktree Deck is a Raycast extension for tracking git worktrees and related Codex sessions. It is designed for local development workflows that use git worktree, Codex CLI/App, and optionally Zed.
+Worktree Deck is a Raycast extension for browsing git worktrees, related Codex sessions, and common repository actions from Raycast.
+
+It is designed for local development workflows that use `git worktree`, Codex CLI/App, and optionally Zed, VS Code, or Cursor.
 
 ## Commands
 
-- `Worktree Deck`: Lists git worktrees and related Codex sessions.
-- `Worktree Status`: Shows working and done session counts in the Raycast menu bar.
+- `Worktree Deck`: Browse worktrees, inspect related Codex sessions, open repositories, create pull requests, and run common worktree actions.
+- `Worktree Status`: Show working and done session counts in the Raycast menu bar.
+
+## First Setup
+
+Worktree Deck starts with sensible defaults:
+
+- Worktree directory: `~/.worktree-deck/worktrees`
+- Codex home: `~/.codex`
+- Local state: `~/.worktree-deck/storage`
+
+On first launch, add a repository mapping when prompted:
+
+1. Open `Worktree Deck` from Raycast.
+2. Select `Add Repository Mapping`.
+3. Set `Repository Path` to the repository that owns your worktrees, for example `/Users/you/src/github.com/org/repo`.
+4. Set `Map Value` to the name used under the worktree directory. If you leave it empty, the repository folder name is used.
+5. Save the mapping and return to the main list.
+
+After this, Worktree Deck can show worktrees for that repository and connect them with related Codex sessions.
+
+To enable the menu bar command, run `Worktree Status` once from Raycast.
 
 ## Configuration
 
-The extension reads configuration from Raycast Preferences > Extensions > Worktree Deck. The main settings are:
+The extension reads configuration from Raycast Preferences > Extensions > Worktree Deck. Change these only if your local paths or session-retention rules differ from the defaults:
 
-- `GIT_WORKTREE_PATH`: Worktree directory under your home directory. Default: `~/.worktree-deck/worktrees`.
+- `GIT_WORKTREE_PATH`: Directory where Worktree Deck creates and scans git worktrees. Default: `~/.worktree-deck/worktrees`.
 - `CODEX_HOME`: Codex home directory. Default: `~/.codex`.
 - `WORKTREE_DECK_SEARCH_DAYS`: Number of days to search for Codex sessions.
 - `WORKTREE_DECK_DONE_THRESHOLD_DAYS`: Number of days after which a working session is treated as done.
 
-Worktree Deck stores local state in `~/.worktree-deck/storage`.
-
-Defaults are provided for the required preferences, so the extension can start without extra setup. Adjust them from Raycast Preferences only if your local paths differ. `Worktree Status` is a menu bar command, so run it once from Raycast to enable the menu bar item.
+Repository mappings, job state, preferred editor settings, and related local state are stored in `~/.worktree-deck/storage`.
 
 ## Requirements
 
