@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const readStorageMock = vi.hoisted(() => vi.fn());
 const writeStorageMock = vi.hoisted(() => vi.fn());
 const openPathInIdeAppMock = vi.hoisted(() => vi.fn());
+const ensureIdeAppInstalledMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./storage/json-file-storage", () => {
   return {
@@ -13,6 +14,7 @@ vi.mock("./storage/json-file-storage", () => {
 
 vi.mock("./worktree-ide-infra", () => {
   return {
+    ensureIdeAppInstalled: ensureIdeAppInstalledMock,
     openPathInIdeApp: openPathInIdeAppMock,
   };
 });
@@ -24,10 +26,12 @@ describe("worktree-ide-app-store", () => {
     readStorageMock.mockReset();
     writeStorageMock.mockReset();
     openPathInIdeAppMock.mockReset();
+    ensureIdeAppInstalledMock.mockReset();
 
     readStorageMock.mockResolvedValue({});
     writeStorageMock.mockResolvedValue(undefined);
     openPathInIdeAppMock.mockResolvedValue(undefined);
+    ensureIdeAppInstalledMock.mockResolvedValue(undefined);
   });
 
   it("未保存の場合は Zed を返す", async () => {
@@ -43,7 +47,18 @@ describe("worktree-ide-app-store", () => {
   it("IDE アプリケーション設定を保存する", async () => {
     await expect(savePreferredIdeApp("vscode")).resolves.toBe("vscode");
 
+    expect(ensureIdeAppInstalledMock).toHaveBeenCalledWith("vscode");
     expect(writeStorageMock).toHaveBeenCalledWith(expect.anything(), "general-settings.json", { ideApp: "vscode" });
+  });
+
+  it("IDE アプリケーションが未インストールなら設定を保存しない", async () => {
+    ensureIdeAppInstalledMock.mockRejectedValue(new Error("Cursor is not installed. Install Cursor and try again."));
+
+    await expect(savePreferredIdeApp("cursor")).rejects.toThrow(
+      "Cursor is not installed. Install Cursor and try again.",
+    );
+
+    expect(writeStorageMock).not.toHaveBeenCalled();
   });
 
   it("保存済み IDE アプリケーションでパスを開く", async () => {

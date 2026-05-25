@@ -40,6 +40,38 @@ export async function openPathInIdeApp(
   if (!trimmedPath) {
     throw new Error("Path is required.");
   }
-  const appName = resolveIdeAppMacOSName(worktreeIdeAppService.resolvePreferred(ideApp));
+  const resolvedIdeApp = worktreeIdeAppService.resolvePreferred(ideApp);
+  await ensureIdeAppInstalled(resolvedIdeApp, execFileImpl);
+  const appName = resolveIdeAppMacOSName(resolvedIdeApp);
   await execFileImpl("open", ["-a", appName, trimmedPath]);
+}
+
+/**
+ * IDE アプリケーションが macOS に登録されているか返す
+ */
+export async function checkIdeAppInstalled(
+  ideApp: WorktreeIdeApp,
+  execFileImpl: ExecFileImpl = execFileAsync,
+): Promise<boolean> {
+  const appName = resolveIdeAppMacOSName(worktreeIdeAppService.resolvePreferred(ideApp));
+  try {
+    await execFileImpl("osascript", ["-e", `id of app "${appName}"`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * IDE アプリケーションが未インストールならエラーにする
+ */
+export async function ensureIdeAppInstalled(
+  ideApp: WorktreeIdeApp,
+  execFileImpl: ExecFileImpl = execFileAsync,
+): Promise<void> {
+  const installed = await checkIdeAppInstalled(ideApp, execFileImpl);
+  if (!installed) {
+    const label = worktreeIdeAppService.formatIdeAppLabel(ideApp);
+    throw new Error(`${label} is not installed. Install ${label} and try again.`);
+  }
 }

@@ -1,7 +1,7 @@
 import { worktreeIdeAppService, type WorktreeIdeApp } from "../domain/worktree-ide-app.service";
 import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
-import { openPathInIdeApp } from "./worktree-ide-infra";
+import { ensureIdeAppInstalled, openPathInIdeApp } from "./worktree-ide-infra";
 
 /**
  * package.json の name と一致させる
@@ -90,6 +90,7 @@ export async function savePreferredIdeApp(ideApp: WorktreeIdeApp): Promise<Workt
   if (!normalizedIdeApp) {
     throw new Error("Unsupported IDE application.");
   }
+  await ensureIdeAppInstalled(normalizedIdeApp);
   await saveGeneralSettingsStorage({ ideApp: normalizedIdeApp });
   return normalizedIdeApp;
 }
