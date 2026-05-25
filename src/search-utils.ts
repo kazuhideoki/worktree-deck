@@ -10,7 +10,7 @@ export type SearchTerms = {
  * アクション項目の検索情報
  */
 export type ActionSearchItem = {
-  id: "create-worktree" | "repository-settings";
+  id: "create-worktree" | "settings";
   title: string;
   keywords: string[];
 };

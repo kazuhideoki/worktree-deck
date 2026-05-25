@@ -30,6 +30,7 @@ import {
   resolveCodexSessionOpenPlan,
 } from "./components/codex-session-select-view";
 import { RepositoryMappingManager } from "./components/repository-mapping-manager";
+import { SettingsView } from "./components/settings-view";
 import {
   buildWorktreeDeckDisplayCache,
   hasWorktreeDeckDisplayCacheData,
@@ -428,8 +429,12 @@ export default function Command() {
   const reloadWorktreesAction = globalActionById.get("reload-worktrees");
   const createWorktreeAction = globalActionById.get("create-worktree");
   const restoreDeletedWorktreeAction = globalActionById.get("restore-deleted-worktree");
+<<<<<<< HEAD
   const repositorySettingsAction = globalActionById.get("repository-settings");
   const extensionPreferencesAction = globalActionById.get("extension-preferences");
+=======
+  const settingsAction = globalActionById.get("settings");
+>>>>>>> migrate-repo-settings-to-raycast-preference
   const hasVisibleContent = visibleSections.length > 0;
   const isRepositoryMappingOnboardingEmptyState = shouldShowRepositoryMappingOnboardingEmptyState({
     searchText,
@@ -1331,6 +1336,7 @@ export default function Command() {
               onAction={handleReloadWorktrees}
             />
           ) : null}
+<<<<<<< HEAD
           {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
           {restoreDeletedWorktreeAction ? (
             <Action.Push
@@ -1358,6 +1364,27 @@ export default function Command() {
               onAction={() => void openExtensionPreferences()}
             />
           ) : null}
+=======
+          {!createWorktreeAction || !restoreDeletedWorktreeAction || !settingsAction ? null : (
+            <>
+              {includeCreateWorktree ? renderCreateWorktreeAction({ initialRepoRoot: args.initialRepoRoot }) : null}
+              <Action.Push
+                title={restoreDeletedWorktreeAction.title}
+                icon={Icon.ArrowClockwise}
+                shortcut={restoreDeletedWorktreeAction.shortcut}
+                target={<RestoreDeletedWorktreeView onComplete={refreshWorktrees} />}
+                onPop={handleCreatePop}
+              />
+              <Action.Push
+                title={settingsAction.title}
+                icon={Icon.Gear}
+                shortcut={settingsAction.shortcut}
+                target={<SettingsView onRepositoryMappingChange={handleRepositoryMappingChange} />}
+                onPop={handleCreatePop}
+              />
+            </>
+          )}
+>>>>>>> migrate-repo-settings-to-raycast-preference
         </>
       );
     },
@@ -1369,8 +1396,8 @@ export default function Command() {
       handleRepositoryMappingChange,
       refreshWorktrees,
       reloadWorktreesAction,
-      repositorySettingsAction,
       renderCreateWorktreeAction,
+      settingsAction,
       restoreDeletedWorktreeAction,
       setDisplayMode,
     ],
@@ -1380,7 +1407,7 @@ export default function Command() {
    * 初回 repository 追加アクションを描画する
    */
   const renderAddRepositoryMappingAction = useCallback(() => {
-    if (!repositorySettingsAction) {
+    if (!settingsAction) {
       return null;
     }
     return (
@@ -1391,7 +1418,7 @@ export default function Command() {
         onPop={handleCreatePop}
       />
     );
-  }, [handleCreatePop, handleRepositoryMappingChange, repositorySettingsAction]);
+  }, [handleCreatePop, handleRepositoryMappingChange, settingsAction]);
 
   /**
    * 選択中アイテムの詳細ペイン表示位置を更新する

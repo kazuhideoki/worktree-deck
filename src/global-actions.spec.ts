@@ -8,8 +8,12 @@ describe("buildGlobalActionItems", () => {
       "reload-worktrees",
       "create-worktree",
       "restore-deleted-worktree",
+<<<<<<< HEAD
       "repository-settings",
       "extension-preferences",
+=======
+      "settings",
+>>>>>>> migrate-repo-settings-to-raycast-preference
     ]);
   });
 
@@ -25,10 +29,11 @@ describe("buildGlobalActionItems", () => {
     expect(target?.shortcut).toEqual({ modifiers: ["cmd"], key: "n" });
   });
 
-  it("Repository Settings は cmd+shift+, のショートカットを持つ", () => {
+  it("Settings は cmd+shift+, のショートカットを持つ", () => {
     const items = buildGlobalActionItems();
-    const target = items.find((item) => item.id === "repository-settings");
+    const target = items.find((item) => item.id === "settings");
     expect(target?.shortcut).toEqual({ modifiers: ["cmd", "shift"], key: "," });
+    expect(target?.title).toBe("Settings");
   });
 
   it("Restore Deleted Worktree は cmd+shift+r のショートカットを持つ", () => {
