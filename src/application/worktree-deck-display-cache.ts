@@ -1,5 +1,9 @@
 import type { RepositoryMapping } from "../domain/repository-mapping.service";
-import { sessionLogParserService, type SessionKind } from "../domain/session-log-parser.service";
+import {
+  sessionLogParserService,
+  type SessionKind,
+  type SessionSkillUsage,
+} from "../domain/session-log-parser.service";
 import { worktreeOpenAppService, type WorktreeOpenAppMeta } from "../domain/worktree-open-app.service";
 import type { Worktree } from "./worktree.entity";
 import type { WorktreeTitle } from "./worktree-title.entity";
@@ -63,6 +67,33 @@ function normalizeSessionKind(value: unknown): SessionKind | null {
 }
 
 /**
+ * キャッシュ由来のスキル使用履歴を正規化する
+ */
+function normalizeSessionSkillUsages(value: unknown): SessionSkillUsage[] | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.flatMap((item) => {
+    if (item == null || typeof item !== "object") {
+      return [];
+    }
+    const raw = item as Record<string, unknown>;
+    if (typeof raw.name !== "string" || !raw.name.trim()) {
+      return [];
+    }
+    return [
+      {
+        name: raw.name.trim(),
+        timestamp: typeof raw.timestamp === "string" ? raw.timestamp : null,
+      },
+    ];
+  });
+}
+
+/**
  * タイトル配列が妥当か判定する
  */
 function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
@@ -84,6 +115,7 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
     const sessionPath = typeof entry.sessionPath === "string" || entry.sessionPath == null ? entry.sessionPath : null;
     const sessionKind = normalizeSessionKind(entry.sessionKind);
     const isWaitingForUser = typeof entry.isWaitingForUser === "boolean" ? entry.isWaitingForUser : undefined;
+    const skillUsages = normalizeSessionSkillUsages(entry.skillUsages);
     if (title == null || title.length === 0 || updatedAt == null || sessionKind == null) {
       return null;
     }
@@ -96,6 +128,7 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
       sessionPath: sessionPath ?? undefined,
       sessionKind,
       isWaitingForUser,
+      skillUsages,
     });
   }
   return entries;

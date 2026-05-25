@@ -130,6 +130,11 @@ const ENGLISH_SKILL_USAGE_PATTERN = /(?:^|\n)\s*Using (?:the )?([A-Za-z0-9][A-Za
 const JAPANESE_SKILL_USAGE_PATTERN = /(?:^|\n)\s*([A-Za-z0-9][A-Za-z0-9:_./ -]{0,80}?)\s*スキル(?:で|を|として|に|$)/;
 
 /**
+ * 日本語の直接的なスキル使用宣言からスキル名を取り出すパターン
+ */
+const JAPANESE_DIRECT_SKILL_USAGE_PATTERN = /(?:^|\n)\s*([A-Za-z0-9][A-Za-z0-9:_./-]{0,80}?)\s*を使います(?:。|\.|$)/;
+
+/**
  * Codex が注入する skill ブロックからスキル本文を取り出すパターン
  */
 const USER_SKILL_BLOCK_PATTERN = /<skill>\s*([\s\S]*?)\s*<\/skill>/g;
@@ -650,6 +655,20 @@ function addSkillUsage(state: SessionParseState, usage: SessionSkillUsage | null
 }
 
 /**
+ * スキル使用履歴を単調増加データとして統合する
+ */
+function mergeSessionSkillUsages(...groups: SessionSkillUsage[][]): SessionSkillUsage[] {
+  const merged: SessionSkillUsage[] = [];
+  for (const usage of groups.flat()) {
+    if (merged.some((existing) => isDuplicateSkillUsage(existing, usage))) {
+      continue;
+    }
+    merged.push(usage);
+  }
+  return merged;
+}
+
+/**
  * function_call からスキル使用を抽出する
  */
 function extractSkillUsageFromFunctionCall(
@@ -680,7 +699,8 @@ function extractSkillUsageFromFunctionCall(
 function extractSkillUsageFromAssistantText(text: string, timestamp: string | null): SessionSkillUsage | null {
   const englishMatch = text.match(ENGLISH_SKILL_USAGE_PATTERN);
   const japaneseMatch = text.match(JAPANESE_SKILL_USAGE_PATTERN);
-  const name = normalizeSkillName(englishMatch?.[1] ?? japaneseMatch?.[1] ?? "");
+  const japaneseDirectMatch = text.match(JAPANESE_DIRECT_SKILL_USAGE_PATTERN);
+  const name = normalizeSkillName(englishMatch?.[1] ?? japaneseMatch?.[1] ?? japaneseDirectMatch?.[1] ?? "");
   return name ? { name, timestamp } : null;
 }
 
@@ -698,6 +718,41 @@ function extractSkillUsagesFromUserText(text: string, timestamp: string | null):
     }
   }
   return usages;
+}
+
+/**
+ * セッションログ1行からスキル使用履歴だけを抽出する
+ */
+function extractSkillUsagesFromLogLine(line: string): SessionSkillUsage[] {
+  try {
+    const parsed = JSON.parse(line) as Record<string, unknown>;
+    const timestamp = extractLogTimestamp(parsed);
+    const usages: SessionSkillUsage[] = [];
+    const functionCallUsage = extractSkillUsageFromFunctionCall(parsed, timestamp);
+    if (functionCallUsage) {
+      usages.push(functionCallUsage);
+    }
+    const eventMessage = extractEventMessage(parsed);
+    if (eventMessage?.role === "agent") {
+      const eventUsage = extractSkillUsageFromAssistantText(eventMessage.message, timestamp);
+      if (eventUsage) {
+        usages.push(eventUsage);
+      }
+    }
+    const responseMessage = extractResponseMessage(parsed);
+    if (responseMessage?.role === "user") {
+      usages.push(...extractSkillUsagesFromUserText(responseMessage.text, timestamp));
+    }
+    if (responseMessage?.role === "assistant" && responseMessage.phase === "commentary") {
+      const responseUsage = extractSkillUsageFromAssistantText(responseMessage.text, timestamp);
+      if (responseUsage) {
+        usages.push(responseUsage);
+      }
+    }
+    return mergeSessionSkillUsages(usages);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -1301,6 +1356,7 @@ export const sessionLogParserService = {
   extractResponseItemType,
   extractResponseMessage,
   extractSessionMessageFromEvent,
+  extractSkillUsagesFromLogLine,
   finalizeParseState,
   isMainSessionKind,
   isSessionMessageRole,
@@ -1308,5 +1364,6 @@ export const sessionLogParserService = {
   isTitleSessionKind,
   isWorkingResponseItemType,
   matchPath,
+  mergeSessionSkillUsages,
   updateParseState,
 } as const;

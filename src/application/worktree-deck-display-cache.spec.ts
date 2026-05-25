@@ -21,6 +21,7 @@ function buildTitle(args: {
   status?: "working" | "done" | null;
   sessionKind?: WorktreeTitle["sessionKind"];
   isWaitingForUser?: boolean;
+  skillUsages?: WorktreeTitle["skillUsages"];
 }): WorktreeTitle {
   return {
     title: args.title,
@@ -29,6 +30,7 @@ function buildTitle(args: {
     status: args.status ?? null,
     sessionKind: args.sessionKind ?? "main",
     isWaitingForUser: args.isWaitingForUser,
+    skillUsages: args.skillUsages,
   };
 }
 
@@ -78,6 +80,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
       latestMessage: "done",
       updatedAt: 100,
       status: "done",
+      skillUsages: [{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" }],
     });
     const cache = buildWorktreeDeckDisplayCache({
       worktrees: [
@@ -153,6 +156,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
       latestMessage: "done",
       updatedAt: 100,
       status: "done",
+      skillUsages: [{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" }],
     });
     const restored = applyWorktreeDeckDisplayCache({
       worktrees: [

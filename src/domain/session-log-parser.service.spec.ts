@@ -239,11 +239,20 @@ describe("sessionLogParserService", () => {
           phase: "commentary",
         },
       },
+      {
+        timestamp: "2026-05-03T10:10:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "agent_message",
+          message: "review-by-sub-agents を使います。",
+        },
+      },
     ]);
 
     expect(result.skillUsages).toEqual([
       { name: "imagegen", timestamp: "2026-05-03T10:00:00.000Z" },
       { name: "Computer Use", timestamp: "2026-05-03T10:05:00.000Z" },
+      { name: "review-by-sub-agents", timestamp: "2026-05-03T10:10:00.000Z" },
     ]);
   });
 

@@ -1,5 +1,5 @@
 import { LocalStorage } from "@raycast/api";
-import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1235,6 +1235,91 @@ describe("loadTitlesForPaths", () => {
       files: Record<string, { sessionKind?: string }>;
     };
     expect(savedCache.files[guardianFile]?.sessionKind).toBe("autoReview");
+  });
+
+  it("大きい動作中セッションの中間にあるスキル履歴を追記更新し既存履歴を保持する", async () => {
+    const sessionDir = await createSessionDir(codexHome, new Date());
+    const storage = new Map<string, string>();
+    mockedLocalStorage.getItem.mockImplementation(async (key: string) => storage.get(key) ?? null);
+    mockedLocalStorage.setItem.mockImplementation(async (key: string, value: unknown) => {
+      storage.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    });
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Active large session"),
+      "x".repeat(300 * 1024),
+      buildResponseMessageLine(
+        "user",
+        [
+          "<skill>",
+          "<name>review-by-sub-agents</name>",
+          "<path>/Users/me/.codex/skills/review-by-sub-agents/SKILL.md</path>",
+          "</skill>",
+        ].join("\n"),
+        "2026-05-03T10:00:00.000Z",
+      ),
+      "x".repeat(300 * 1024),
+      buildFunctionCallLine(),
+    ]);
+
+    const first = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    await appendFile(
+      sessionPath,
+      `${buildEventMessageLine("agent_message", "github:gh-fix-ci を使います。", "2026-05-03T10:10:00.000Z")}\n`,
+      "utf8",
+    );
+
+    const second = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(first.get(worktreePath)?.[0]?.skillUsages).toEqual([
+      { name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" },
+    ]);
+    expect(second.get(worktreePath)?.[0]?.skillUsages).toEqual([
+      { name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" },
+      { name: "github:gh-fix-ci", timestamp: "2026-05-03T10:10:00.000Z" },
+    ]);
+  });
+
+  it("スキル履歴の追記スキャンは未完了行を次回に持ち越す", async () => {
+    const sessionDir = await createSessionDir(codexHome, new Date());
+    const storage = new Map<string, string>();
+    mockedLocalStorage.getItem.mockImplementation(async (key: string) => storage.get(key) ?? null);
+    mockedLocalStorage.setItem.mockImplementation(async (key: string, value: unknown) => {
+      storage.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    });
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Partial skill scan"),
+      "x".repeat(300 * 1024),
+      buildFunctionCallLine(),
+    ]);
+
+    const first = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    const skillLine = buildEventMessageLine(
+      "agent_message",
+      "review-by-sub-agents を使います。",
+      "2026-05-03T10:00:00.000Z",
+    );
+    await appendFile(sessionPath, skillLine.slice(0, Math.floor(skillLine.length / 2)), "utf8");
+    const second = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    await appendFile(sessionPath, `${skillLine.slice(Math.floor(skillLine.length / 2))}\n`, "utf8");
+
+    const third = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(first.get(worktreePath)?.[0]?.skillUsages).toEqual([]);
+    expect(second.get(worktreePath)?.[0]?.skillUsages).toEqual([]);
+    expect(third.get(worktreePath)?.[0]?.skillUsages).toEqual([
+      { name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" },
+    ]);
   });
 });
 

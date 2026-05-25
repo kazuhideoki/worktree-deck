@@ -33,6 +33,7 @@ type TitlesTimingLogger = (label: string, elapsedMs: number) => void;
 type TitlesCacheFileEntry = {
   mtimeMs: number;
   size: number;
+  skillScanOffset: number;
   updatedAt: number;
   startedAt: number | null;
   title: string | null;
@@ -60,7 +61,7 @@ const ENV_SEARCH_DAYS = "WORKTREE_DECK_SEARCH_DAYS";
 /**
  * タイトルキャッシュのキー接頭辞
  */
-const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v14";
+const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v15";
 /**
  * working を done に切り替える経過日数の環境変数名
  */
@@ -306,6 +307,22 @@ function shouldRunSessionFullParseFallback(args: {
 }
 
 /**
+ * 前回のスキル履歴走査位置を継続利用できるか判定する
+ */
+function resolveSkillScanOffset(cachedEntry: TitlesCacheFileEntry | undefined, fileSize: number): number | null {
+  if (!cachedEntry) {
+    return null;
+  }
+  if (!Number.isFinite(cachedEntry.skillScanOffset)) {
+    return null;
+  }
+  if (cachedEntry.skillScanOffset < 0 || cachedEntry.skillScanOffset > fileSize) {
+    return null;
+  }
+  return cachedEntry.skillScanOffset;
+}
+
+/**
  * 改行文字のバイト値か判定する
  */
 function isLineBreakByte(byte: number): boolean {
@@ -515,6 +532,89 @@ async function parseSessionFile(filePath: string, homeDir: string | null): Promi
 }
 
 /**
+ * セッションファイルの指定位置以降からスキル使用履歴だけを走査する
+ */
+async function scanSessionSkillUsages(args: {
+  filePath: string;
+  startOffset: number;
+  fileSize: number;
+}): Promise<{ skillUsages: ParsedSessionLog["skillUsages"]; scannedOffset: number }> {
+  if (args.startOffset >= args.fileSize) {
+    return { skillUsages: [], scannedOffset: args.fileSize };
+  }
+  let handle;
+  const skillUsages: ParsedSessionLog["skillUsages"] = [];
+  try {
+    handle = await fs.open(args.filePath, "r");
+    const length = args.fileSize - args.startOffset;
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, args.startOffset);
+    const text = buffer.toString("utf8");
+    const hasCompleteFinalLine = text.endsWith("\n") || text.endsWith("\r");
+    const lines = text.split(/\r?\n/);
+    if (!hasCompleteFinalLine) {
+      lines.pop();
+    }
+    for (const line of lines) {
+      skillUsages.push(...sessionLogParserService.extractSkillUsagesFromLogLine(line));
+    }
+    const lastLineBreakIndex = Math.max(buffer.lastIndexOf(0x0a), buffer.lastIndexOf(0x0d));
+    const scannedBytes = lastLineBreakIndex >= 0 ? lastLineBreakIndex + 1 : 0;
+    const scannedOffset = hasCompleteFinalLine ? args.fileSize : args.startOffset + scannedBytes;
+    return {
+      skillUsages,
+      scannedOffset,
+    };
+  } finally {
+    if (handle) {
+      await handle.close();
+    }
+  }
+}
+
+/**
+ * cache と今回解析分を使ってスキル使用履歴を単調に更新する
+ */
+async function resolveSessionSkillUsageCache(args: {
+  filePath: string;
+  fileSize: number;
+  cachedEntry: TitlesCacheFileEntry | undefined;
+  parsedSkillUsages: ParsedSessionLog["skillUsages"];
+}): Promise<{ skillUsages: ParsedSessionLog["skillUsages"]; skillScanOffset: number }> {
+  const cachedOffset = resolveSkillScanOffset(args.cachedEntry, args.fileSize);
+  if (cachedOffset != null) {
+    const scanned = await scanSessionSkillUsages({
+      filePath: args.filePath,
+      startOffset: cachedOffset,
+      fileSize: args.fileSize,
+    });
+    return {
+      skillUsages: sessionLogParserService.mergeSessionSkillUsages(
+        args.cachedEntry?.skillUsages ?? [],
+        args.parsedSkillUsages,
+        scanned.skillUsages,
+      ),
+      skillScanOffset: scanned.scannedOffset,
+    };
+  }
+  if (args.fileSize <= SESSION_HEAD_READ_BYTES) {
+    return {
+      skillUsages: args.parsedSkillUsages,
+      skillScanOffset: args.fileSize,
+    };
+  }
+  const scanned = await scanSessionSkillUsages({
+    filePath: args.filePath,
+    startOffset: 0,
+    fileSize: args.fileSize,
+  });
+  return {
+    skillUsages: sessionLogParserService.mergeSessionSkillUsages(args.parsedSkillUsages, scanned.skillUsages),
+    skillScanOffset: scanned.scannedOffset,
+  };
+}
+
+/**
  * タイトルキャッシュ用のキーを生成する
  */
 function buildTitlesCacheKey(codexHome: string): string {
@@ -544,6 +644,7 @@ function normalizeTitlesCacheStorage(value: unknown): TitlesCacheStorage | null 
     const rawEntry = entry as Record<string, unknown>;
     const mtimeMs = typeof rawEntry.mtimeMs === "number" ? rawEntry.mtimeMs : null;
     const size = typeof rawEntry.size === "number" ? rawEntry.size : null;
+    const skillScanOffset = typeof rawEntry.skillScanOffset === "number" ? rawEntry.skillScanOffset : null;
     const updatedAt = typeof rawEntry.updatedAt === "number" ? rawEntry.updatedAt : null;
     const startedAt = typeof rawEntry.startedAt === "number" ? rawEntry.startedAt : null;
     const title = typeof rawEntry.title === "string" ? rawEntry.title : null;
@@ -566,6 +667,7 @@ function normalizeTitlesCacheStorage(value: unknown): TitlesCacheStorage | null 
     files[filePath] = {
       mtimeMs,
       size,
+      skillScanOffset: skillScanOffset ?? 0,
       updatedAt,
       startedAt,
       title,
@@ -802,10 +904,17 @@ export async function loadTitlesForPaths(args: {
         cacheMissCount += 1;
         const parseSessionFileStartMs = Date.now();
         const parsed = await parseSessionFile(sessionFile.path, args.homeDir);
+        const skillUsageCache = await resolveSessionSkillUsageCache({
+          filePath: sessionFile.path,
+          fileSize: sessionFile.size,
+          cachedEntry,
+          parsedSkillUsages: parsed.skillUsages,
+        });
         parseSessionFilesElapsedMs += Date.now() - parseSessionFileStartMs;
         entry = {
           mtimeMs: sessionFile.updatedAt,
           size: sessionFile.size,
+          skillScanOffset: skillUsageCache.skillScanOffset,
           updatedAt: sessionFile.updatedAt,
           startedAt: parsed.startedAt,
           title: parsed.title,
@@ -818,7 +927,7 @@ export async function loadTitlesForPaths(args: {
           isWaitingForUser: parsed.isWaitingForUser,
           sessionThreadId: parsed.sessionThreadId,
           parentThreadId: parsed.parentThreadId,
-          skillUsages: parsed.skillUsages,
+          skillUsages: skillUsageCache.skillUsages,
         };
       }
 
