@@ -63,7 +63,7 @@ describe("raycast-preferences", () => {
 
     expect(preferencesByName.get("GIT_WORKTREE_PATH")).toMatchObject({
       title: "Worktree Directory (~/.worktree-deck/worktrees)",
-      required: true,
+      required: false,
       default: "~/.worktree-deck/worktrees",
     });
     expect(preferencesByName.get("CODEX_HOME")).toMatchObject({

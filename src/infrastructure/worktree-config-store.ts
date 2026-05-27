@@ -1,6 +1,11 @@
 import { expandHomePath, normalizePathValue } from "../domain/path-utils";
 
 /**
+ * 初期起動時に使う worktree 作成・スキャン先
+ */
+const DEFAULT_WORKTREE_BASE_PATH = "~/.worktree-deck/worktrees";
+
+/**
  * GIT_WORKTREE_PATH の値を実行環境の絶対パスへ正規化する
  */
 function normalizeWorktreeBasePath(value: string, homeDir: string | null): string {
@@ -20,5 +25,5 @@ export async function loadBasePath(args: {
     return normalizeWorktreeBasePath(fromEnv, args.homeDir);
   }
 
-  throw new Error("GIT_WORKTREE_PATH is not set. Set it in Raycast Preferences.");
+  return normalizeWorktreeBasePath(DEFAULT_WORKTREE_BASE_PATH, args.homeDir);
 }

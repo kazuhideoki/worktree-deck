@@ -22,9 +22,9 @@ describe("loadBasePath", () => {
     expect(result).toBe("/Users/tester/.worktree-deck/worktrees");
   });
 
-  it("GIT_WORKTREE_PATH が未設定なら Raycast Preferences の入力を促す", async () => {
-    await expect(loadBasePath(buildArgs())).rejects.toThrow(
-      "GIT_WORKTREE_PATH is not set. Set it in Raycast Preferences.",
-    );
+  it("GIT_WORKTREE_PATH が未設定なら default worktree directory を使う", async () => {
+    const result = await loadBasePath(buildArgs());
+
+    expect(result).toBe("/Users/tester/.worktree-deck/worktrees");
   });
 });

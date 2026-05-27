@@ -43,7 +43,7 @@
       "title": "Worktree Directory (~/.worktree-deck/worktrees)",
       "description": "Directory where Worktree Deck creates and scans git worktrees.",
       "type": "directory",
-      "required": true,
+      "required": false,
       "default": "~/.worktree-deck/worktrees"
     },
     {
