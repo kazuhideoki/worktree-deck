@@ -78,8 +78,10 @@ import {
   loadSessionMessages,
 } from "./infrastructure/codex-session-file-store";
 import {
+  loadCreateStartMode,
   loadPreferredIdeApp,
   openPathInConfiguredIde,
+  saveCreateStartMode,
   savePreferredIdeApp,
 } from "./infrastructure/worktree-ide-app-store";
 import {
@@ -160,6 +162,8 @@ type WorktreeDeckCompositionRoot = {
   generalSettingsStore: {
     loadPreferredIdeApp: typeof loadPreferredIdeApp;
     savePreferredIdeApp: typeof savePreferredIdeApp;
+    loadCreateStartMode: typeof loadCreateStartMode;
+    saveCreateStartMode: typeof saveCreateStartMode;
   };
   selectionStore: {
     loadPersistedSelection: typeof loadPersistedSelectionFromStorage;
@@ -266,6 +270,8 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
     generalSettingsStore: {
       loadPreferredIdeApp,
       savePreferredIdeApp,
+      loadCreateStartMode,
+      saveCreateStartMode,
     },
     selectionStore: {
       loadPersistedSelection: loadPersistedSelectionFromStorage,

@@ -10,6 +10,7 @@ import {
   formatImageAttachmentControlsText,
   normalizeBaseRefDropdownValue,
   openWorktreeWhenReady,
+  resolveCreateFormAutoStart,
   resolveCreateWorktreeFormImagePaths,
   resolveCreateWorktreeFormFocusRestoreItemId,
   resetCreateWorktreeFormDraftStorage,
@@ -79,8 +80,15 @@ describe("buildCreateWorktreeFormItemOrder", () => {
 });
 
 describe("DEFAULT_CREATE_WORKTREE_AUTO_START", () => {
-  it("保持済みドラフトがない場合は Auto Start を既定にする", () => {
+  it("設定未保存の場合は Auto Start を既定にする", () => {
     expect(DEFAULT_CREATE_WORKTREE_AUTO_START).toBe(true);
+  });
+});
+
+describe("resolveCreateFormAutoStart", () => {
+  it("開始モードから Auto Start 状態を返す", () => {
+    expect(resolveCreateFormAutoStart("auto-start")).toBe(true);
+    expect(resolveCreateFormAutoStart("manual")).toBe(false);
   });
 });
 

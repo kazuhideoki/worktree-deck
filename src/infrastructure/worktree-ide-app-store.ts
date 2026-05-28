@@ -1,4 +1,8 @@
 import { worktreeIdeAppService, type WorktreeIdeApp } from "../domain/worktree-ide-app.service";
+import {
+  worktreeCreateStartModeService,
+  type WorktreeCreateStartMode,
+} from "../domain/worktree-create-start-mode.service";
 import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 import { ensureIdeAppInstalled, openPathInIdeApp } from "./worktree-ide-infra";
@@ -18,6 +22,7 @@ const GENERAL_SETTINGS_STORAGE_FILE = "general-settings.json";
  */
 type GeneralSettingsStorage = {
   ideApp?: WorktreeIdeApp;
+  createStartMode?: WorktreeCreateStartMode;
 };
 
 /**
@@ -45,7 +50,13 @@ function normalizeGeneralSettingsStorage(value: unknown): GeneralSettingsStorage
     return {};
   }
   const ideApp = worktreeIdeAppService.normalizeIdeApp((value as Record<string, unknown>).ideApp);
-  return ideApp ? { ideApp } : {};
+  const createStartMode = worktreeCreateStartModeService.normalizeStartMode(
+    (value as Record<string, unknown>).createStartMode,
+  );
+  return {
+    ...(ideApp ? { ideApp } : {}),
+    ...(createStartMode ? { createStartMode } : {}),
+  };
 }
 
 /**
@@ -75,11 +86,31 @@ async function saveGeneralSettingsStorage(storage: GeneralSettingsStorage): Prom
 }
 
 /**
+ * General Settings の現在値を部分更新する
+ */
+async function updateGeneralSettingsStorage(
+  update: (storage: GeneralSettingsStorage) => GeneralSettingsStorage,
+): Promise<GeneralSettingsStorage> {
+  const currentStorage = await loadGeneralSettingsStorage();
+  const nextStorage = update(currentStorage);
+  await saveGeneralSettingsStorage(nextStorage);
+  return nextStorage;
+}
+
+/**
  * 保存済み IDE アプリケーションを読み込む
  */
 export async function loadPreferredIdeApp(): Promise<WorktreeIdeApp> {
   const storage = await loadGeneralSettingsStorage();
   return worktreeIdeAppService.resolvePreferred(storage.ideApp);
+}
+
+/**
+ * Worktree 作成フォームの保存済み開始モードを読み込む
+ */
+export async function loadCreateStartMode(): Promise<WorktreeCreateStartMode> {
+  const storage = await loadGeneralSettingsStorage();
+  return worktreeCreateStartModeService.resolveDefault(storage.createStartMode);
 }
 
 /**
@@ -91,8 +122,20 @@ export async function savePreferredIdeApp(ideApp: WorktreeIdeApp): Promise<Workt
     throw new Error("Unsupported IDE application.");
   }
   await ensureIdeAppInstalled(normalizedIdeApp);
-  await saveGeneralSettingsStorage({ ideApp: normalizedIdeApp });
+  await updateGeneralSettingsStorage((storage) => ({ ...storage, ideApp: normalizedIdeApp }));
   return normalizedIdeApp;
+}
+
+/**
+ * Worktree 作成フォームの開始モード設定を保存する
+ */
+export async function saveCreateStartMode(startMode: WorktreeCreateStartMode): Promise<WorktreeCreateStartMode> {
+  const normalizedStartMode = worktreeCreateStartModeService.normalizeStartMode(startMode);
+  if (!normalizedStartMode) {
+    throw new Error("Unsupported create start mode.");
+  }
+  await updateGeneralSettingsStorage((storage) => ({ ...storage, createStartMode: normalizedStartMode }));
+  return normalizedStartMode;
 }
 
 /**

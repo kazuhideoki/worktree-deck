@@ -19,7 +19,13 @@ vi.mock("./worktree-ide-infra", () => {
   };
 });
 
-import { loadPreferredIdeApp, openPathInConfiguredIde, savePreferredIdeApp } from "./worktree-ide-app-store";
+import {
+  loadCreateStartMode,
+  loadPreferredIdeApp,
+  openPathInConfiguredIde,
+  saveCreateStartMode,
+  savePreferredIdeApp,
+} from "./worktree-ide-app-store";
 
 describe("worktree-ide-app-store", () => {
   beforeEach(() => {
@@ -38,10 +44,20 @@ describe("worktree-ide-app-store", () => {
     await expect(loadPreferredIdeApp()).resolves.toBe("zed");
   });
 
+  it("開始モードが未保存の場合は Auto Start を返す", async () => {
+    await expect(loadCreateStartMode()).resolves.toBe("auto-start");
+  });
+
   it("保存済み IDE アプリケーションを読み込む", async () => {
     readStorageMock.mockResolvedValue({ ideApp: "cursor" });
 
     await expect(loadPreferredIdeApp()).resolves.toBe("cursor");
+  });
+
+  it("保存済み開始モードを読み込む", async () => {
+    readStorageMock.mockResolvedValue({ createStartMode: "manual" });
+
+    await expect(loadCreateStartMode()).resolves.toBe("manual");
   });
 
   it("IDE アプリケーション設定を保存する", async () => {
@@ -49,6 +65,28 @@ describe("worktree-ide-app-store", () => {
 
     expect(ensureIdeAppInstalledMock).toHaveBeenCalledWith("vscode");
     expect(writeStorageMock).toHaveBeenCalledWith(expect.anything(), "general-settings.json", { ideApp: "vscode" });
+  });
+
+  it("IDE アプリケーション設定の保存時に開始モードを保持する", async () => {
+    readStorageMock.mockResolvedValue({ ideApp: "cursor", createStartMode: "manual" });
+
+    await expect(savePreferredIdeApp("vscode")).resolves.toBe("vscode");
+
+    expect(writeStorageMock).toHaveBeenCalledWith(expect.anything(), "general-settings.json", {
+      ideApp: "vscode",
+      createStartMode: "manual",
+    });
+  });
+
+  it("開始モード設定を保存する", async () => {
+    readStorageMock.mockResolvedValue({ ideApp: "cursor", createStartMode: "auto-start" });
+
+    await expect(saveCreateStartMode("manual")).resolves.toBe("manual");
+
+    expect(writeStorageMock).toHaveBeenCalledWith(expect.anything(), "general-settings.json", {
+      ideApp: "cursor",
+      createStartMode: "manual",
+    });
   });
 
   it("IDE アプリケーションが未インストールなら設定を保存しない", async () => {

@@ -1,11 +1,16 @@
 import { Action, ActionPanel, Form, Icon, List, Toast, showToast, useNavigation } from "@raycast/api";
 import { useCallback, useEffect, useState } from "react";
 import { resolveWorktreeDeckCompositionRoot } from "../composition-root";
+import {
+  worktreeCreateStartModeService,
+  type WorktreeCreateStartMode,
+} from "../domain/worktree-create-start-mode.service";
 import { worktreeIdeAppService, type WorktreeIdeApp } from "../domain/worktree-ide-app.service";
 import { RepositoryMappingManager } from "./repository-mapping-manager";
 
 const WORKTREE_DECK_COMPOSITION_ROOT = resolveWorktreeDeckCompositionRoot();
-const { loadPreferredIdeApp, savePreferredIdeApp } = WORKTREE_DECK_COMPOSITION_ROOT.generalSettingsStore;
+const { loadCreateStartMode, loadPreferredIdeApp, saveCreateStartMode, savePreferredIdeApp } =
+  WORKTREE_DECK_COMPOSITION_ROOT.generalSettingsStore;
 
 /**
  * アプリケーション設定カテゴリの識別子
@@ -35,7 +40,7 @@ export function buildSettingsItems(): SettingsItem[] {
     {
       id: "general",
       title: "General Settings",
-      subtitle: "Choose the IDE used to open workspaces and files.",
+      subtitle: "Choose the IDE and default worktree creation mode.",
       icon: Icon.Gear,
     },
     {
@@ -89,6 +94,7 @@ export function SettingsView({ onGeneralSettingsChange, onRepositoryMappingChang
 
 type GeneralSettingsFormValues = {
   ideApp: string;
+  createStartMode: string;
 };
 
 type GeneralSettingsFormProps = {
@@ -103,11 +109,19 @@ export function resolveGeneralSettingsIdeApp(value: string): WorktreeIdeApp {
 }
 
 /**
+ * Worktree 作成開始モード値をフォーム入力から解決する
+ */
+export function resolveGeneralSettingsCreateStartMode(value: string): WorktreeCreateStartMode {
+  return worktreeCreateStartModeService.resolveDefault(worktreeCreateStartModeService.normalizeStartMode(value));
+}
+
+/**
  * General Settings 入力フォームを表示する
  */
 export function GeneralSettingsForm({ onSave }: GeneralSettingsFormProps) {
   const { pop } = useNavigation();
   const [ideApp, setIdeApp] = useState<WorktreeIdeApp>("zed");
+  const [createStartMode, setCreateStartMode] = useState<WorktreeCreateStartMode>("auto-start");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -115,9 +129,10 @@ export function GeneralSettingsForm({ onSave }: GeneralSettingsFormProps) {
     async function loadSettings(): Promise<void> {
       setIsLoading(true);
       try {
-        const loadedIdeApp = await loadPreferredIdeApp();
+        const [loadedIdeApp, loadedCreateStartMode] = await Promise.all([loadPreferredIdeApp(), loadCreateStartMode()]);
         if (active) {
           setIdeApp(loadedIdeApp);
+          setCreateStartMode(loadedCreateStartMode);
         }
       } catch (error) {
         if (active) {
@@ -146,7 +161,11 @@ export function GeneralSettingsForm({ onSave }: GeneralSettingsFormProps) {
     async (values: GeneralSettingsFormValues) => {
       try {
         const savedIdeApp = await savePreferredIdeApp(resolveGeneralSettingsIdeApp(values.ideApp));
+        const savedCreateStartMode = await saveCreateStartMode(
+          resolveGeneralSettingsCreateStartMode(values.createStartMode),
+        );
         setIdeApp(savedIdeApp);
+        setCreateStartMode(savedCreateStartMode);
         onSave?.(savedIdeApp);
         await showToast({ style: Toast.Style.Success, title: "Settings saved" });
         pop();
@@ -177,6 +196,16 @@ export function GeneralSettingsForm({ onSave }: GeneralSettingsFormProps) {
         onChange={(value) => setIdeApp(resolveGeneralSettingsIdeApp(value))}
       >
         {worktreeIdeAppService.listIdeAppOptions().map((option) => (
+          <Form.Dropdown.Item key={option.value} value={option.value} title={option.title} />
+        ))}
+      </Form.Dropdown>
+      <Form.Dropdown
+        id="createStartMode"
+        title="Default Start Mode"
+        value={createStartMode}
+        onChange={(value) => setCreateStartMode(resolveGeneralSettingsCreateStartMode(value))}
+      >
+        {worktreeCreateStartModeService.listStartModeOptions().map((option) => (
           <Form.Dropdown.Item key={option.value} value={option.value} title={option.title} />
         ))}
       </Form.Dropdown>

@@ -55,7 +55,7 @@
 ## 4. 設定・保存先の境界
 
 - Raycast Preferences は command entrypoint で `process.env` 互換値へ反映し、実行パスとしきい値を扱う。対象は `GIT_WORKTREE_PATH`, `CODEX_HOME`, `WORKTREE_DECK_SEARCH_DAYS`, `WORKTREE_DECK_DONE_THRESHOLD_DAYS`。
-- アプリ所有の JSON 状態は `~/.worktree-deck/storage` に固定する。storage の場所は Raycast Preferences で変更しない。
+- アプリ所有の JSON 状態は `~/.worktree-deck/storage` に固定する。storage の場所は Raycast Preferences で変更しない。General Settings には preferred IDE と Worktree 作成フォームの既定開始モードを保存する。
 - Raycast LocalStorage は、一覧キャッシュや選択復元など、失敗しても主要処理を止めないキャッシュに使う。
 
 ## 5. 依存と組み立てのルール

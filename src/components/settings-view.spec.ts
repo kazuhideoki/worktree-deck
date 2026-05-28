@@ -3,7 +3,13 @@ import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 
 import { RepositoryMappingManager } from "./repository-mapping-manager";
-import { buildSettingsItems, GeneralSettingsForm, resolveGeneralSettingsIdeApp, SettingsView } from "./settings-view";
+import {
+  buildSettingsItems,
+  GeneralSettingsForm,
+  resolveGeneralSettingsCreateStartMode,
+  resolveGeneralSettingsIdeApp,
+  SettingsView,
+} from "./settings-view";
 
 type ElementWithProps<Props> = ReactElement<Props>;
 
@@ -13,7 +19,7 @@ describe("buildSettingsItems", () => {
       {
         id: "general",
         title: "General Settings",
-        subtitle: "Choose the IDE used to open workspaces and files.",
+        subtitle: "Choose the IDE and default worktree creation mode.",
         icon: Icon.Gear,
       },
       {
@@ -87,5 +93,12 @@ describe("resolveGeneralSettingsIdeApp", () => {
   it("未対応値は Zed にフォールバックする", () => {
     expect(resolveGeneralSettingsIdeApp("cursor")).toBe("cursor");
     expect(resolveGeneralSettingsIdeApp("unknown")).toBe("zed");
+  });
+});
+
+describe("resolveGeneralSettingsCreateStartMode", () => {
+  it("未対応値は Auto Start にフォールバックする", () => {
+    expect(resolveGeneralSettingsCreateStartMode("manual")).toBe("manual");
+    expect(resolveGeneralSettingsCreateStartMode("unknown")).toBe("auto-start");
   });
 });

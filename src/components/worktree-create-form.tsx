@@ -39,6 +39,7 @@ import {
 import { worktreeOpenAppUsecase } from "../application/worktree-open-app.usecase";
 import { resolveWorktreeDeckCompositionRoot } from "../composition-root";
 import { type RepositoryMapping } from "../domain/repository-mapping.service";
+import { type WorktreeCreateStartMode } from "../domain/worktree-create-start-mode.service";
 import { type WorktreeIdeApp } from "../domain/worktree-ide-app.service";
 import { type WorktreeOpenApp } from "../domain/worktree-open-app.service";
 import { resolveOpenAppIcon, resolveOpenAppTitle } from "./worktree-open-app-icon";
@@ -140,6 +141,7 @@ const CODEX_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-code
  */
 const WORKTREE_DECK_COMPOSITION_ROOT = resolveWorktreeDeckCompositionRoot();
 const { loadRepositoryMappings } = WORKTREE_DECK_COMPOSITION_ROOT.repositoryMappingStore;
+const { loadCreateStartMode, loadPreferredIdeApp } = WORKTREE_DECK_COMPOSITION_ROOT.generalSettingsStore;
 const {
   listLocalBranches,
   loadDefaultBaseRef,
@@ -212,10 +214,7 @@ export function CreateWorktreeForm({
   const [selectedBaseBranch, setSelectedBaseBranch] = useState<string>("");
   const [isBranchesLoading, setIsBranchesLoading] = useState(false);
   const [branchErrorMessage, setBranchErrorMessage] = useState<string | null>(null);
-  const [autoStartDraft, setAutoStartDraft] = useCachedState<boolean>(
-    CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.autoStart,
-    DEFAULT_CREATE_WORKTREE_AUTO_START,
-  );
+  const [autoStartDraft, setAutoStartDraft] = useState<boolean>(DEFAULT_CREATE_WORKTREE_AUTO_START);
   const [initialPromptDraft, setInitialPromptDraft] = useCachedState<string>(
     CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.initialPrompt,
     "",
@@ -254,6 +253,7 @@ export function CreateWorktreeForm({
   const [preferredIdeApp, setPreferredIdeApp] = useState<WorktreeIdeApp>("zed");
   const [scriptPath, setScriptPath] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGeneralSettingsLoading, setIsGeneralSettingsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const focusedFormItemIdRef = useRef<CreateWorktreeFocusableItemId>(CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt);
@@ -268,25 +268,31 @@ export function CreateWorktreeForm({
   const openAppRef = useRef<Form.Dropdown>(null);
 
   /**
-   * General Settings の IDE 設定を読み込む
+   * General Settings の作成フォーム既定値を読み込む
    */
   useEffect(() => {
     let active = true;
-    async function loadPreferredIdeAppSetting(): Promise<void> {
+    async function loadGeneralSettings(): Promise<void> {
+      setIsGeneralSettingsLoading(true);
       try {
-        const loadedIdeApp = await WORKTREE_DECK_COMPOSITION_ROOT.generalSettingsStore.loadPreferredIdeApp();
+        const [loadedIdeApp, loadedCreateStartMode] = await Promise.all([loadPreferredIdeApp(), loadCreateStartMode()]);
         if (active) {
           setPreferredIdeApp(loadedIdeApp);
+          setAutoStartDraft(resolveCreateFormAutoStart(loadedCreateStartMode));
         }
       } catch (error) {
         await showToast({
           style: Toast.Style.Failure,
-          title: "Failed to load IDE setting",
+          title: "Failed to load settings",
           message: formatExecErrorMessage(error),
         });
+      } finally {
+        if (active) {
+          setIsGeneralSettingsLoading(false);
+        }
       }
     }
-    void loadPreferredIdeAppSetting();
+    void loadGeneralSettings();
     return () => {
       active = false;
     };
@@ -864,7 +870,7 @@ export function CreateWorktreeForm({
 
   return (
     <Form
-      isLoading={isLoading}
+      isLoading={isLoading || isGeneralSettingsLoading}
       actions={
         <ActionPanel>
           <Action.SubmitForm
@@ -927,7 +933,7 @@ export function CreateWorktreeForm({
         </ActionPanel>
       }
     >
-      {isLoading
+      {isLoading || isGeneralSettingsLoading
         ? null
         : buildCreateWorktreeFormItemOrder({
             autoStart: autoStartDraft,
@@ -1640,6 +1646,13 @@ function resolvePermissionsMode(value: string): CodexPermissionMode {
  */
 function resolveCreateFormOpenApp(value: string): WorktreeOpenApp {
   return value === "codex-app" ? "codex-app" : "zed";
+}
+
+/**
+ * General Settings の開始モードから Auto Start 状態を返す
+ */
+export function resolveCreateFormAutoStart(startMode: WorktreeCreateStartMode): boolean {
+  return startMode === "auto-start";
 }
 
 /**
