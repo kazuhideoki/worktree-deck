@@ -174,11 +174,7 @@ function buildLoadArgs(codexHome: string, worktreePath: string) {
   return {
     paths: [worktreePath],
     env,
-    cwd: worktreePath,
     homeDir: null,
-    assetsPath: "",
-    packageDir: process.cwd(),
-    packageName: "worktree-deck",
   };
 }
 
@@ -194,11 +190,7 @@ function buildFindLatestArgs(codexHome: string, worktreePath: string) {
   return {
     path: worktreePath,
     env,
-    cwd: worktreePath,
     homeDir: null,
-    assetsPath: "",
-    packageDir: process.cwd(),
-    packageName: "worktree-deck",
   };
 }
 

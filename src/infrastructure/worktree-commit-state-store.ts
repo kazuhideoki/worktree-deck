@@ -5,10 +5,6 @@ import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 
 /**
- * package.json の name と一致させる
- */
-const WORKTREE_DECK_PACKAGE_NAME = "worktree-deck";
-/**
  * worktree のコミット状態を保存する storage ファイル名
  */
 const WORKTREE_COMMIT_STATE_STORAGE_FILE = "worktree-commit-state.json";
@@ -19,7 +15,7 @@ export type { WorktreeCommitState };
  * worktree commit 状態用の storage 引数を組み立てる
  */
 function buildWorktreeCommitStateStorageArgs(): EnvLookupArgs {
-  return buildEnvLookupArgs(__dirname, WORKTREE_DECK_PACKAGE_NAME);
+  return buildEnvLookupArgs();
 }
 
 /**

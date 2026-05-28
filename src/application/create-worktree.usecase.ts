@@ -7,8 +7,6 @@ export type WorktreeCreateContext = {
   env: NodeJS.ProcessEnv;
   homeDir: string | null;
   assetsPath: string;
-  packageDir: string;
-  packageName: string;
 };
 
 /**

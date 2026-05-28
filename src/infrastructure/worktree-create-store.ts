@@ -23,8 +23,6 @@ type ResolveArgs = {
   env: NodeJS.ProcessEnv;
   homeDir: string | null;
   assetsPath: string;
-  packageDir: string;
-  packageName: string;
 };
 
 type CopyUntrackedJobPayload = {

@@ -101,20 +101,12 @@ async function createSessionFile(args: { codexHome: string; fileName: string; bo
 function buildLoadTitlesArgs(args: { codexHome: string; paths: string[]; env?: NodeJS.ProcessEnv }): {
   paths: string[];
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
 } {
   return {
     paths: args.paths,
     env: { CODEX_HOME: args.codexHome, ...(args.env ?? {}) } as NodeJS.ProcessEnv,
-    cwd: process.cwd(),
     homeDir: null,
-    assetsPath: process.cwd(),
-    packageDir: process.cwd(),
-    packageName: "worktree-deck",
   };
 }
 
@@ -867,11 +859,7 @@ describe("worktree list shaping helpers", () => {
       worktrees,
       titlesByPath: new Map([["/worktrees/app-a", titleEntries]]),
       env: {},
-      cwd: process.cwd(),
       homeDir: null,
-      assetsPath: process.cwd(),
-      packageDir: process.cwd(),
-      packageName: "worktree-deck",
     });
 
     expect(result).toEqual([

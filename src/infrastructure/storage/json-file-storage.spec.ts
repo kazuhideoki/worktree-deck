@@ -22,10 +22,7 @@ import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } fro
 function buildArgs() {
   return {
     env: {},
-    cwd: "/tmp/dev-flow/current",
     homeDir: "/Users/tester",
-    packageDir: "/tmp/dev-flow",
-    packageName: "worktree-deck",
   };
 }
 

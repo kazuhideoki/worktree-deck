@@ -30,6 +30,11 @@ type SessionTitleEntry = WorktreeTitle &
 
 type TitlesTimingLogger = (label: string, elapsedMs: number) => void;
 
+type EnvValueContext = {
+  env: NodeJS.ProcessEnv;
+  homeDir: string | null;
+};
+
 type TitlesCacheFileEntry = {
   mtimeMs: number;
   size: number;
@@ -100,14 +105,7 @@ function hasSessionFileExtension(name: string): boolean {
 /**
  * 検索日数を読み取り不正なら既定値にする
  */
-async function loadSearchDays(args: {
-  env: NodeJS.ProcessEnv;
-  cwd: string;
-  homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
-}): Promise<number> {
+async function loadSearchDays(args: EnvValueContext): Promise<number> {
   const raw = await loadEnvValue(args, ENV_SEARCH_DAYS);
   if (!raw) {
     return DEFAULT_SEARCH_DAYS;
@@ -122,14 +120,7 @@ async function loadSearchDays(args: {
 /**
  * working を done 扱いにする経過日数を取得する
  */
-async function loadDoneThresholdDays(args: {
-  env: NodeJS.ProcessEnv;
-  cwd: string;
-  homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
-}): Promise<number | null> {
+async function loadDoneThresholdDays(args: EnvValueContext): Promise<number | null> {
   const raw = await loadEnvValue(args, ENV_DONE_THRESHOLD_DAYS);
   if (!raw) {
     return null;
@@ -144,14 +135,7 @@ async function loadDoneThresholdDays(args: {
 /**
  * CODEX_HOME を取得しホーム展開・正規化する
  */
-async function loadCodexHome(args: {
-  env: NodeJS.ProcessEnv;
-  cwd: string;
-  homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
-}): Promise<string | null> {
+async function loadCodexHome(args: EnvValueContext): Promise<string | null> {
   const value = await loadEnvValue(args, ENV_CODEX_HOME);
   if (!value) {
     return null;
@@ -812,11 +796,7 @@ function buildExplicitOnlyTitles(args: {
 export async function loadTitlesForPaths(args: {
   paths: string[];
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
   timingLabelPrefix?: string;
   logTiming?: TitlesTimingLogger;
 }): Promise<Map<string, WorktreeTitle[]>> {
@@ -1423,11 +1403,7 @@ export async function loadSessionMessages(args: {
 export async function findLatestSessionFileByPath(args: {
   path: string;
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
 }): Promise<string | null> {
   const startMs = Date.now();
   const trimmedPath = args.path.trim();
@@ -1472,11 +1448,7 @@ export async function findLatestSessionFileByPath(args: {
 export async function findFirstSessionFileByPath(args: {
   path: string;
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
 }): Promise<string | null> {
   const startMs = Date.now();
   const trimmedPath = args.path.trim();
@@ -1530,20 +1502,12 @@ export async function findFirstSessionFileByPath(args: {
 async function loadWorktreeTitles(args: {
   worktrees: Worktree[];
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
 }): Promise<Map<string, WorktreeTitle[]>> {
   return loadTitlesForPaths({
     paths: args.worktrees.map((item) => item.path),
     env: args.env,
-    cwd: args.cwd,
     homeDir: args.homeDir,
-    assetsPath: args.assetsPath,
-    packageDir: args.packageDir,
-    packageName: args.packageName,
   });
 }
 
@@ -1553,11 +1517,7 @@ async function loadWorktreeTitles(args: {
 export async function attachWorktreeTitles(args: {
   worktrees: Worktree[];
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
   titlesByPath?: Map<string, WorktreeTitle[]>;
 }): Promise<Worktree[]> {
   try {

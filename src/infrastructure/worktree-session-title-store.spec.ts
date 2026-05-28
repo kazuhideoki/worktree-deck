@@ -44,10 +44,7 @@ describe("worktree-session-title-store", () => {
     const result = await loadExplicitSessionTitlesForWorktreePaths({
       paths: ["/repo/a"],
       env: {},
-      cwd: "/repo",
       homeDir: null,
-      packageDir: "/repo",
-      packageName: "worktree-deck",
     });
 
     expect(result.byThreadId.get("thread-1")?.title).toBe("A");

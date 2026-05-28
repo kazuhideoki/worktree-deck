@@ -76,8 +76,6 @@ export async function loadWorktreeMenuBarSummaryWithDependencies(args: {
       cwd: process.cwd(),
       homeDir,
       assetsPath: environment.assetsPath,
-      packageDir: __dirname,
-      packageName: "worktree-deck",
     },
     dependencies: WORKTREE_DECK_COMPOSITION_ROOT.listWorktreesDependencies,
     options: { preferCache: false },
@@ -85,11 +83,7 @@ export async function loadWorktreeMenuBarSummaryWithDependencies(args: {
   const titlesByPath = await args.dependencies.loadTitlesForPaths({
     paths: listed.worktrees.map((item) => item.path),
     env: process.env,
-    cwd: process.cwd(),
     homeDir,
-    assetsPath: environment.assetsPath,
-    packageDir: __dirname,
-    packageName: "worktree-deck",
   });
   const menuBarItems = buildMenuBarItems({
     worktrees: listed.worktrees,

@@ -9,10 +9,6 @@ import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 
 /**
- * package.json の name と一致させる
- */
-const WORKTREE_DECK_PACKAGE_NAME = "worktree-deck";
-/**
  * repository mapping 用の storage ファイル名
  */
 const REPOSITORY_MAPPING_STORAGE_FILE = "repository-mappings.json";
@@ -21,7 +17,7 @@ const REPOSITORY_MAPPING_STORAGE_FILE = "repository-mappings.json";
  * repository mapping 用の storage 引数を組み立てる
  */
 function buildRepositoryMappingStorageArgs(): EnvLookupArgs {
-  return buildEnvLookupArgs(__dirname, WORKTREE_DECK_PACKAGE_NAME);
+  return buildEnvLookupArgs();
 }
 
 /**

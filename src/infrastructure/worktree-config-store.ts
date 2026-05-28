@@ -12,14 +12,7 @@ function normalizeWorktreeBasePath(value: string, homeDir: string | null): strin
   return normalizePathValue(expandHomePath(value, homeDir));
 }
 
-export async function loadBasePath(args: {
-  env: NodeJS.ProcessEnv;
-  cwd: string;
-  homeDir: string | null;
-  assetsPath: string;
-  packageDir: string;
-  packageName: string;
-}): Promise<string> {
+export async function loadBasePath(args: { env: NodeJS.ProcessEnv; homeDir: string | null }): Promise<string> {
   const fromEnv = args.env.GIT_WORKTREE_PATH?.trim();
   if (fromEnv) {
     return normalizeWorktreeBasePath(fromEnv, args.homeDir);

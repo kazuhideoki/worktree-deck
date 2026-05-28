@@ -55,7 +55,7 @@ describe("createWorktree", () => {
     createdRoots.length = 0;
   });
 
-  it("repository map paths は env ファイルが無くても script path を返す", async () => {
+  it("repository map paths は assetsPath から script path を返す", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "worktree-create-store-"));
     createdRoots.push(rootDir);
     const assetsPath = join(rootDir, "assets");
@@ -67,8 +67,6 @@ describe("createWorktree", () => {
       env: {},
       homeDir: rootDir,
       assetsPath,
-      packageDir: rootDir,
-      packageName: "worktree-deck",
     });
 
     expect(result).toEqual({ scriptPath });

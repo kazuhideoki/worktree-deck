@@ -1,10 +1,6 @@
 export type EnvLookupArgs = {
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath?: string;
-  packageDir: string;
-  packageName: string;
 };
 
 /**
@@ -25,13 +21,10 @@ function resolveHomeDir(env: NodeJS.ProcessEnv): string | null {
 /**
  * EnvLookupArgs を現在のプロセス情報から組み立てる
  */
-export function buildEnvLookupArgs(packageDir: string, packageName: string): EnvLookupArgs {
+export function buildEnvLookupArgs(): EnvLookupArgs {
   return {
     env: process.env,
-    cwd: process.cwd(),
     homeDir: resolveHomeDir(process.env),
-    packageDir,
-    packageName,
   };
 }
 

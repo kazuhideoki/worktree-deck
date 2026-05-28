@@ -8,10 +8,7 @@ import { loadBasePath } from "./worktree-config-store";
 function buildArgs(args?: { env?: NodeJS.ProcessEnv }) {
   return {
     env: args?.env ?? {},
-    cwd: "/tmp/current",
     homeDir: "/Users/tester",
-    packageDir: "/tmp/app",
-    packageName: "worktree-deck",
   };
 }
 

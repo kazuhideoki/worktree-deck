@@ -11,8 +11,6 @@ function buildContext(): WorktreeCreateContext {
     env: {},
     homeDir: "/Users/tester",
     assetsPath: "/tmp/dev-flow/assets",
-    packageDir: "/tmp/dev-flow",
-    packageName: "worktree-deck",
   };
 }
 

@@ -15,8 +15,6 @@ function buildContext(): WorktreeDeckContext {
     cwd: "/repo",
     homeDir: "/Users/tester",
     assetsPath: "/assets",
-    packageDir: "/package",
-    packageName: "worktree-deck",
   };
 }
 
@@ -167,20 +165,12 @@ describe("worktreeDeckSnapshotUsecase.loadTitlesSnapshot", () => {
     expect(dependencies.loadTitlesForPaths).toHaveBeenCalledWith({
       paths: ["/repo/a", "/repo/main", "/repo/b", "/repo/other"],
       env: { HOME: "/Users/tester" },
-      cwd: "/repo",
       homeDir: "/Users/tester",
-      assetsPath: "/assets",
-      packageDir: "/package",
-      packageName: "worktree-deck",
     });
     expect(dependencies.attachWorktreeTitles).toHaveBeenCalledWith({
       worktrees,
       env: { HOME: "/Users/tester" },
-      cwd: "/repo",
       homeDir: "/Users/tester",
-      assetsPath: "/assets",
-      packageDir: "/package",
-      packageName: "worktree-deck",
       titlesByPath,
     });
   });

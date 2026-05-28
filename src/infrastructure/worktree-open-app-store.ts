@@ -10,11 +10,6 @@ import { openCodexThreadInApp, openPathInCodexApp } from "./codex-app-infra";
 import { openPathInConfiguredIde } from "./worktree-ide-app-store";
 
 /**
- * package.json の name と一致させる
- */
-const WORKTREE_DECK_PACKAGE_NAME = "worktree-deck";
-
-/**
  * 起動アプリ設定の storage ファイル名
  */
 const WORKTREE_OPEN_APP_STORAGE_FILE = "worktree-open-app.json";
@@ -31,7 +26,7 @@ type OpenPathInPreferredAppResult = {
  * 起動アプリ用の storage 引数を組み立てる
  */
 function buildWorktreeOpenAppStorageArgs(): EnvLookupArgs {
-  return buildEnvLookupArgs(__dirname, WORKTREE_DECK_PACKAGE_NAME);
+  return buildEnvLookupArgs();
 }
 
 /**

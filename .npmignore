@@ -2,7 +2,7 @@ AGENTS.md
 AGENTS.override.md
 docs/
 *.tgz
-assets/.env
+**/.env
 raycast-env.d.ts
 src/**/*.spec.ts
 src/test/

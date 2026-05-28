@@ -1677,8 +1677,6 @@ function buildWorktreeCreateContext(): WorktreeCreateContext {
     env: process.env,
     homeDir: resolveHomeDir(),
     assetsPath: environment.assetsPath,
-    packageDir: __dirname,
-    packageName: "worktree-deck",
   };
 }
 

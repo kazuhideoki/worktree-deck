@@ -445,8 +445,6 @@ export default function Command() {
         cwd: process.cwd(),
         homeDir: process.env.HOME?.trim() ?? null,
         assetsPath: environment.assetsPath,
-        packageDir: __dirname,
-        packageName: "worktree-deck",
       },
       displayCache: displayCacheRef.current,
       includeOriginEntries: displayMode === "show-all",
@@ -1244,8 +1242,6 @@ export default function Command() {
           cwd: process.cwd(),
           homeDir: process.env.HOME?.trim() ?? null,
           assetsPath: environment.assetsPath,
-          packageDir: __dirname,
-          packageName: "worktree-deck",
         },
         dependencies: WORKTREE_DECK_COMPOSITION_ROOT.worktreeSessionFileDependencies,
       });

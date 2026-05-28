@@ -61,22 +61,14 @@ export type LoadWorktreeDeckTitlesSnapshotDependencies = {
   loadTitlesForPaths(args: {
     paths: string[];
     env: NodeJS.ProcessEnv;
-    cwd: string;
     homeDir: string | null;
-    assetsPath: string;
-    packageDir: string;
-    packageName: string;
     timingLabelPrefix?: string;
     logTiming?: (label: string, elapsedMs: number) => void;
   }): Promise<Map<string, WorktreeTitle[]>>;
   attachWorktreeTitles(args: {
     worktrees: Worktree[];
     env: NodeJS.ProcessEnv;
-    cwd: string;
     homeDir: string | null;
-    assetsPath: string;
-    packageDir: string;
-    packageName: string;
     titlesByPath: Map<string, WorktreeTitle[]>;
   }): Promise<Worktree[]>;
 };
@@ -290,11 +282,7 @@ async function loadTitlesSnapshot(args: {
         args.dependencies.loadTitlesForPaths({
           paths: displayPaths,
           env: args.context.env,
-          cwd: args.context.cwd,
           homeDir: args.context.homeDir,
-          assetsPath: args.context.assetsPath,
-          packageDir: args.context.packageDir,
-          packageName: args.context.packageName,
           ...(args.logTiming
             ? {
                 timingLabelPrefix: `${timingLabelPrefix}:loadTitlesForPaths`,
@@ -313,11 +301,7 @@ async function loadTitlesSnapshot(args: {
       args.dependencies.attachWorktreeTitles({
         worktrees: args.worktrees,
         env: args.context.env,
-        cwd: args.context.cwd,
         homeDir: args.context.homeDir,
-        assetsPath: args.context.assetsPath,
-        packageDir: args.context.packageDir,
-        packageName: args.context.packageName,
         titlesByPath,
       }),
   });

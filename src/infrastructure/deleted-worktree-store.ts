@@ -10,11 +10,6 @@ import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } fro
 const execFileAsync = promisify(execFile);
 
 /**
- * package.json の name と一致させる
- */
-const WORKTREE_DECK_PACKAGE_NAME = "worktree-deck";
-
-/**
  * 削除済み worktree storage のファイル名
  */
 const DELETED_WORKTREES_STORAGE_FILE = "deleted-worktrees.json";
@@ -28,7 +23,7 @@ const MAX_DELETED_WORKTREE_ENTRIES = 50;
  * 削除済み worktree 用の storage 引数を組み立てる
  */
 function buildDeletedWorktreeStorageArgs(): EnvLookupArgs {
-  return buildEnvLookupArgs(__dirname, WORKTREE_DECK_PACKAGE_NAME);
+  return buildEnvLookupArgs();
 }
 
 /**

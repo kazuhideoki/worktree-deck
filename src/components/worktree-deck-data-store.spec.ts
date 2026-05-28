@@ -40,8 +40,6 @@ function buildContext(): WorktreeDeckContext {
     cwd: "/repo",
     homeDir: "/Users/tester",
     assetsPath: "/assets",
-    packageDir: "/package",
-    packageName: "worktree-deck",
   };
 }
 

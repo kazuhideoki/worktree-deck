@@ -7,11 +7,6 @@ import { buildEnvLookupArgs, type EnvLookupArgs } from "./env/env-store";
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 
 /**
- * package.json の name と一致させる
- */
-const WORKTREE_DECK_PACKAGE_NAME = "worktree-deck";
-
-/**
  * 明示セッションタイトルの storage ファイル名
  */
 const WORKTREE_SESSION_TITLE_STORAGE_FILE = "worktree-session-titles.json";
@@ -20,7 +15,7 @@ const WORKTREE_SESSION_TITLE_STORAGE_FILE = "worktree-session-titles.json";
  * 明示セッションタイトル用の storage 引数を組み立てる
  */
 function buildWorktreeSessionTitleStorageArgs(): EnvLookupArgs {
-  return buildEnvLookupArgs(__dirname, WORKTREE_DECK_PACKAGE_NAME);
+  return buildEnvLookupArgs();
 }
 
 /**
@@ -63,11 +58,7 @@ export type ExplicitSessionTitleLookup = {
 export async function loadExplicitSessionTitlesForWorktreePaths(args: {
   paths: string[];
   env: NodeJS.ProcessEnv;
-  cwd: string;
   homeDir: string | null;
-  assetsPath?: string;
-  packageDir: string;
-  packageName: string;
 }): Promise<ExplicitSessionTitleLookup> {
   const normalizedPaths = new Set(args.paths.map((path) => path.trim()).filter(Boolean));
   if (normalizedPaths.size === 0) {

@@ -26,8 +26,6 @@ function buildContext(): WorktreeDeckContext {
     cwd: "/cwd",
     homeDir: "/home/me",
     assetsPath: "/assets",
-    packageDir: "/pkg",
-    packageName: "worktree-deck",
   };
 }
 

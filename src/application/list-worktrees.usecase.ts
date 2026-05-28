@@ -10,8 +10,6 @@ export type WorktreeDeckContext = {
   cwd: string;
   homeDir: string | null;
   assetsPath: string;
-  packageDir: string;
-  packageName: string;
 };
 
 /**

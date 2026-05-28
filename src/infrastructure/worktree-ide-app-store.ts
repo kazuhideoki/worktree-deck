@@ -8,11 +8,6 @@ import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } fro
 import { ensureIdeAppInstalled, openPathInIdeApp } from "./worktree-ide-infra";
 
 /**
- * package.json の name と一致させる
- */
-const WORKTREE_DECK_PACKAGE_NAME = "worktree-deck";
-
-/**
  * General Settings の storage ファイル名
  */
 const GENERAL_SETTINGS_STORAGE_FILE = "general-settings.json";
@@ -29,7 +24,7 @@ type GeneralSettingsStorage = {
  * General Settings 用の storage 引数を組み立てる
  */
 function buildGeneralSettingsStorageArgs(): EnvLookupArgs {
-  return buildEnvLookupArgs(__dirname, WORKTREE_DECK_PACKAGE_NAME);
+  return buildEnvLookupArgs();
 }
 
 /**

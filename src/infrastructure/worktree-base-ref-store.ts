@@ -13,11 +13,6 @@ import { isMissingExternalCommandError, normalizeExternalCommandError } from "./
 import { readWorktreeDeckFileStorageJson, writeWorktreeDeckFileStorageJson } from "./storage/json-file-storage";
 
 /**
- * package.json の name と一致させる
- */
-const WORKTREE_DECK_PACKAGE_NAME = "worktree-deck";
-
-/**
  * worktree のベースブランチ情報
  */
 type WorktreeBaseBranchMeta = {
@@ -39,7 +34,7 @@ const execFileAsync = promisify(execFile);
  * base branch 用の storage 引数を組み立てる
  */
 function buildWorktreeBaseBranchStorageArgs(): EnvLookupArgs {
-  return buildEnvLookupArgs(__dirname, WORKTREE_DECK_PACKAGE_NAME);
+  return buildEnvLookupArgs();
 }
 
 /**

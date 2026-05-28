@@ -8,17 +8,13 @@ import { buildEnvLookupArgs, loadEnvValue, type EnvLookupArgs } from "./env-stor
 function buildArgs(overrides?: Partial<EnvLookupArgs>): EnvLookupArgs {
   return {
     env: {},
-    cwd: "/tmp/dev-flow/current",
     homeDir: "/Users/tester",
-    packageDir: "/tmp/dev-flow",
-    packageName: "worktree-deck",
     ...overrides,
   };
 }
 
 describe("infrastructure/env/env-store", () => {
   const originalEnv = process.env;
-  const originalCwd = process.cwd;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -26,31 +22,25 @@ describe("infrastructure/env/env-store", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    process.cwd = originalCwd;
     vi.restoreAllMocks();
   });
 
   it("buildEnvLookupArgs は process から実行コンテキストを組み立てる", () => {
     process.env.HOME = "/Users/tester";
-    vi.spyOn(process, "cwd").mockReturnValue("/tmp/dev-flow/current");
 
-    const result = buildEnvLookupArgs("/tmp/dev-flow", "worktree-deck");
+    const result = buildEnvLookupArgs();
 
     expect(result).toEqual({
       env: process.env,
-      cwd: "/tmp/dev-flow/current",
       homeDir: "/Users/tester",
-      packageDir: "/tmp/dev-flow",
-      packageName: "worktree-deck",
     });
   });
 
   it("buildEnvLookupArgs は HOME が空文字のとき null を返す", () => {
     process.env.HOME = "   ";
     process.env.USERPROFILE = "";
-    vi.spyOn(process, "cwd").mockReturnValue("/tmp/dev-flow/current");
 
-    const result = buildEnvLookupArgs("/tmp/dev-flow", "worktree-deck");
+    const result = buildEnvLookupArgs();
 
     expect(result.homeDir).toBeNull();
   });
