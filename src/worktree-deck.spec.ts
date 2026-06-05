@@ -21,6 +21,7 @@ import {
   resolveOpenActionShortcut,
   resolveOpenActionThreadId,
   resolveInitialRepoRoot,
+  EDIT_TARGET_BRANCH_SHORTCUT,
   SHOW_DETAILS_SHORTCUT,
   shouldAutoOpenRepositoryMappingOnboarding,
   shouldSelectCodexSessionForOpenAction,
@@ -497,6 +498,10 @@ describe("toggleDisplayMode", () => {
 describe("worktree action shortcuts", () => {
   it("詳細表示アクションは cmd+enter を使わない", () => {
     expect(SHOW_DETAILS_SHORTCUT).not.toEqual({ modifiers: ["cmd"], key: "enter" });
+  });
+
+  it("target branch 編集アクションは cmd+e を使う", () => {
+    expect(EDIT_TARGET_BRANCH_SHORTCUT).toEqual({ modifiers: ["cmd"], key: "e" });
   });
 
   it("保存済みアプリが Zed のときは逆側の起動先として CA を返す", () => {

@@ -19,6 +19,7 @@ import { CreateWorktreeForm } from "./components/worktree-create-form";
 import { MergeWorktreeForm } from "./components/worktree-merge-form";
 import { CreatePullRequestForm } from "./components/worktree-pull-request-form";
 import { RenameWorktreeForm } from "./components/worktree-rename-form";
+import { EditWorktreeTargetBranchForm } from "./components/worktree-target-branch-form";
 import { RestoreDeletedWorktreeView } from "./components/worktree-restore-deleted-view";
 import { type RepositoryMapping } from "./domain/repository-mapping.service";
 import { parseSearchTerms } from "./search-utils";
@@ -84,6 +85,7 @@ import {
 import { deletedWorktreesUsecase } from "./application/deleted-worktrees.usecase";
 import { removeWorktreeUsecase } from "./application/remove-worktree.usecase";
 import { worktreeRenameUsecase } from "./application/worktree-rename.usecase";
+import { worktreeMergeTargetOptionsUsecase } from "./application/worktree-merge-target-options.usecase";
 import { worktreeMergeUsecase, type WorktreeMergePlan } from "./application/worktree-merge.usecase";
 import { worktreePullUsecase } from "./application/worktree-pull.usecase";
 import { worktreePullRequestUsecase } from "./application/worktree-pull-request.usecase";
@@ -136,6 +138,11 @@ type PinnedListOrder = {
  * セッション詳細表示アクションのショートカット
  */
 export const SHOW_DETAILS_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "shift"], key: "enter" };
+
+/**
+ * target branch 編集アクションのショートカット
+ */
+export const EDIT_TARGET_BRANCH_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "e" };
 
 /**
  * 保存済みアプリと逆側で開くアクションを Raycast の secondary action 位置に置くための添字
@@ -928,6 +935,42 @@ export default function Command() {
         toast.style = Toast.Style.Failure;
         toast.title = "Failed to rename branch";
         toast.message = formatExecErrorMessage(error);
+      }
+    },
+    [refreshWorktrees],
+  );
+
+  /**
+   * worktree の target branch を保存する
+   */
+  const handleSaveWorktreeTargetBranch = useCallback(
+    async (args: { item: Worktree; targetRef: string }): Promise<boolean> => {
+      const targetRef = args.targetRef.trim();
+      if (!targetRef) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Target branch is required",
+        });
+        return false;
+      }
+      const toast = await showToast({ style: Toast.Style.Animated, title: "Saving target branch" });
+      try {
+        await worktreeMergeTargetOptionsUsecase.saveBaseSelection({
+          worktreePath: args.item.path,
+          branch: args.item.branch,
+          baseRef: targetRef,
+          dependencies: WORKTREE_DECK_COMPOSITION_ROOT.worktreeMergeTargetOptionsDependencies,
+        });
+        toast.style = Toast.Style.Success;
+        toast.title = "Target branch saved";
+        toast.message = targetRef;
+        await refreshWorktrees();
+        return true;
+      } catch (error) {
+        toast.style = Toast.Style.Failure;
+        toast.title = "Failed to save target branch";
+        toast.message = formatExecErrorMessage(error);
+        return false;
       }
     },
     [refreshWorktrees],
@@ -1879,6 +1922,14 @@ export default function Command() {
                             onAction={() => void handleOpenCreatePullRequest(item)}
                           />
                         ) : null}
+                        <Action
+                          title="Edit Target Branch"
+                          icon={Icon.Pencil}
+                          shortcut={EDIT_TARGET_BRANCH_SHORTCUT}
+                          onAction={() =>
+                            push(<EditWorktreeTargetBranchForm item={item} onSave={handleSaveWorktreeTargetBranch} />)
+                          }
+                        />
                         {canMergeWorktree ? (
                           <Action
                             title="Merge into Base Branch"
