@@ -11,6 +11,14 @@ export type RepositoryMapping = {
 } & RepositoryBranchNamingFields;
 
 /**
+ * 他 repository から流用できる branch 命名規則候補
+ */
+export type RepositoryBranchNamingSuggestion = {
+  sourceRepoRoot: string;
+  sourceMapValue: string;
+} & RepositoryBranchNamingFields;
+
+/**
  * repository mapping の入力型
  */
 export type RepositoryMappingInput = Record<string, unknown>;
@@ -89,6 +97,45 @@ function findByRepoRoot(entries: RepositoryMapping[], repoRoot: string): Reposit
 }
 
 /**
+ * 他 repository に保存済みの branch 命名規則候補を返す
+ */
+function listBranchNamingSuggestions(
+  entries: RepositoryMapping[],
+  currentRepoRoot: string,
+): RepositoryBranchNamingSuggestion[] {
+  const normalizedCurrentRepoRoot = currentRepoRoot.trim();
+  const seenRuleKeys = new Set<string>();
+  const suggestions: RepositoryBranchNamingSuggestion[] = [];
+  for (const entry of sort(entries)) {
+    if (entry.repoRoot === normalizedCurrentRepoRoot) {
+      continue;
+    }
+    const branchNamePattern = entry.branchNamePattern?.trim() ?? "";
+    const branchNamePrompt = entry.branchNamePrompt?.trim() ?? "";
+    if (!branchNamePattern && !branchNamePrompt) {
+      continue;
+    }
+    const ruleKey = `${branchNamePattern}\n${branchNamePrompt}`;
+    if (seenRuleKeys.has(ruleKey)) {
+      continue;
+    }
+    seenRuleKeys.add(ruleKey);
+    const suggestion: RepositoryBranchNamingSuggestion = {
+      sourceRepoRoot: entry.repoRoot,
+      sourceMapValue: entry.mapValue,
+    };
+    if (branchNamePattern.length > 0) {
+      suggestion.branchNamePattern = branchNamePattern;
+    }
+    if (branchNamePrompt.length > 0) {
+      suggestion.branchNamePrompt = branchNamePrompt;
+    }
+    suggestions.push(suggestion);
+  }
+  return suggestions;
+}
+
+/**
  * repository mapping を安定ソートする
  */
 function sort(entries: RepositoryMapping[]): RepositoryMapping[] {
@@ -134,6 +181,7 @@ function parseFromStorageValue(value: unknown): RepositoryMapping[] {
  */
 export const repositoryMappingService = {
   findByRepoRoot,
+  listBranchNamingSuggestions,
   normalize,
   sort,
   parseFromStorageValue,

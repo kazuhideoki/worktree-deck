@@ -51,6 +51,54 @@ describe("findRepositoryMappingByRepoRoot", () => {
   });
 });
 
+describe("listRepositoryBranchNamingSuggestions", () => {
+  it("現在 repo 以外の branch 命名規則を重複なしで返す", () => {
+    const result = repositoryMappingService.listBranchNamingSuggestions(
+      [
+        {
+          repoRoot: "/tmp/current",
+          mapValue: "current",
+          branchNamePattern: "^current/.+",
+          branchNamePrompt: "Use current.",
+        },
+        { repoRoot: "/tmp/no-rule", mapValue: "no-rule" },
+        {
+          repoRoot: "/tmp/alpha",
+          mapValue: "Alpha",
+          branchNamePattern: "^feat/[a-z0-9-]+$",
+          branchNamePrompt: "Use feat/ for product changes.",
+        },
+        {
+          repoRoot: "/tmp/duplicate",
+          mapValue: "Duplicate",
+          branchNamePattern: "^feat/[a-z0-9-]+$",
+          branchNamePrompt: "Use feat/ for product changes.",
+        },
+        {
+          repoRoot: "/tmp/bravo",
+          mapValue: "Bravo",
+          branchNamePrompt: "Use type/short-kebab-description.",
+        },
+      ],
+      "/tmp/current",
+    );
+
+    expect(result).toEqual([
+      {
+        sourceRepoRoot: "/tmp/alpha",
+        sourceMapValue: "Alpha",
+        branchNamePattern: "^feat/[a-z0-9-]+$",
+        branchNamePrompt: "Use feat/ for product changes.",
+      },
+      {
+        sourceRepoRoot: "/tmp/bravo",
+        sourceMapValue: "Bravo",
+        branchNamePrompt: "Use type/short-kebab-description.",
+      },
+    ]);
+  });
+});
+
 describe("sortRepositoryMappings", () => {
   it("mapValueとrepoRootの順でソートする", () => {
     const result = repositoryMappingService.sort([
