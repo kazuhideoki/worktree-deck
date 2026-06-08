@@ -15,14 +15,39 @@ const INVALID_BRANCH_NAME_PATTERN = /[\s~^:?*[\]\\]/;
 type WorktreeBranchNameResult<TValue> = { ok: true; value: TValue } | { ok: false; error: string };
 
 /**
+ * repository ごとの branch 名生成設定
+ */
+export type WorktreeBranchNamingRule = {
+  pattern: string;
+  prompt: string;
+};
+
+/**
  * 初期プロンプトから branch 名生成用のプロンプトを組み立てる
  */
-function buildGenerationPrompt(initialPrompt: string): WorktreeBranchNameResult<string> {
+function buildGenerationPrompt(
+  initialPrompt: string,
+  rule: WorktreeBranchNamingRule,
+  retry: { branch: string; error: string } | null,
+): WorktreeBranchNameResult<string> {
   const trimmed = initialPrompt.trim();
   if (!trimmed) {
     return { ok: false, error: "Initial prompt is required." };
   }
-  return { ok: true, value: `${BRANCH_NAME_GENERATION_PROMPT_HEADER}\n\nTask:\n${trimmed}` };
+  const sections = [BRANCH_NAME_GENERATION_PROMPT_HEADER];
+  const pattern = rule.pattern.trim();
+  if (pattern.length > 0) {
+    sections.push(`Branch naming regular expression:\n${pattern}`);
+  }
+  const prompt = rule.prompt.trim();
+  if (prompt.length > 0) {
+    sections.push(`Additional branch naming instruction:\n${prompt}`);
+  }
+  if (retry !== null) {
+    sections.push(`Previous generated branch name was rejected:\n${retry.branch}\nReason:\n${retry.error}`);
+  }
+  sections.push(`Task:\n${trimmed}`);
+  return { ok: true, value: sections.join("\n\n") };
 }
 
 /**
@@ -88,9 +113,30 @@ function normalizeGeneratedBranchName(value: string): WorktreeBranchNameResult<s
 }
 
 /**
+ * 設定された repository 別正規表現に branch 名が一致するか検証する
+ */
+function validateBranchNameRule(branch: string, rule: WorktreeBranchNamingRule): WorktreeBranchNameResult<string> {
+  const pattern = rule.pattern.trim();
+  if (pattern.length === 0) {
+    return { ok: true, value: branch };
+  }
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern);
+  } catch {
+    return { ok: false, error: "Branch name pattern must be a valid regular expression." };
+  }
+  if (!regex.test(branch)) {
+    return { ok: false, error: `Generated branch name does not match pattern: ${pattern}` };
+  }
+  return { ok: true, value: branch };
+}
+
+/**
  * worktree branch 名生成のドメインサービス関数群
  */
 export const worktreeBranchNameService = {
   buildGenerationPrompt,
   normalizeGeneratedBranchName,
+  validateBranchNameRule,
 } as const;

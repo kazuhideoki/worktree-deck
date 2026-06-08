@@ -46,7 +46,7 @@ export function buildSettingsItems(): SettingsItem[] {
     {
       id: "repositories",
       title: "Repositories",
-      subtitle: "Register repository roots and display names.",
+      subtitle: "Register repository roots, display names, and branch naming rules.",
       icon: Icon.Folder,
     },
   ];

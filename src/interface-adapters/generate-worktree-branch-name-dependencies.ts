@@ -2,6 +2,8 @@ import type {
   GenerateWorktreeBranchNameDependencies,
   GenerateWorktreeBranchNameRequest,
 } from "../application/generate-worktree-branch-name.usecase";
+import type { RepositoryMapping } from "../domain/repository-mapping.service";
+import { loadRepositoryMappings } from "../infrastructure/repository-mapping-store";
 import { generateBranchNameWithCodexExec } from "../infrastructure/worktree-branch-name-infra";
 
 /**
@@ -9,6 +11,7 @@ import { generateBranchNameWithCodexExec } from "../infrastructure/worktree-bran
  */
 type GenerateWorktreeBranchNameInfra = {
   generateBranchNameWithCodexExec(request: GenerateWorktreeBranchNameRequest): Promise<string>;
+  loadRepositoryMappings(): Promise<RepositoryMapping[]>;
 };
 
 /**
@@ -21,6 +24,9 @@ export function createGenerateWorktreeBranchNameDependencies(
     generateBranchName(request) {
       return infra.generateBranchNameWithCodexExec(request);
     },
+    loadRepositoryMappings() {
+      return infra.loadRepositoryMappings();
+    },
   };
 }
 
@@ -30,5 +36,6 @@ export function createGenerateWorktreeBranchNameDependencies(
 export function createDefaultGenerateWorktreeBranchNameDependencies(): GenerateWorktreeBranchNameDependencies {
   return createGenerateWorktreeBranchNameDependencies({
     generateBranchNameWithCodexExec,
+    loadRepositoryMappings,
   });
 }

@@ -16,12 +16,14 @@ const AUTO_START_METADATA_GENERATION_PROMPT_HEADER = [
 ].join(" ");
 const BRANCH_NAME_CODEX_MODEL = "gpt-5.3-codex-spark";
 const BRANCH_NAME_REASONING_EFFORT = "xhigh";
+const BRANCH_NAME_GENERATION_MAX_ATTEMPTS = 3;
 const CODEX_EXEC_TIMEOUT_MS = 60_000;
 const APP_SERVER_READY_TIMEOUT_MS = 8_000;
 const JSON_RPC_TIMEOUT_MS = 15_000;
 const DEFAULT_CODEX_APP_SERVER_PORT = 53621;
 const DEFAULT_COMMAND_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const INVALID_BRANCH_NAME_PATTERN = /[\s~^:?*[\]\\]/;
+const REPOSITORY_MAPPING_STORAGE_FILE = "repository-mappings.json";
 const UNSAFE_WORKTREE_PATH_SEGMENT_PATTERN = /[<>:"\\|?*\u0000-\u001f]+/g;
 const SESSION_TITLE_MAX_LENGTH_CHARS = 80;
 
@@ -352,14 +354,65 @@ async function saveBranchBaseRef(worktreePath, branch, baseRef) {
 }
 
 /**
+ * repository mapping を storage 値から読み取る
+ */
+function parseRepositoryMappingsFromStorageValue(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const repoRoot = typeof entry.repoRoot === "string" ? entry.repoRoot.trim() : "";
+      if (!repoRoot) {
+        return null;
+      }
+      return {
+        repoRoot,
+        branchNamePattern: typeof entry.branchNamePattern === "string" ? entry.branchNamePattern.trim() : "",
+        branchNamePrompt: typeof entry.branchNamePrompt === "string" ? entry.branchNamePrompt.trim() : "",
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * repository root に対応する branch 命名 rule を読み込む
+ */
+async function loadRepositoryBranchNamingRule(repoRoot) {
+  const storagePath = join(resolveStorageDir(), REPOSITORY_MAPPING_STORAGE_FILE);
+  const mappings = parseRepositoryMappingsFromStorageValue(await readStorageJson(storagePath));
+  const mapping = mappings.find((entry) => entry.repoRoot === repoRoot.trim());
+  return {
+    pattern: mapping?.branchNamePattern ?? "",
+    prompt: mapping?.branchNamePrompt ?? "",
+  };
+}
+
+/**
  * Auto Start メタ情報生成用プロンプトを作る
  */
-function buildGenerationPrompt(initialPrompt) {
+function buildGenerationPrompt(initialPrompt, rule, retry) {
   const trimmed = initialPrompt.trim();
   if (!trimmed) {
     throw new Error("Initial prompt is required.");
   }
-  return `${AUTO_START_METADATA_GENERATION_PROMPT_HEADER}\n\nTask:\n${trimmed}`;
+  const sections = [AUTO_START_METADATA_GENERATION_PROMPT_HEADER];
+  const pattern = rule.pattern.trim();
+  if (pattern) {
+    sections.push(`Branch naming regular expression:\n${pattern}`);
+  }
+  const prompt = rule.prompt.trim();
+  if (prompt) {
+    sections.push(`Additional branch naming instruction:\n${prompt}`);
+  }
+  if (retry) {
+    sections.push(`Previous generated branch name was rejected:\n${retry.branch}\nReason:\n${retry.error}`);
+  }
+  sections.push(`Task:\n${trimmed}`);
+  return sections.join("\n\n");
 }
 
 /**
@@ -416,6 +469,26 @@ function normalizeGeneratedBranchName(value) {
 }
 
 /**
+ * 設定された repository 別正規表現に branch 名が一致するか検証する
+ */
+function validateBranchNameRule(branch, rule) {
+  const pattern = rule.pattern.trim();
+  if (!pattern) {
+    return branch;
+  }
+  let regex;
+  try {
+    regex = new RegExp(pattern);
+  } catch {
+    throw new Error("Branch name pattern must be a valid regular expression.");
+  }
+  if (!regex.test(branch)) {
+    throw new Error(`Generated branch name does not match pattern: ${pattern}`);
+  }
+  return branch;
+}
+
+/**
  * Codex thread id を正規化する
  */
 function normalizeThreadId(value) {
@@ -466,12 +539,12 @@ function extractJsonObjectText(value) {
 /**
  * Codex 出力から Auto Start メタ情報を抽出する
  */
-function normalizeGeneratedAutoStartMetadata(value) {
+function normalizeGeneratedAutoStartMetadata(value, rule) {
   const parsed = JSON.parse(extractJsonObjectText(value));
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Generated metadata is invalid.");
   }
-  const branch = normalizeGeneratedBranchName(String(parsed.branch ?? ""));
+  const branch = validateBranchNameRule(normalizeGeneratedBranchName(String(parsed.branch ?? "")), rule);
   const sessionTitle = normalizeSessionTitle(parsed.sessionTitle);
   if (!sessionTitle) {
     throw new Error("Generated session title is invalid.");
@@ -536,7 +609,7 @@ function resolveAvailableBranchName(preferredBranch, existingBranches) {
 /**
  * Codex exec で Auto Start メタ情報を生成する
  */
-async function generateAutoStartMetadata(payload) {
+async function generateAutoStartMetadata(payload, rule) {
   const tempDir = await mkdtemp(join(tmpdir(), "worktree-deck-branch-"));
   const outputPath = join(tempDir, "metadata.json");
   const args = [
@@ -556,23 +629,33 @@ async function generateAutoStartMetadata(payload) {
     outputPath,
     "-",
   ];
+  let rejected = null;
+  let lastError = "";
   try {
-    const result = await runProcess("codex", args, {
-      cwd: payload.repoRoot,
-      env: { ...process.env, PATH: buildCommandPath(process.env.PATH) },
-      input: buildGenerationPrompt(payload.initialPrompt),
-      timeoutMs: CODEX_EXEC_TIMEOUT_MS,
-    });
-    let output = result.stdout;
-    try {
-      const fileOutput = (await readFile(outputPath, "utf8")).trim();
-      if (fileOutput) {
-        output = fileOutput;
+    for (let attempt = 1; attempt <= BRANCH_NAME_GENERATION_MAX_ATTEMPTS; attempt += 1) {
+      const result = await runProcess("codex", args, {
+        cwd: payload.repoRoot,
+        env: { ...process.env, PATH: buildCommandPath(process.env.PATH) },
+        input: buildGenerationPrompt(payload.initialPrompt, rule, rejected),
+        timeoutMs: CODEX_EXEC_TIMEOUT_MS,
+      });
+      let output = result.stdout;
+      try {
+        const fileOutput = (await readFile(outputPath, "utf8")).trim();
+        if (fileOutput) {
+          output = fileOutput;
+        }
+      } catch {
+        // Codex が最終メッセージファイルを書けない場合は stdout を使う
       }
-    } catch {
-      // Codex が最終メッセージファイルを書けない場合は stdout を使う
+      try {
+        return normalizeGeneratedAutoStartMetadata(output, rule);
+      } catch (error) {
+        lastError = extractErrorMessage(error);
+        rejected = { branch: output.trim(), error: lastError };
+      }
     }
-    return normalizeGeneratedAutoStartMetadata(output);
+    throw new Error(lastError || "Failed to generate branch name.");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -954,13 +1037,17 @@ async function main() {
   try {
     payload = await parsePayload();
     await writeJobState(payload, { status: "running", startedAt: new Date().toISOString() });
+    const branchNamingRule = await loadRepositoryBranchNamingRule(payload.repoRoot);
     let branch;
     let sessionTitle;
     try {
-      const metadata = await generateAutoStartMetadata(payload);
+      const metadata = await generateAutoStartMetadata(payload, branchNamingRule);
       branch = metadata.branch;
       sessionTitle = metadata.sessionTitle;
     } catch (error) {
+      if (branchNamingRule.pattern.trim()) {
+        throw error;
+      }
       branchGenerationWarning = extractErrorMessage(error);
       sessionTitleGenerationWarning = branchGenerationWarning;
       branch = buildFallbackBranchName(payload.initialPrompt);

@@ -22,6 +22,8 @@ const { loadRepositoryMappings, saveRepositoryMappings } = WORKTREE_DECK_COMPOSI
 type RepositoryMappingFormValues = {
   repoRoot: string;
   mapValue: string;
+  branchNamePattern?: string;
+  branchNamePrompt?: string;
 };
 
 type RepositoryMappingFormProps = {
@@ -78,6 +80,8 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
     async (values: RepositoryMappingFormValues, originalRepoRoot?: string): Promise<boolean> => {
       const repoRoot = values.repoRoot.trim();
       const mapValue = values.mapValue.trim();
+      const branchNamePattern = values.branchNamePattern?.trim() ?? "";
+      const branchNamePrompt = values.branchNamePrompt?.trim() ?? "";
       if (!repoRoot) {
         await showToast({ style: Toast.Style.Failure, title: "Repository path is required" });
         return false;
@@ -97,7 +101,7 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
         }
         next = next.filter((entry) => entry.repoRoot !== repoRoot);
       }
-      next = [...next, { repoRoot, mapValue }];
+      next = [...next, { repoRoot, mapValue, branchNamePattern, branchNamePrompt }];
       try {
         const saved = await saveRepositoryMappings(next);
         setMappings(saved);
@@ -225,7 +229,10 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
               title={entry.mapValue}
               subtitle={entry.repoRoot}
               icon={Icon.Folder}
-              accessories={[{ text: basename(entry.repoRoot) }]}
+              accessories={[
+                ...(entry.branchNamePattern ? [{ text: "Branch Rule" }] : []),
+                { text: basename(entry.repoRoot) },
+              ]}
               actions={
                 <ActionPanel>
                   <Action.Push
@@ -318,7 +325,22 @@ function RepositoryMappingForm({ initialMapping, onSave, returnToRootAfterSave =
         placeholder={initialMapping?.repoRoot ? basename(initialMapping.repoRoot) : "repository-name"}
         defaultValue={initialMapping?.mapValue ?? ""}
       />
-      <Form.Description title="Note" text="If Map Value is empty, the repository name is used." />
+      <Form.TextField
+        id="branchNamePattern"
+        title="Branch Name Pattern"
+        placeholder="^feat/[a-z0-9-]+$"
+        defaultValue={initialMapping?.branchNamePattern ?? ""}
+      />
+      <Form.TextArea
+        id="branchNamePrompt"
+        title="Branch Naming Prompt"
+        placeholder="Use feat/, fix/, or chore/ based on the task."
+        defaultValue={initialMapping?.branchNamePrompt ?? ""}
+      />
+      <Form.Description
+        title="Note"
+        text="If Map Value is empty, the repository name is used. Branch Name Pattern is optional."
+      />
     </Form>
   );
 }

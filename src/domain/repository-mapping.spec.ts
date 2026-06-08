@@ -7,14 +7,47 @@ describe("normalizeRepositoryMappings", () => {
     const result = repositoryMappingService.normalize([
       { repoRoot: " /tmp/repo-a ", mapValue: " first " },
       { repoRoot: "", mapValue: "ignored" },
-      { repoRoot: "/tmp/repo-a", mapValue: "second" },
+      { repoRoot: "/tmp/repo-a", mapValue: "second", branchNamePattern: " ^feat/.+ ", branchNamePrompt: " Use feat/ " },
       { repoRoot: "/tmp/repo-b" },
     ]);
 
     expect(result).toEqual([
-      { repoRoot: "/tmp/repo-a", mapValue: "second" },
+      { repoRoot: "/tmp/repo-a", mapValue: "second", branchNamePattern: "^feat/.+", branchNamePrompt: "Use feat/" },
       { repoRoot: "/tmp/repo-b", mapValue: "repo-b" },
     ]);
+  });
+});
+
+describe("validateRepositoryMappings", () => {
+  it("branch name pattern が正規表現として有効なら成功する", () => {
+    expect(
+      repositoryMappingService.validate([
+        { repoRoot: "/tmp/repo-a", mapValue: "Alpha", branchNamePattern: "^feat/.+" },
+      ]),
+    ).toEqual({ ok: true });
+  });
+
+  it("branch name pattern が正規表現として不正なら失敗する", () => {
+    expect(
+      repositoryMappingService.validate([{ repoRoot: "/tmp/repo-a", mapValue: "Alpha", branchNamePattern: "[" }]),
+    ).toEqual({
+      ok: false,
+      error: "Branch name pattern must be a valid regular expression.",
+    });
+  });
+});
+
+describe("findRepositoryMappingByRepoRoot", () => {
+  it("repoRoot が一致する mapping を返す", () => {
+    expect(
+      repositoryMappingService.findByRepoRoot(
+        [
+          { repoRoot: "/tmp/repo-a", mapValue: "Alpha" },
+          { repoRoot: "/tmp/repo-b", mapValue: "Bravo" },
+        ],
+        "/tmp/repo-b",
+      ),
+    ).toEqual({ repoRoot: "/tmp/repo-b", mapValue: "Bravo" });
   });
 });
 

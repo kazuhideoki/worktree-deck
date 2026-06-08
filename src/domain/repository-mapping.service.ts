@@ -3,18 +3,17 @@ import { basename } from "node:path";
 /**
  * repository mapping の値オブジェクト
  */
+type RepositoryBranchNamingFields = Partial<Record<"branchNamePattern" | "branchNamePrompt", string>>;
+
 export type RepositoryMapping = {
   repoRoot: string;
   mapValue: string;
-};
+} & RepositoryBranchNamingFields;
 
 /**
  * repository mapping の入力型
  */
-export type RepositoryMappingInput = {
-  repoRoot: unknown;
-  mapValue: unknown;
-};
+export type RepositoryMappingInput = Record<string, unknown>;
 
 /**
  * repository mapping の要素を正規化する
@@ -27,12 +26,66 @@ function normalize(entries: RepositoryMappingInput[]): RepositoryMapping[] {
       continue;
     }
     const rawValue = typeof entry.mapValue === "string" ? entry.mapValue.trim() : "";
-    mappingByRoot.set(repoRoot, {
+    const branchNamePattern = typeof entry.branchNamePattern === "string" ? entry.branchNamePattern.trim() : "";
+    const branchNamePrompt = typeof entry.branchNamePrompt === "string" ? entry.branchNamePrompt.trim() : "";
+    const normalized: RepositoryMapping = {
       repoRoot,
       mapValue: rawValue || basename(repoRoot),
-    });
+    };
+    if (branchNamePattern.length > 0) {
+      normalized.branchNamePattern = branchNamePattern;
+    }
+    if (branchNamePrompt.length > 0) {
+      normalized.branchNamePrompt = branchNamePrompt;
+    }
+    mappingByRoot.set(repoRoot, normalized);
   }
   return Array.from(mappingByRoot.values());
+}
+
+/**
+ * branch 名正規表現が設定されていれば JavaScript RegExp として検証する
+ */
+function validateBranchNamePattern(pattern: string): WorktreeRepositoryMappingValidationResult {
+  const trimmed = pattern.trim();
+  if (!trimmed) {
+    return { ok: true };
+  }
+  try {
+    new RegExp(trimmed);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Branch name pattern must be a valid regular expression." };
+  }
+}
+
+/**
+ * repository mapping 検証結果
+ */
+type WorktreeRepositoryMappingValidationResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * repository mapping 全体を保存前に検証する
+ */
+function validate(entries: RepositoryMapping[]): WorktreeRepositoryMappingValidationResult {
+  for (const entry of entries) {
+    const result = validateBranchNamePattern(entry.branchNamePattern ?? "");
+    if (!result.ok) {
+      return result;
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * repository root に一致する mapping を返す
+ */
+function findByRepoRoot(entries: RepositoryMapping[], repoRoot: string): RepositoryMapping | null {
+  const normalizedRepoRoot = repoRoot.trim();
+  if (!normalizedRepoRoot) {
+    return null;
+  }
+  return entries.find((entry) => entry.repoRoot === normalizedRepoRoot) ?? null;
 }
 
 /**
@@ -80,7 +133,10 @@ function parseFromStorageValue(value: unknown): RepositoryMapping[] {
  * repository mapping ドメインサービス関数群
  */
 export const repositoryMappingService = {
+  findByRepoRoot,
   normalize,
   sort,
   parseFromStorageValue,
+  validate,
+  validateBranchNamePattern,
 } as const;
