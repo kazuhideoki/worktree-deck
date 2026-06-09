@@ -30,6 +30,8 @@ type RepositoryMappingFormValues = {
   branchNamePrompt?: string;
 };
 
+type RepositoryMappingFormDraftValues = Required<RepositoryMappingFormValues>;
+
 type RepositoryMappingFormProps = {
   initialMapping?: RepositoryMapping;
   branchNamingSuggestions: RepositoryBranchNamingSuggestion[];
@@ -319,6 +321,34 @@ export function resolveRepositoryBranchNamingSuggestions(args: {
 }
 
 /**
+ * mapping フォームの初期入力値を返す
+ */
+export function resolveRepositoryMappingFormDraft(
+  initialMapping?: RepositoryMapping,
+): RepositoryMappingFormDraftValues {
+  return {
+    repoRoot: initialMapping?.repoRoot ?? "",
+    mapValue: initialMapping?.mapValue ?? "",
+    branchNamePattern: initialMapping?.branchNamePattern ?? "",
+    branchNamePrompt: initialMapping?.branchNamePrompt ?? "",
+  };
+}
+
+/**
+ * branch 命名規則候補を入力中のフォーム値へ反映する
+ */
+export function applyRepositoryBranchNamingSuggestionToDraft(
+  current: RepositoryMappingFormDraftValues,
+  suggestion: RepositoryBranchNamingSuggestion,
+): RepositoryMappingFormDraftValues {
+  return {
+    ...current,
+    branchNamePattern: suggestion.branchNamePattern ?? "",
+    branchNamePrompt: suggestion.branchNamePrompt ?? "",
+  };
+}
+
+/**
  * mapping 入力フォームを表示する
  */
 function RepositoryMappingForm({
@@ -328,15 +358,13 @@ function RepositoryMappingForm({
   returnToRootAfterSave = false,
 }: RepositoryMappingFormProps) {
   const { pop } = useNavigation();
-  const [branchNamePatternDraft, setBranchNamePatternDraft] = useState(initialMapping?.branchNamePattern ?? "");
-  const [branchNamePromptDraft, setBranchNamePromptDraft] = useState(initialMapping?.branchNamePrompt ?? "");
+  const [draft, setDraft] = useState(() => resolveRepositoryMappingFormDraft(initialMapping));
 
   /**
    * 他 repository の branch 命名規則をフォームへ反映する
    */
   const handleApplyBranchNamingSuggestion = useCallback(async (suggestion: RepositoryBranchNamingSuggestion) => {
-    setBranchNamePatternDraft(suggestion.branchNamePattern ?? "");
-    setBranchNamePromptDraft(suggestion.branchNamePrompt ?? "");
+    setDraft((current) => applyRepositoryBranchNamingSuggestionToDraft(current, suggestion));
     await showToast({
       style: Toast.Style.Success,
       title: "Branch naming rule applied",
@@ -384,27 +412,29 @@ function RepositoryMappingForm({
         id="repoRoot"
         title="Repository Path"
         placeholder="/path/to/repository"
-        defaultValue={initialMapping?.repoRoot ?? ""}
+        value={draft.repoRoot}
+        onChange={(value) => setDraft((current) => ({ ...current, repoRoot: value }))}
       />
       <Form.TextField
         id="mapValue"
         title="Map Value"
         placeholder={initialMapping?.repoRoot ? basename(initialMapping.repoRoot) : "repository-name"}
-        defaultValue={initialMapping?.mapValue ?? ""}
+        value={draft.mapValue}
+        onChange={(value) => setDraft((current) => ({ ...current, mapValue: value }))}
       />
       <Form.TextField
         id="branchNamePattern"
         title="Branch Name Pattern"
         placeholder="^feat/[a-z0-9-]+$"
-        value={branchNamePatternDraft}
-        onChange={setBranchNamePatternDraft}
+        value={draft.branchNamePattern}
+        onChange={(value) => setDraft((current) => ({ ...current, branchNamePattern: value }))}
       />
       <Form.TextArea
         id="branchNamePrompt"
         title="Branch Naming Prompt"
         placeholder="Use feat/, fix/, or chore/ based on the task."
-        value={branchNamePromptDraft}
-        onChange={setBranchNamePromptDraft}
+        value={draft.branchNamePrompt}
+        onChange={(value) => setDraft((current) => ({ ...current, branchNamePrompt: value }))}
       />
       <Form.Description
         title="Note"

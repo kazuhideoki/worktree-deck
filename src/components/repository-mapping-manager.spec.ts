@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyRepositoryBranchNamingSuggestionToDraft,
   resolveRepositoryBranchNamingSuggestions,
+  resolveRepositoryMappingFormDraft,
   resolveRepositoryMappingFormReturnToRoot,
   shouldAutoOpenRepositoryMappingForm,
 } from "./repository-mapping-manager";
@@ -101,5 +103,58 @@ describe("resolveRepositoryBranchNamingSuggestions", () => {
         branchNamePrompt: "Use feature/ for product changes.",
       },
     ]);
+  });
+});
+
+describe("resolveRepositoryMappingFormDraft", () => {
+  it("mapping からフォーム入力値を初期化する", () => {
+    expect(
+      resolveRepositoryMappingFormDraft({
+        repoRoot: "/repos/app",
+        mapValue: "app",
+        branchNamePattern: "^feat/.+",
+        branchNamePrompt: "Use feat/.",
+      }),
+    ).toEqual({
+      repoRoot: "/repos/app",
+      mapValue: "app",
+      branchNamePattern: "^feat/.+",
+      branchNamePrompt: "Use feat/.",
+    });
+  });
+
+  it("新規作成時は空文字で初期化する", () => {
+    expect(resolveRepositoryMappingFormDraft()).toEqual({
+      repoRoot: "",
+      mapValue: "",
+      branchNamePattern: "",
+      branchNamePrompt: "",
+    });
+  });
+});
+
+describe("applyRepositoryBranchNamingSuggestionToDraft", () => {
+  it("branch 命名規則候補を反映して入力中の repository path と map value は保持する", () => {
+    expect(
+      applyRepositoryBranchNamingSuggestionToDraft(
+        {
+          repoRoot: "/repos/new-app",
+          mapValue: "new-app",
+          branchNamePattern: "",
+          branchNamePrompt: "",
+        },
+        {
+          sourceRepoRoot: "/repos/source",
+          sourceMapValue: "source",
+          branchNamePattern: "^feature/[a-z0-9-]+$",
+          branchNamePrompt: "Use feature/.",
+        },
+      ),
+    ).toEqual({
+      repoRoot: "/repos/new-app",
+      mapValue: "new-app",
+      branchNamePattern: "^feature/[a-z0-9-]+$",
+      branchNamePrompt: "Use feature/.",
+    });
   });
 });
