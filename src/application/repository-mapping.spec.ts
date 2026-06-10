@@ -33,15 +33,29 @@ describe("save", () => {
     const result = await repositoryMappingUsecase.save({
       entries: [
         { repoRoot: " /tmp/repo-b ", mapValue: "" },
-        { repoRoot: "/tmp/repo-a", mapValue: "Alpha" },
+        { repoRoot: "/tmp/repo-a", mapValue: "Alpha", branchNamePattern: "^feat/.+", branchNamePrompt: "Use feat/" },
       ],
       dependencies: deps,
     });
 
     expect(result).toEqual([
-      { repoRoot: "/tmp/repo-a", mapValue: "Alpha" },
+      { repoRoot: "/tmp/repo-a", mapValue: "Alpha", branchNamePattern: "^feat/.+", branchNamePrompt: "Use feat/" },
       { repoRoot: "/tmp/repo-b", mapValue: "repo-b" },
     ]);
     expect(deps.saveMappingsToStorage).toHaveBeenCalledWith(result);
+  });
+
+  it("branch name pattern が不正なら storage 保存しない", async () => {
+    const deps = {
+      saveMappingsToStorage: vi.fn(async () => {}),
+    };
+
+    await expect(
+      repositoryMappingUsecase.save({
+        entries: [{ repoRoot: "/tmp/repo-a", mapValue: "Alpha", branchNamePattern: "[" }],
+        dependencies: deps,
+      }),
+    ).rejects.toThrow("Branch name pattern must be a valid regular expression.");
+    expect(deps.saveMappingsToStorage).not.toHaveBeenCalled();
   });
 });

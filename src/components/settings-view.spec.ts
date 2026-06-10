@@ -25,7 +25,7 @@ describe("buildSettingsItems", () => {
       {
         id: "repositories",
         title: "Repositories",
-        subtitle: "Register repository roots and display names.",
+        subtitle: "Register repository roots, display names, and branch naming rules.",
         icon: Icon.Folder,
       },
     ]);
@@ -80,7 +80,7 @@ describe("SettingsView", () => {
     expect(section.props.title).toBe("General");
     expect(item.type).toBe(List.Item);
     expect(item.props.title).toBe("Repositories");
-    expect(item.props.subtitle).toBe("Register repository roots and display names.");
+    expect(item.props.subtitle).toBe("Register repository roots, display names, and branch naming rules.");
     expect(actions.type).toBe(ActionPanel);
     expect(pushAction.type).toBe(Action.Push);
     expect(pushAction.props.title).toBe("Open Repositories");

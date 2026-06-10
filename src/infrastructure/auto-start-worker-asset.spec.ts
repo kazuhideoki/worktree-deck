@@ -56,4 +56,15 @@ describe("auto_start_worker.js", () => {
     );
     expect(source).toContain("normalizeMissingCommandError(error, command)");
   });
+
+  it("Auto Start の branch 生成にも repository 別命名 rule と最大3回リトライを使う", async () => {
+    const source = await readAutoStartWorkerAsset();
+
+    expect(source).toContain("const BRANCH_NAME_GENERATION_MAX_ATTEMPTS = 3");
+    expect(source).toContain("const storagePath = join(resolveStorageDir(), REPOSITORY_MAPPING_STORAGE_FILE)");
+    expect(source).toContain("Branch naming regular expression:");
+    expect(source).toContain("Previous generated branch name was rejected:");
+    expect(source).toContain("attempt <= BRANCH_NAME_GENERATION_MAX_ATTEMPTS");
+    expect(source).toContain("validateBranchNameRule(normalizeGeneratedBranchName");
+  });
 });

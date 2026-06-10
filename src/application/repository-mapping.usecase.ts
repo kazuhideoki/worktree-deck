@@ -34,6 +34,10 @@ async function save(args: {
   dependencies: SaveRepositoryMappingsDependencies;
 }): Promise<RepositoryMapping[]> {
   const normalized = repositoryMappingService.normalize(args.entries);
+  const validation = repositoryMappingService.validate(normalized);
+  if (!validation.ok) {
+    throw new Error(validation.error);
+  }
   const sorted = repositoryMappingService.sort(normalized);
   await args.dependencies.saveMappingsToStorage(sorted);
   return sorted;

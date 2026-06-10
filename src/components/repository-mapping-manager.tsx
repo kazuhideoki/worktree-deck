@@ -14,7 +14,11 @@ import {
 import { basename } from "node:path";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveWorktreeDeckCompositionRoot } from "../composition-root";
-import { type RepositoryMapping } from "../domain/repository-mapping.service";
+import {
+  repositoryMappingService,
+  type RepositoryBranchNamingSuggestion,
+  type RepositoryMapping,
+} from "../domain/repository-mapping.service";
 
 const WORKTREE_DECK_COMPOSITION_ROOT = resolveWorktreeDeckCompositionRoot();
 const { loadRepositoryMappings, saveRepositoryMappings } = WORKTREE_DECK_COMPOSITION_ROOT.repositoryMappingStore;
@@ -22,10 +26,13 @@ const { loadRepositoryMappings, saveRepositoryMappings } = WORKTREE_DECK_COMPOSI
 type RepositoryMappingFormValues = {
   repoRoot: string;
   mapValue: string;
+  branchNamePattern?: string;
+  branchNamePrompt?: string;
 };
 
 type RepositoryMappingFormProps = {
   initialMapping?: RepositoryMapping;
+  branchNamingSuggestions: RepositoryBranchNamingSuggestion[];
   onSave: (values: RepositoryMappingFormValues, originalRepoRoot?: string) => Promise<boolean>;
   returnToRootAfterSave?: boolean;
 };
@@ -78,6 +85,8 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
     async (values: RepositoryMappingFormValues, originalRepoRoot?: string): Promise<boolean> => {
       const repoRoot = values.repoRoot.trim();
       const mapValue = values.mapValue.trim();
+      const branchNamePattern = values.branchNamePattern?.trim() ?? "";
+      const branchNamePrompt = values.branchNamePrompt?.trim() ?? "";
       if (!repoRoot) {
         await showToast({ style: Toast.Style.Failure, title: "Repository path is required" });
         return false;
@@ -97,7 +106,7 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
         }
         next = next.filter((entry) => entry.repoRoot !== repoRoot);
       }
-      next = [...next, { repoRoot, mapValue }];
+      next = [...next, { repoRoot, mapValue, branchNamePattern, branchNamePrompt }];
       try {
         const saved = await saveRepositoryMappings(next);
         setMappings(saved);
@@ -165,6 +174,10 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
     hasAutoOpenedAddFormRef.current = true;
     push(
       <RepositoryMappingForm
+        branchNamingSuggestions={resolveRepositoryBranchNamingSuggestions({
+          mappings,
+          currentRepoRoot: "",
+        })}
         onSave={handleSaveMapping}
         returnToRootAfterSave={resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm)}
       />,
@@ -185,6 +198,10 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
                   icon={Icon.PlusCircle}
                   target={
                     <RepositoryMappingForm
+                      branchNamingSuggestions={resolveRepositoryBranchNamingSuggestions({
+                        mappings,
+                        currentRepoRoot: "",
+                      })}
                       onSave={handleSaveMapping}
                       returnToRootAfterSave={resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm)}
                     />
@@ -209,6 +226,10 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
                 icon={Icon.PlusCircle}
                 target={
                   <RepositoryMappingForm
+                    branchNamingSuggestions={resolveRepositoryBranchNamingSuggestions({
+                      mappings,
+                      currentRepoRoot: "",
+                    })}
                     onSave={handleSaveMapping}
                     returnToRootAfterSave={resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm)}
                   />
@@ -225,13 +246,25 @@ export function RepositoryMappingManager({ autoOpenAddForm = false, onChange }: 
               title={entry.mapValue}
               subtitle={entry.repoRoot}
               icon={Icon.Folder}
-              accessories={[{ text: basename(entry.repoRoot) }]}
+              accessories={[
+                ...(entry.branchNamePattern ? [{ text: "Branch Rule" }] : []),
+                { text: basename(entry.repoRoot) },
+              ]}
               actions={
                 <ActionPanel>
                   <Action.Push
                     title="Edit Repository Mapping"
                     icon={Icon.Pencil}
-                    target={<RepositoryMappingForm initialMapping={entry} onSave={handleSaveMapping} />}
+                    target={
+                      <RepositoryMappingForm
+                        initialMapping={entry}
+                        branchNamingSuggestions={resolveRepositoryBranchNamingSuggestions({
+                          mappings,
+                          currentRepoRoot: entry.repoRoot,
+                        })}
+                        onSave={handleSaveMapping}
+                      />
+                    }
                   />
                   <Action
                     title="Remove Repository Mapping"
@@ -276,10 +309,40 @@ export function resolveRepositoryMappingFormReturnToRoot(autoOpenAddForm: boolea
 }
 
 /**
+ * Repository Mapping Form に表示する branch 命名規則候補を返す
+ */
+export function resolveRepositoryBranchNamingSuggestions(args: {
+  mappings: RepositoryMapping[];
+  currentRepoRoot: string;
+}): RepositoryBranchNamingSuggestion[] {
+  return repositoryMappingService.listBranchNamingSuggestions(args.mappings, args.currentRepoRoot);
+}
+
+/**
  * mapping 入力フォームを表示する
  */
-function RepositoryMappingForm({ initialMapping, onSave, returnToRootAfterSave = false }: RepositoryMappingFormProps) {
+function RepositoryMappingForm({
+  initialMapping,
+  branchNamingSuggestions,
+  onSave,
+  returnToRootAfterSave = false,
+}: RepositoryMappingFormProps) {
   const { pop } = useNavigation();
+  const [branchNamePatternDraft, setBranchNamePatternDraft] = useState(initialMapping?.branchNamePattern ?? "");
+  const [branchNamePromptDraft, setBranchNamePromptDraft] = useState(initialMapping?.branchNamePrompt ?? "");
+
+  /**
+   * 他 repository の branch 命名規則をフォームへ反映する
+   */
+  const handleApplyBranchNamingSuggestion = useCallback(async (suggestion: RepositoryBranchNamingSuggestion) => {
+    setBranchNamePatternDraft(suggestion.branchNamePattern ?? "");
+    setBranchNamePromptDraft(suggestion.branchNamePrompt ?? "");
+    await showToast({
+      style: Toast.Style.Success,
+      title: "Branch naming rule applied",
+      message: suggestion.sourceMapValue,
+    });
+  }, []);
 
   /**
    * 入力値を検証して保存する
@@ -303,6 +366,17 @@ function RepositoryMappingForm({ initialMapping, onSave, returnToRootAfterSave =
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Save Repository Mapping" icon={Icon.SaveDocument} onSubmit={handleSubmit} />
+          {branchNamingSuggestions.map((suggestion) => (
+            <Action
+              key={suggestion.sourceRepoRoot}
+              title={`Apply Branch Rule from ${suggestion.sourceMapValue}`}
+              icon={Icon.Download}
+              shortcut={null}
+              onAction={() => {
+                void handleApplyBranchNamingSuggestion(suggestion);
+              }}
+            />
+          ))}
         </ActionPanel>
       }
     >
@@ -318,7 +392,24 @@ function RepositoryMappingForm({ initialMapping, onSave, returnToRootAfterSave =
         placeholder={initialMapping?.repoRoot ? basename(initialMapping.repoRoot) : "repository-name"}
         defaultValue={initialMapping?.mapValue ?? ""}
       />
-      <Form.Description title="Note" text="If Map Value is empty, the repository name is used." />
+      <Form.TextField
+        id="branchNamePattern"
+        title="Branch Name Pattern"
+        placeholder="^feat/[a-z0-9-]+$"
+        value={branchNamePatternDraft}
+        onChange={setBranchNamePatternDraft}
+      />
+      <Form.TextArea
+        id="branchNamePrompt"
+        title="Branch Naming Prompt"
+        placeholder="Use feat/, fix/, or chore/ based on the task."
+        value={branchNamePromptDraft}
+        onChange={setBranchNamePromptDraft}
+      />
+      <Form.Description
+        title="Note"
+        text="If Map Value is empty, the repository name is used. Branch Name Pattern is optional."
+      />
     </Form>
   );
 }
