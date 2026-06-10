@@ -66,7 +66,7 @@ const ENV_SEARCH_DAYS = "WORKTREE_DECK_SEARCH_DAYS";
 /**
  * タイトルキャッシュのキー接頭辞
  */
-const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v15";
+const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v16";
 /**
  * working を done に切り替える経過日数の環境変数名
  */
@@ -526,33 +526,22 @@ async function scanSessionSkillUsages(args: {
   if (args.startOffset >= args.fileSize) {
     return { skillUsages: [], scannedOffset: args.fileSize };
   }
-  let handle;
   const skillUsages: ParsedSessionLog["skillUsages"] = [];
+  const stream = createReadStream(args.filePath, { encoding: "utf8", start: args.startOffset });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+  let scannedOffset = args.startOffset;
   try {
-    handle = await fs.open(args.filePath, "r");
-    const length = args.fileSize - args.startOffset;
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, args.startOffset);
-    const text = buffer.toString("utf8");
-    const hasCompleteFinalLine = text.endsWith("\n") || text.endsWith("\r");
-    const lines = text.split(/\r?\n/);
-    if (!hasCompleteFinalLine) {
-      lines.pop();
-    }
-    for (const line of lines) {
+    for await (const line of reader) {
       skillUsages.push(...sessionLogParserService.extractSkillUsagesFromLogLine(line));
+      scannedOffset += Buffer.byteLength(line, "utf8") + 1;
     }
-    const lastLineBreakIndex = Math.max(buffer.lastIndexOf(0x0a), buffer.lastIndexOf(0x0d));
-    const scannedBytes = lastLineBreakIndex >= 0 ? lastLineBreakIndex + 1 : 0;
-    const scannedOffset = hasCompleteFinalLine ? args.fileSize : args.startOffset + scannedBytes;
     return {
       skillUsages,
-      scannedOffset,
+      scannedOffset: Math.min(scannedOffset, args.fileSize),
     };
   } finally {
-    if (handle) {
-      await handle.close();
-    }
+    reader.close();
+    stream.destroy();
   }
 }
 
@@ -1131,12 +1120,16 @@ export async function loadLatestSessionMessages(args: {
         if (!line) {
           continue;
         }
-        const shouldParseJson = line.includes('"event_msg"') || line.includes('"response_item"');
+        const preparedLine = sessionLogParserService.prepareLogLineForParsing(line);
+        if (preparedLine == null) {
+          continue;
+        }
+        const shouldParseJson = preparedLine.includes('"event_msg"') || preparedLine.includes('"response_item"');
         if (!shouldParseJson) {
           continue;
         }
         try {
-          const parsed = JSON.parse(line) as Record<string, unknown>;
+          const parsed = JSON.parse(preparedLine) as Record<string, unknown>;
           const timestamp = sessionLogParserService.extractLogTimestamp(parsed);
           const responseItemType = sessionLogParserService.extractResponseItemType(parsed);
           if (responseItemType && sessionLogParserService.isWorkingResponseItemType(responseItemType)) {
@@ -1323,12 +1316,16 @@ export async function loadSessionMessages(args: {
         if (!line) {
           continue;
         }
-        const shouldParseJson = line.includes('"event_msg"') || line.includes('"response_item"');
+        const preparedLine = sessionLogParserService.prepareLogLineForParsing(line);
+        if (preparedLine == null) {
+          continue;
+        }
+        const shouldParseJson = preparedLine.includes('"event_msg"') || preparedLine.includes('"response_item"');
         if (!shouldParseJson) {
           continue;
         }
         try {
-          const parsed = JSON.parse(line) as Record<string, unknown>;
+          const parsed = JSON.parse(preparedLine) as Record<string, unknown>;
           const timestamp = sessionLogParserService.extractLogTimestamp(parsed);
           const responseItemType = sessionLogParserService.extractResponseItemType(parsed);
           if (responseItemType && sessionLogParserService.isWorkingResponseItemType(responseItemType)) {

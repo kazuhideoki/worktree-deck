@@ -104,7 +104,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
     });
 
     expect(cache).toEqual({
-      version: 4,
+      version: 5,
       worktreesByPath: {
         "/tmp/repo/feature-a": {
           titleEntries: [title],
@@ -169,7 +169,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
       ],
       mappings: [buildMapping("/tmp/repo", "repo")],
       cache: {
-        version: 4,
+        version: 5,
         worktreesByPath: {
           "/tmp/repo/feature-a": {
             titleEntries: [title],
@@ -248,7 +248,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
   it("title が文字列でない表示キャッシュは例外にせず復元しない", () => {
     expect(
       normalizeWorktreeDeckDisplayCache({
-        version: 4,
+        version: 5,
         worktreesByPath: {},
         titlesByPath: {
           "/tmp/repo": [
@@ -278,7 +278,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
     });
 
     const cache = normalizeWorktreeDeckDisplayCache({
-      version: 4,
+      version: 5,
       worktreesByPath: {},
       titlesByPath: {
         "/tmp/repo": [title],

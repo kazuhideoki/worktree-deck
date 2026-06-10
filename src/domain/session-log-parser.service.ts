@@ -110,6 +110,21 @@ const CWD_PATTERN = /<cwd>([^<]+)<\/cwd>/g;
 const TITLE_MAX_LENGTH_CHARS = 60;
 
 /**
+ * parse 前に破棄する巨大ログ行の目安
+ */
+const HEAVY_LOG_LINE_SKIP_CHARS = 128 * 1024;
+
+/**
+ * ログ行内の画像 data URL を安全な短い値へ置き換えるパターン
+ */
+const IMAGE_DATA_URL_FIELD_PATTERN = /"(image_url|b64_json)":"(?:data:image\/)?[^"]+"/g;
+
+/**
+ * parse しても一覧表示に使わない巨大 payload の目印
+ */
+const HEAVY_PREVIEW_PAYLOAD_MARKERS = ['"input_image"', '"image_url":"data:image/', '"b64_json"', "data:image/"];
+
+/**
  * 同一スキル使用を隣接重複としてまとめる時間幅
  */
 const SKILL_USAGE_DEDUPE_WINDOW_MS = 2 * 60 * 1000;
@@ -721,11 +736,68 @@ function extractSkillUsagesFromUserText(text: string, timestamp: string | null):
 }
 
 /**
+ * ログ行が画像/base64系の巨大 payload を含むか判定する
+ */
+function containsHeavyPreviewPayload(line: string): boolean {
+  return HEAVY_PREVIEW_PAYLOAD_MARKERS.some((marker) => line.includes(marker));
+}
+
+/**
+ * message として扱える可能性があるログ行か判定する
+ */
+function containsMessagePayload(line: string): boolean {
+  if (
+    line.includes('"type":"event_msg"') &&
+    (line.includes('"type":"user_message"') || line.includes('"type":"agent_message"'))
+  ) {
+    return true;
+  }
+  return line.includes('"type":"response_item"') && line.includes('"type":"message"');
+}
+
+/**
+ * parse 前に破棄してよい巨大ログ行か判定する
+ */
+function shouldSkipHeavyPreviewPayloadLine(line: string): boolean {
+  if (line.includes('"type":"compacted"')) {
+    return true;
+  }
+  if (line.includes('"type":"event_msg"') && line.includes('"type":"image_generation')) {
+    return true;
+  }
+  if (
+    line.includes('"type":"response_item"') &&
+    line.includes('"type":"function_call_output"') &&
+    containsHeavyPreviewPayload(line)
+  ) {
+    return true;
+  }
+  return line.length > HEAVY_LOG_LINE_SKIP_CHARS && containsHeavyPreviewPayload(line) && !containsMessagePayload(line);
+}
+
+/**
+ * JSON.parse 前に preview 不要の画像 payload を取り除いたログ行を返す
+ */
+function prepareLogLineForParsing(line: string): string | null {
+  if (shouldSkipHeavyPreviewPayloadLine(line)) {
+    return null;
+  }
+  if (!containsHeavyPreviewPayload(line)) {
+    return line;
+  }
+  return line.replace(IMAGE_DATA_URL_FIELD_PATTERN, (_, key: string) => `"${key}":"[image omitted]"`);
+}
+
+/**
  * セッションログ1行からスキル使用履歴だけを抽出する
  */
 function extractSkillUsagesFromLogLine(line: string): SessionSkillUsage[] {
+  const preparedLine = prepareLogLineForParsing(line);
+  if (preparedLine == null) {
+    return [];
+  }
   try {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
+    const parsed = JSON.parse(preparedLine) as Record<string, unknown>;
     const timestamp = extractLogTimestamp(parsed);
     const usages: SessionSkillUsage[] = [];
     const functionCallUsage = extractSkillUsageFromFunctionCall(parsed, timestamp);
@@ -1012,12 +1084,16 @@ function extractAssistantMessageFromLogLine(line: string): string | null {
   if (!line) {
     return null;
   }
-  const shouldParseJson = line.includes('"event_msg"') || line.includes('"response_item"');
+  const preparedLine = prepareLogLineForParsing(line);
+  if (preparedLine == null) {
+    return null;
+  }
+  const shouldParseJson = preparedLine.includes('"event_msg"') || preparedLine.includes('"response_item"');
   if (!shouldParseJson) {
     return null;
   }
   try {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
+    const parsed = JSON.parse(preparedLine) as Record<string, unknown>;
     const responseMessage = extractResponseMessage(parsed);
     if (responseMessage?.role === "assistant") {
       return responseMessage.text;
@@ -1082,19 +1158,23 @@ function updateParseState(args: {
   if (!line) {
     return;
   }
+  const preparedLine = prepareLogLineForParsing(line);
+  if (preparedLine == null) {
+    return;
+  }
 
   const shouldParseJson =
-    line.includes('"event_msg"') ||
-    line.includes('"response_item"') ||
-    line.includes('"turn_context"') ||
-    line.includes('"session_meta"') ||
-    line.includes('"response.');
+    preparedLine.includes('"event_msg"') ||
+    preparedLine.includes('"response_item"') ||
+    preparedLine.includes('"turn_context"') ||
+    preparedLine.includes('"session_meta"') ||
+    preparedLine.includes('"response.');
   if (!shouldParseJson) {
     return;
   }
 
   try {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
+    const parsed = JSON.parse(preparedLine) as Record<string, unknown>;
     const logEntryType = extractLogEntryType(parsed);
     const responseLifecycleStatus = logEntryType ? resolveResponseLifecycleStatus(logEntryType) : null;
     const eventType = extractEventType(parsed);
@@ -1353,6 +1433,7 @@ export const sessionLogParserService = {
   extractAssistantMessageFromLogLine,
   extractEventMessage,
   extractLogTimestamp,
+  prepareLogLineForParsing,
   extractResponseItemType,
   extractResponseMessage,
   extractSessionMessageFromEvent,

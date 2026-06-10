@@ -94,6 +94,81 @@ describe("sessionLogParserService", () => {
     expect(result.latestMessage).toBe("🤖 Final decision: approve\n\n- Commit: abc123\n- Tests: passed");
   });
 
+  it("画像生成イベントの巨大 payload は parse 対象から除外する", () => {
+    const rawLine = line({
+      timestamp: "2026-05-03T10:01:00.000Z",
+      type: "event_msg",
+      payload: {
+        type: "image_generation_end",
+        result: `data:image/png;base64,${"A".repeat(200_000)}`,
+      },
+    });
+
+    expect(sessionLogParserService.prepareLogLineForParsing(rawLine)).toBeNull();
+  });
+
+  it("message 行に含まれる画像 data URL は parse 前に短縮する", () => {
+    const rawLine = line({
+      timestamp: "2026-05-03T10:01:00.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: "画像を見て" },
+          { type: "input_image", image_url: `data:image/png;base64,${"A".repeat(200_000)}` },
+        ],
+      },
+    });
+    const preparedLine = sessionLogParserService.prepareLogLineForParsing(rawLine);
+
+    expect(preparedLine).not.toBeNull();
+    expect(preparedLine).toContain('"image_url":"[image omitted]"');
+    expect(preparedLine).not.toContain("AAAA");
+    expect(() => JSON.parse(preparedLine ?? "")).not.toThrow();
+  });
+
+  it("function_call_output の画像 payload は最新メッセージに影響させない", () => {
+    const state = sessionLogParserService.createParseState();
+    const values = [
+      {
+        timestamp: "2026-05-03T10:00:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "画像を確認して",
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:01:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "agent_message",
+          message: "確認しました",
+        },
+      },
+      {
+        timestamp: "2026-05-03T10:02:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "call-image",
+          output: [{ type: "input_image", image_url: `data:image/png;base64,${"A".repeat(200_000)}` }],
+        },
+      },
+    ];
+    for (const value of values) {
+      sessionLogParserService.updateParseState({
+        line: line(value),
+        homeDir: null,
+        state,
+        skipFirstUserMessage: false,
+      });
+    }
+
+    expect(sessionLogParserService.finalizeParseState(state).latestMessage).toBe("🤖 確認しました");
+  });
+
   it("goal 継続 developer message の objective を title fallback として解析する", () => {
     const path = "/tmp/repo-a/worktree-a";
     const parsed = parseLines([

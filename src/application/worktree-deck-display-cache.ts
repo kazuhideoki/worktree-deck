@@ -11,7 +11,7 @@ import type { WorktreeTitle } from "./worktree-title.entity";
 /**
  * 表示キャッシュの互換性管理用バージョン
  */
-const WORKTREE_DECK_DISPLAY_CACHE_VERSION = 4;
+const WORKTREE_DECK_DISPLAY_CACHE_VERSION = 5;
 
 /**
  * 1件の worktree 表示キャッシュ
