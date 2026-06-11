@@ -31,7 +31,7 @@ import type { OpenWorktreeInPreferredAppDependencies } from "./application/workt
 import type { WorktreeMenuBarLifecycleDependencies } from "./application/worktree-menu-bar-lifecycle.usecase";
 import type { WorktreeMenuBarSummaryStore } from "./interface-adapters/worktree-menu-bar-summary-dependencies";
 import type { SessionMessage } from "./domain/session-detail.service";
-import type { Worktree } from "./application/worktree.entity";
+import type { Worktree, WorktreePullRequestInfo } from "./application/worktree.entity";
 import type { WorktreeTitle } from "./application/worktree-title.entity";
 import { createDefaultWorktreeDependencies } from "./interface-adapters/create-worktree-dependencies";
 import { createDefaultDeletedWorktreeDependencies } from "./interface-adapters/deleted-worktrees-dependencies";
@@ -93,6 +93,7 @@ import {
   createDefaultCreateWorktreePullRequestDependencies,
   createDefaultResolvePullRequestHeadBranchDependencies,
   createDefaultResolveWorktreePullRequestTitleDependencies,
+  loadPullRequestInfoByWorktreePath,
 } from "./infrastructure/worktree-pr-infra";
 import { openPathInCodexApp, openCodexThreadInApp } from "./infrastructure/codex-app-infra";
 import {
@@ -112,7 +113,7 @@ export type WorktreeSection = {
   repo: string;
   items: Worktree[];
 };
-export type { SessionMessage, Worktree, WorktreePullRequestResult, WorktreeTitle };
+export type { SessionMessage, Worktree, WorktreePullRequestInfo, WorktreePullRequestResult, WorktreeTitle };
 
 /**
  * worktree-deck で利用する依存解決結果
@@ -262,6 +263,7 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
       loadWorktreeMetadata,
       loadAheadBehindCounts,
       resolveMergeTargetRef,
+      loadPullRequestInfoByWorktreePath,
     },
     repositoryMappingStore: {
       loadRepositoryMappings,

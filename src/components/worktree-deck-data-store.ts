@@ -141,6 +141,7 @@ function mergeInitialWorktreeDisplayState(current: Worktree[], updates: Worktree
       baseRef: currentItem.baseRef !== undefined ? currentItem.baseRef : item.baseRef,
       aheadCount: currentItem.aheadCount !== undefined ? currentItem.aheadCount : item.aheadCount,
       behindCount: currentItem.behindCount !== undefined ? currentItem.behindCount : item.behindCount,
+      pullRequest: currentItem.pullRequest !== undefined ? currentItem.pullRequest : item.pullRequest,
     };
   });
 }

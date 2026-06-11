@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RepositoryMapping } from "../domain/repository-mapping.service";
-import type { Worktree } from "./worktree.entity";
+import type { Worktree, WorktreePullRequestInfo } from "./worktree.entity";
 import type { WorktreeTitle } from "./worktree-title.entity";
 import {
   applyWorktreeDeckDisplayCache,
@@ -48,6 +48,7 @@ function buildWorktree(args: {
   baseRef?: string | null;
   aheadCount?: number | null;
   behindCount?: number | null;
+  pullRequest?: WorktreePullRequestInfo | null;
 }): Worktree {
   return {
     repo: args.repo,
@@ -60,6 +61,23 @@ function buildWorktree(args: {
     baseRef: args.baseRef,
     aheadCount: args.aheadCount,
     behindCount: args.behindCount,
+    pullRequest: args.pullRequest,
+  };
+}
+
+/**
+ * テスト用の PR 情報を作成する
+ */
+function buildPullRequestInfo(args: Partial<WorktreePullRequestInfo> = {}): WorktreePullRequestInfo {
+  return {
+    number: args.number ?? 42,
+    title: args.title ?? "Add feature",
+    url: args.url ?? "https://github.com/example/repo/pull/42",
+    state: args.state ?? "OPEN",
+    isDraft: args.isDraft ?? false,
+    reviewDecision: args.reviewDecision ?? null,
+    headRefName: args.headRefName ?? "feature-a",
+    baseRefName: args.baseRefName ?? "main",
   };
 }
 
@@ -82,6 +100,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
       status: "done",
       skillUsages: [{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" }],
     });
+    const pullRequest = buildPullRequestInfo();
     const cache = buildWorktreeDeckDisplayCache({
       worktrees: [
         buildWorktree({
@@ -95,6 +114,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
           baseRef: "main",
           aheadCount: 0,
           behindCount: 0,
+          pullRequest,
         }),
       ],
       titlesByPath: new Map([["/tmp/repo", [title]]]),
@@ -104,7 +124,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
     });
 
     expect(cache).toEqual({
-      version: 4,
+      version: 5,
       worktreesByPath: {
         "/tmp/repo/feature-a": {
           titleEntries: [title],
@@ -113,6 +133,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
           baseRef: "main",
           aheadCount: 0,
           behindCount: 0,
+          pullRequest,
         },
       },
       titlesByPath: {
@@ -147,6 +168,26 @@ describe("buildWorktreeDeckDisplayCache", () => {
 
     expect(hasWorktreeDeckDisplayCacheData(cache)).toBe(false);
   });
+
+  it("PR 未紐付けの取得済み状態もキャッシュへ保存する", () => {
+    const cache = buildWorktreeDeckDisplayCache({
+      worktrees: [
+        buildWorktree({
+          repo: "repo",
+          path: "/tmp/repo/feature-a",
+          branch: "feature-a",
+          pullRequest: null,
+        }),
+      ],
+      titlesByPath: new Map(),
+      originLastCommitByPath: new Map(),
+      originBranchByPath: new Map(),
+      openAppMetaByPath: new Map(),
+    });
+
+    expect(cache.worktreesByPath["/tmp/repo/feature-a"]).toEqual({ pullRequest: null });
+    expect(hasWorktreeDeckDisplayCacheData(cache)).toBe(true);
+  });
 });
 
 describe("applyWorktreeDeckDisplayCache", () => {
@@ -158,6 +199,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
       status: "done",
       skillUsages: [{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:00:00.000Z" }],
     });
+    const pullRequest = buildPullRequestInfo();
     const restored = applyWorktreeDeckDisplayCache({
       worktrees: [
         buildWorktree({
@@ -169,7 +211,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
       ],
       mappings: [buildMapping("/tmp/repo", "repo")],
       cache: {
-        version: 4,
+        version: 5,
         worktreesByPath: {
           "/tmp/repo/feature-a": {
             titleEntries: [title],
@@ -178,6 +220,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
             baseRef: "main",
             aheadCount: 0,
             behindCount: 0,
+            pullRequest,
           },
         },
         titlesByPath: {
@@ -212,6 +255,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
         baseRef: "main",
         aheadCount: 0,
         behindCount: 0,
+        pullRequest,
       }),
     ]);
     expect(restored.titlesByPath).toEqual(new Map([["/tmp/repo", [title]]]));
@@ -248,7 +292,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
   it("title が文字列でない表示キャッシュは例外にせず復元しない", () => {
     expect(
       normalizeWorktreeDeckDisplayCache({
-        version: 4,
+        version: 5,
         worktreesByPath: {},
         titlesByPath: {
           "/tmp/repo": [
@@ -278,7 +322,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
     });
 
     const cache = normalizeWorktreeDeckDisplayCache({
-      version: 4,
+      version: 5,
       worktreesByPath: {},
       titlesByPath: {
         "/tmp/repo": [title],
@@ -289,5 +333,31 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
     });
 
     expect(cache?.titlesByPath["/tmp/repo"]).toEqual([title]);
+  });
+
+  it("不正な PR 情報を含む表示キャッシュは復元しない", () => {
+    expect(
+      normalizeWorktreeDeckDisplayCache({
+        version: 5,
+        worktreesByPath: {
+          "/tmp/repo/feature-a": {
+            pullRequest: {
+              number: 42,
+              title: "Add feature",
+              url: "",
+              state: "OPEN",
+              isDraft: false,
+              reviewDecision: null,
+              headRefName: "feature-a",
+              baseRefName: "main",
+            },
+          },
+        },
+        titlesByPath: {},
+        originLastCommitByPath: {},
+        originBranchByPath: {},
+        openAppMetaByPath: {},
+      }),
+    ).toBeNull();
   });
 });

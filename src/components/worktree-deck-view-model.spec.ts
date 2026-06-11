@@ -137,6 +137,39 @@ describe("worktree-deck-view-model", () => {
     );
   });
 
+  it("Git 情報の同じ行末に PR リンクを表示する", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      mergeStatus: "synced",
+      baseRef: "main",
+      aheadCount: 1,
+      behindCount: 0,
+      pullRequest: {
+        number: 42,
+        title: "Add feature",
+        url: "https://github.com/example/repo/pull/42",
+        state: "OPEN",
+        isDraft: false,
+        reviewDecision: null,
+        headRefName: "feature-a",
+        baseRefName: "main",
+      },
+      titles: [buildTitleEntry({ title: "Implement feature", latestMessage: "Done", updatedAt: 100 })],
+    });
+
+    expect(markdown).toBe(
+      [
+        "| 📝 | Implement feature |",
+        "| --- | --- |",
+        "| 🌿 | 🌿 main (+1 -0)  ✅ synced  [PR\u00A0#42\u00A0Open](https://github.com/example/repo/pull/42) |",
+        "| 🧰 | None |",
+        "",
+        "Done",
+      ].join("\n"),
+    );
+  });
+
   it("複数通常セッションがある場合も詳細タイトルは初回タイトルを維持する", () => {
     const markdown = buildDetailMarkdown({
       title: "feature-a",

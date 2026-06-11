@@ -1,6 +1,12 @@
 import { basename } from "node:path";
 
-import { type Worktree, type WorktreeMergeStatus, type WorktreeSection, type WorktreeTitle } from "../composition-root";
+import {
+  type Worktree,
+  type WorktreeMergeStatus,
+  type WorktreePullRequestInfo,
+  type WorktreeSection,
+  type WorktreeTitle,
+} from "../composition-root";
 import { type RepositoryMapping } from "../domain/repository-mapping.service";
 import { type WorktreeOpenApp, type WorktreeOpenAppMeta } from "../domain/worktree-open-app.service";
 import { matchesSearchTerms, type SearchTerms } from "../search-utils";
@@ -407,11 +413,16 @@ export function buildSortedSectionEntries(args: {
 /**
  * セッションタイトル表示用の Markdown を整形する
  */
-export function formatTitleEntry(entry: WorktreeTitle, gitStatus: string | null = null): string {
+export function formatTitleEntry(
+  entry: WorktreeTitle,
+  gitStatus: string | null = null,
+  pullRequest: WorktreePullRequestInfo | null = null,
+): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
+  const gitStatusWithPullRequest = formatGitStatusWithPullRequest(gitStatus ?? "No git status", pullRequest);
   const rows = [
     ["📝", truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS)],
-    ["🌿", gitStatus ?? "No git status"],
+    ["🌿", gitStatusWithPullRequest],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
   ];
   const [headerRow, ...bodyRows] = rows.map(([key, value]) => `| ${key} | ${formatTableValue(value)} |`);
@@ -505,6 +516,47 @@ function formatTableValue(value: string): string {
  */
 function formatLatestMessageBlock(value: string): string {
   return value.trim();
+}
+
+/**
+ * PR 状態を詳細表示向けに短く整形する
+ */
+function formatPullRequestState(pullRequest: WorktreePullRequestInfo): string {
+  if (pullRequest.isDraft) {
+    return "Draft";
+  }
+  const normalized = pullRequest.state.trim().toUpperCase();
+  if (!normalized || normalized === "UNKNOWN") {
+    return "";
+  }
+  return normalized.toLowerCase().replace(/(^|_)([a-z])/g, (_match, prefix: string, letter: string) => {
+    return `${prefix === "_" ? " " : ""}${letter.toUpperCase()}`;
+  });
+}
+
+/**
+ * Markdown 詳細内の PR リンクを組み立てる
+ */
+function formatPullRequestLink(pullRequest: WorktreePullRequestInfo | null): string {
+  if (pullRequest === null || pullRequest.url.trim().length === 0) {
+    return "";
+  }
+  const state = formatPullRequestState(pullRequest);
+  const label = ["PR", `#${pullRequest.number}`, state].filter(Boolean).join("\u00A0");
+  return `[${label}](${pullRequest.url})`;
+}
+
+/**
+ * Git 状態の同じ行末に PR リンクを追加する
+ */
+function formatGitStatusWithPullRequest(gitStatus: string, pullRequest: WorktreePullRequestInfo | null): string {
+  const pullRequestLink = formatPullRequestLink(pullRequest);
+  if (!pullRequestLink) {
+    return gitStatus;
+  }
+  const lines = gitStatus.split(/\r?\n/);
+  const firstLine = lines[0]?.trimEnd() ?? "";
+  return [firstLine ? `${firstLine}  ${pullRequestLink}` : pullRequestLink, ...lines.slice(1)].join("\n");
 }
 
 /**
@@ -625,6 +677,7 @@ export function buildDetailMarkdown({
   baseRef,
   aheadCount,
   behindCount,
+  pullRequest,
   openApp,
   useLastCommitSeparator = true,
 }: {
@@ -637,6 +690,7 @@ export function buildDetailMarkdown({
   baseRef?: string | null;
   aheadCount?: number | null;
   behindCount?: number | null;
+  pullRequest?: WorktreePullRequestInfo | null;
   openApp?: WorktreeOpenApp | null;
   useLastCommitSeparator?: boolean;
 }): string {
@@ -664,7 +718,7 @@ export function buildDetailMarkdown({
   }
   const gitStatus = lines.length > 0 ? lines.join("\n") : null;
   if (detailTitle) {
-    return formatTitleEntry(detailTitle, gitStatus);
+    return formatTitleEntry(detailTitle, gitStatus, pullRequest ?? null);
   }
   return formatTitleEntry(
     {
@@ -675,6 +729,7 @@ export function buildDetailMarkdown({
       sessionKind: "main",
     },
     gitStatus,
+    pullRequest ?? null,
   );
 }
 

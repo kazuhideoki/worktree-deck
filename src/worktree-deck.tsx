@@ -96,6 +96,7 @@ import {
   resolveWorktreeDeckCompositionRoot,
   type Worktree,
   type WorktreeMergeStatus,
+  type WorktreePullRequestInfo,
   type WorktreePullRequestResult,
   type WorktreeTitle,
 } from "./composition-root";
@@ -1524,6 +1525,22 @@ export default function Command() {
   );
 
   /**
+   * 取得済み PR をブラウザで開く Action を返す
+   */
+  const renderOpenPullRequestAction = useCallback((pullRequest: WorktreePullRequestInfo | null | undefined) => {
+    if (!pullRequest) {
+      return null;
+    }
+    return (
+      <Action.OpenInBrowser
+        title={`Open Pull Request #${pullRequest.number}`}
+        icon={Icon.Globe}
+        url={pullRequest.url}
+      />
+    );
+  }, []);
+
+  /**
    * 一覧内で常に表示するアクション群
    */
   const renderGlobalActions = useCallback(
@@ -1837,6 +1854,7 @@ export default function Command() {
                   baseRef: item.baseRef ?? null,
                   aheadCount: item.aheadCount ?? null,
                   behindCount: item.behindCount ?? null,
+                  pullRequest: item.pullRequest ?? null,
                   openApp,
                 });
                 const detailMarkdown = buildScrollableDetailMarkdown(
@@ -1901,6 +1919,7 @@ export default function Command() {
                           shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
                           onAction={() => void openLatestSessionForPath(item.path)}
                         />
+                        {renderOpenPullRequestAction(item.pullRequest)}
                         <Action.ShowInFinder path={item.path} icon={Icon.Folder} />
                         <Action.CopyToClipboard title="Copy Path" icon={Icon.Clipboard} content={item.path} />
                         <Action.CopyToClipboard title="Copy Repository" icon={Icon.Clipboard} content={item.repo} />

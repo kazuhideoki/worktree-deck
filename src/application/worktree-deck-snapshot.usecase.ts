@@ -1,7 +1,7 @@
 import type { RepositoryMapping } from "../domain/repository-mapping.service";
 import type { WorktreeOpenAppMeta } from "../domain/worktree-open-app.service";
 import type { ListWorktreesResult, WorktreeDeckContext } from "./list-worktrees.usecase";
-import type { Worktree } from "./worktree.entity";
+import type { Worktree, WorktreePullRequestInfo } from "./worktree.entity";
 import type { WorktreeTitle } from "./worktree-title.entity";
 export type { WorktreeTitle };
 
@@ -95,6 +95,7 @@ export type LoadWorktreeDeckDetailsSnapshotDependencies = {
     baseRef: string;
   }): Promise<{ aheadCount: number; behindCount: number } | null>;
   resolveMergeTargetRef(worktreePath: string): Promise<string | null>;
+  loadPullRequestInfoByWorktreePath(worktrees: Worktree[]): Promise<Map<string, WorktreePullRequestInfo | null>>;
 };
 
 /**
@@ -195,6 +196,27 @@ function collectOriginPaths(args: {
     }
   }
   return Array.from(paths);
+}
+
+/**
+ * path 別 PR 情報を worktree に付与する
+ */
+function attachWorktreePullRequestInfo(
+  worktrees: Worktree[],
+  pullRequestInfoByPath: Map<string, WorktreePullRequestInfo | null>,
+): Worktree[] {
+  if (pullRequestInfoByPath.size === 0) {
+    return worktrees;
+  }
+  return worktrees.map((item) => {
+    if (!pullRequestInfoByPath.has(item.path)) {
+      return item;
+    }
+    return {
+      ...item,
+      pullRequest: pullRequestInfoByPath.get(item.path) ?? null,
+    };
+  });
 }
 
 /**
@@ -431,6 +453,7 @@ async function loadDetailsSnapshot(args: {
   let originBranchByPath = new Map<string, string | null>();
   let baseRefByPath = new Map<string, string>();
   let openAppMetaByPath = new Map<string, WorktreeOpenAppMeta>();
+  let pullRequestInfoByPath = new Map<string, WorktreePullRequestInfo | null>();
   const originPaths = collectOriginPaths({ worktrees: args.worktrees, mappings: args.mappings, includeOriginEntries });
   const worktreePaths = args.worktrees.map((item) => item.path);
   const displayPaths = collectDisplayPaths({
@@ -485,26 +508,40 @@ async function loadDetailsSnapshot(args: {
       return new Map<string, WorktreeOpenAppMeta>();
     }
   })();
-  const [originData, loadedBaseRefByPath, loadedOpenAppMetaByPath] = await Promise.all([
+  const pullRequestInfoPromise = (async () => {
+    try {
+      return await measureSnapshotStep({
+        label: `${timingLabelPrefix}:loadPullRequestInfoByWorktreePath(worktrees=${args.worktrees.length})`,
+        logTiming: args.logTiming,
+        task: () => args.dependencies.loadPullRequestInfoByWorktreePath(args.worktrees),
+      });
+    } catch {
+      return new Map<string, WorktreePullRequestInfo | null>();
+    }
+  })();
+  const [originData, loadedBaseRefByPath, loadedOpenAppMetaByPath, loadedPullRequestInfoByPath] = await Promise.all([
     originDataPromise,
     baseRefPromise,
     openAppMetaPromise,
+    pullRequestInfoPromise,
   ]);
   originLastCommitByPath = originData.originLastCommitByPath;
   originBranchByPath = originData.originBranchByPath;
   baseRefByPath = loadedBaseRefByPath;
   openAppMetaByPath = loadedOpenAppMetaByPath;
+  pullRequestInfoByPath = loadedPullRequestInfoByPath;
   const itemsWithMeta = await measureSnapshotStep({
     label: `${timingLabelPrefix}:loadWorktreeMetadata(worktrees=${args.worktrees.length})`,
     logTiming: args.logTiming,
     task: () => args.dependencies.loadWorktreeMetadata(args.worktrees, { baseRefByPath }),
   });
+  const itemsWithPullRequestInfo = attachWorktreePullRequestInfo(itemsWithMeta, pullRequestInfoByPath);
   const worktrees = await measureSnapshotStep({
-    label: `${timingLabelPrefix}:attachWorktreeBaseDiffs(worktrees=${itemsWithMeta.length})`,
+    label: `${timingLabelPrefix}:attachWorktreeBaseDiffs(worktrees=${itemsWithPullRequestInfo.length})`,
     logTiming: args.logTiming,
     task: () =>
       attachWorktreeBaseDiffs({
-        worktrees: itemsWithMeta,
+        worktrees: itemsWithPullRequestInfo,
         baseRefByPath,
         dependencies: args.dependencies,
         timingLabelPrefix: `${timingLabelPrefix}:attachWorktreeBaseDiffs`,

@@ -231,6 +231,24 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
       loadCurrentBranchByPath: vi.fn(async () => new Map([["/repo/main", "main"]])),
       loadBaseRefByWorktreePath: vi.fn(async () => baseRefByPath),
       loadOpenAppMetaByWorktreePath: vi.fn(async () => new Map([["/repo/a", { openApp: "zed", threadId: null }]])),
+      loadPullRequestInfoByWorktreePath: vi.fn(
+        async () =>
+          new Map([
+            [
+              "/repo/a",
+              {
+                number: 12,
+                title: "Add feature",
+                url: "https://github.com/example/repo/pull/12",
+                state: "OPEN",
+                isDraft: false,
+                reviewDecision: null,
+                headRefName: "feature",
+                baseRefName: "main",
+              },
+            ],
+          ]),
+      ),
       loadWorktreeMetadata: vi.fn(async (items: Worktree[]) =>
         items.map((item) => ({ ...item, mergeStatus: item.mergeStatus ?? "synced" })),
       ),
@@ -253,6 +271,7 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
       "/repo/b",
       "/repo/other",
     ]);
+    expect(dependencies.loadPullRequestInfoByWorktreePath).toHaveBeenCalledWith(worktrees);
     expect(dependencies.loadWorktreeMetadata).toHaveBeenCalledWith(worktrees, { baseRefByPath });
     expect(result.worktrees).toEqual([
       {
@@ -264,6 +283,16 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
         baseRef: "main",
         aheadCount: 2,
         behindCount: 1,
+        pullRequest: {
+          number: 12,
+          title: "Add feature",
+          url: "https://github.com/example/repo/pull/12",
+          state: "OPEN",
+          isDraft: false,
+          reviewDecision: null,
+          headRefName: "feature",
+          baseRefName: "main",
+        },
       },
       {
         repo: "repo",
@@ -291,6 +320,9 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
       loadOpenAppMetaByWorktreePath: vi.fn(async () => {
         throw new Error("storage unavailable");
       }),
+      loadPullRequestInfoByWorktreePath: vi.fn(async () => {
+        throw new Error("gh unavailable");
+      }),
       loadWorktreeMetadata: vi.fn(async (items: Worktree[]) => items),
       loadAheadBehindCounts: vi.fn(async () => null),
       resolveMergeTargetRef: vi.fn(async () => null),
@@ -315,6 +347,7 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
       loadCurrentBranchByPath: vi.fn(async () => new Map<string, string | null>()),
       loadBaseRefByWorktreePath: vi.fn(async () => new Map([["/repo/a", "stale-base"]])),
       loadOpenAppMetaByWorktreePath: vi.fn(async () => new Map<string, WorktreeOpenAppMeta>()),
+      loadPullRequestInfoByWorktreePath: vi.fn(async () => new Map()),
       loadWorktreeMetadata: vi.fn(async (items: Worktree[]) => items),
       loadAheadBehindCounts: vi
         .fn()
@@ -353,6 +386,7 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
       loadCurrentBranchByPath: vi.fn(async () => new Map<string, string | null>()),
       loadBaseRefByWorktreePath: vi.fn(async () => new Map<string, string>()),
       loadOpenAppMetaByWorktreePath: vi.fn(async () => new Map<string, WorktreeOpenAppMeta>()),
+      loadPullRequestInfoByWorktreePath: vi.fn(async () => new Map()),
       loadWorktreeMetadata: vi.fn(async (items: Worktree[]) => items),
       loadAheadBehindCounts: vi.fn(async () => null),
       resolveMergeTargetRef: vi.fn(async () => null),

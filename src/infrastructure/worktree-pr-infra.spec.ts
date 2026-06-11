@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createDefaultCreateWorktreePullRequestDependencies, resolveFirstCommitTitle } from "./worktree-pr-infra";
+import {
+  createDefaultCreateWorktreePullRequestDependencies,
+  parsePullRequestViewJson,
+  resolveFirstCommitTitle,
+} from "./worktree-pr-infra";
 
 /**
  * execFile を Promise 化したもの
@@ -88,6 +92,39 @@ describe("resolveFirstCommitTitle", () => {
     const title = await resolveFirstCommitTitle({ repoRoot, baseRef: "main", headRef: "feature/empty" });
 
     expect(title).toBeNull();
+  });
+});
+
+describe("parsePullRequestViewJson", () => {
+  it("gh pr view の JSON から PR 情報を復元する", () => {
+    const info = parsePullRequestViewJson(
+      JSON.stringify({
+        number: 12,
+        title: "Add login",
+        url: "https://github.com/example/repo/pull/12",
+        state: "OPEN",
+        isDraft: true,
+        reviewDecision: "REVIEW_REQUIRED",
+        headRefName: "feature/login",
+        baseRefName: "main",
+      }),
+    );
+
+    expect(info).toEqual({
+      number: 12,
+      title: "Add login",
+      url: "https://github.com/example/repo/pull/12",
+      state: "OPEN",
+      isDraft: true,
+      reviewDecision: "REVIEW_REQUIRED",
+      headRefName: "feature/login",
+      baseRefName: "main",
+    });
+  });
+
+  it("PR URL が無い JSON は復元しない", () => {
+    expect(parsePullRequestViewJson(JSON.stringify({ number: 12, url: "" }))).toBeNull();
+    expect(parsePullRequestViewJson("not-json")).toBeNull();
   });
 });
 

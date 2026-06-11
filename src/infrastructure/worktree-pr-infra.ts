@@ -8,6 +8,8 @@ import type {
   ResolveWorktreePullRequestTitleDependencies,
   WorktreePullRequestPlan as AppWorktreePullRequestPlan,
 } from "../application/worktree-pull-request.usecase";
+import type { Worktree, WorktreePullRequestInfo } from "../application/worktree.entity";
+import { worktreePullRequestService } from "../domain/worktree-pull-request.service";
 import {
   createBuildWorktreePullRequestPlanDependencies,
   createResolvePullRequestHeadBranchDependencies,
@@ -25,6 +27,20 @@ const execFileAsync = promisify(execFile);
  * gh の出力から URL を抽出する正規表現
  */
 const PULL_REQUEST_URL_PATTERN = /https?:\/\/\S+/;
+
+/**
+ * gh pr view で取得する JSON フィールド
+ */
+const PULL_REQUEST_VIEW_JSON_FIELDS = [
+  "number",
+  "title",
+  "url",
+  "state",
+  "isDraft",
+  "reviewDecision",
+  "headRefName",
+  "baseRefName",
+].join(",");
 
 /**
  * PATHに追加する代表的な検索ディレクトリ
@@ -104,6 +120,35 @@ export function createDefaultResolveWorktreePullRequestTitleDependencies(): Reso
 }
 
 /**
+ * worktree の現在ブランチに紐づく PR 情報をまとめて取得する
+ */
+export async function loadPullRequestInfoByWorktreePath(
+  worktrees: Worktree[],
+): Promise<Map<string, WorktreePullRequestInfo | null>> {
+  const envPath = buildCommandPath(process.env.PATH);
+  const command = resolveGhCommand(envPath);
+  if (!command) {
+    return new Map();
+  }
+  const entries = await Promise.all(
+    worktrees.map(async (item): Promise<[string, WorktreePullRequestInfo | null] | null> => {
+      const branch = worktreePullRequestService.normalizeHeadBranch(item.branch);
+      if (branch === null) {
+        return null;
+      }
+      const info = await fetchPullRequestInfoForBranch({
+        command,
+        envPath,
+        worktreePath: item.path,
+        branch,
+      });
+      return [item.path, info];
+    }),
+  );
+  return new Map(entries.filter((entry): entry is [string, WorktreePullRequestInfo | null] => entry !== null));
+}
+
+/**
  * gh を使って PR を作成する
  */
 async function createWorktreePullRequest(plan: WorktreePullRequestPlan): Promise<WorktreePullRequestResult> {
@@ -146,6 +191,70 @@ async function createWorktreePullRequest(plan: WorktreePullRequestPlan): Promise
     url: parsePullRequestUrl(stdout),
     stdout,
     stderr,
+  };
+}
+
+/**
+ * gh pr view で指定ブランチの PR 情報を取得する
+ */
+async function fetchPullRequestInfoForBranch(args: {
+  command: string;
+  envPath: string;
+  worktreePath: string;
+  branch: string;
+}): Promise<WorktreePullRequestInfo | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      args.command,
+      ["pr", "view", args.branch, "--json", PULL_REQUEST_VIEW_JSON_FIELDS],
+      {
+        cwd: args.worktreePath,
+        env: {
+          ...process.env,
+          PATH: args.envPath,
+        },
+      },
+    );
+    return parsePullRequestViewJson(stdout);
+  } catch (error) {
+    if (isMissingExternalCommandError(error)) {
+      return null;
+    }
+    return null;
+  }
+}
+
+/**
+ * gh pr view の JSON 出力を表示用 PR 情報へ変換する
+ */
+export function parsePullRequestViewJson(stdout: string): WorktreePullRequestInfo | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const entry = raw as Record<string, unknown>;
+  if (typeof entry.number !== "number" || !Number.isFinite(entry.number)) {
+    return null;
+  }
+  if (typeof entry.url !== "string" || entry.url.trim().length === 0) {
+    return null;
+  }
+  const title = typeof entry.title === "string" ? entry.title.trim() : "";
+  const state = typeof entry.state === "string" ? entry.state.trim() : "";
+  return {
+    number: entry.number,
+    title,
+    url: entry.url.trim(),
+    state: state || "UNKNOWN",
+    isDraft: entry.isDraft === true,
+    reviewDecision: typeof entry.reviewDecision === "string" ? entry.reviewDecision.trim() || null : null,
+    headRefName: typeof entry.headRefName === "string" ? entry.headRefName.trim() || null : null,
+    baseRefName: typeof entry.baseRefName === "string" ? entry.baseRefName.trim() || null : null,
   };
 }
 
