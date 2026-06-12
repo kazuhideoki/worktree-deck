@@ -140,15 +140,15 @@ export function resolveCodexSessionOpenPlan(args: {
 }): CodexSessionOpenPlan {
   const normalizedThreadId = worktreeOpenAppService.normalizeThreadId(args.storedThreadId);
   const entries = buildCodexSessionEntries(args.sessions, { archivedThreadIds: args.archivedThreadIds });
-  if (normalizedThreadId && entries.some((entry) => entry.threadId === normalizedThreadId)) {
-    return { kind: "open-thread", threadId: normalizedThreadId };
-  }
   const archivedEntries = buildCodexSessionEntries(args.sessions, {
     archivedThreadIds: args.archivedThreadIds,
     visibility: "archived",
   });
   if (entries.length > 1 || archivedEntries.length > 0) {
     return { kind: "select", entries };
+  }
+  if (normalizedThreadId && entries.some((entry) => entry.threadId === normalizedThreadId)) {
+    return { kind: "open-thread", threadId: normalizedThreadId };
   }
   if (entries.length === 1) {
     return { kind: "open-thread", threadId: entries[0].threadId };

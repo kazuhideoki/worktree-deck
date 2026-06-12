@@ -191,7 +191,7 @@ describe("resolveCodexSessionOpenPlan", () => {
     expect(result.kind).toBe("select");
   });
 
-  it("メインセッションが複数あっても保存済み thread が候補にあれば直接開く", () => {
+  it("メインセッションが複数あるときは保存済み thread が候補にあっても選択画面へ遷移する", () => {
     const result = resolveCodexSessionOpenPlan({
       sessions: [
         buildTitle({ title: "Main A", sessionPath: "/tmp/019dd94f-27e0-7ad1-8d17-3d628ac5d16b.jsonl" }),
@@ -200,10 +200,7 @@ describe("resolveCodexSessionOpenPlan", () => {
       storedThreadId: "119DD94F-27E0-7AD1-8D17-3D628AC5D16B",
     });
 
-    expect(result).toEqual({
-      kind: "open-thread",
-      threadId: "119dd94f-27e0-7ad1-8d17-3d628ac5d16b",
-    });
+    expect(result.kind).toBe("select");
   });
 
   it("メインセッションが1件だけならその thread を直接開く", () => {
