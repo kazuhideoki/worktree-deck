@@ -96,7 +96,10 @@ describe("listRestorableDeletedWorktrees", () => {
       async ({ branch }) => branch !== "feature/missing",
     );
 
-    const result = await deletedWorktreesUsecase.listRestorableDeletedWorktrees({ dependencies });
+    const result = await deletedWorktreesUsecase.listRestorableDeletedWorktrees({
+      dependencies,
+      now: () => new Date("2026-05-16T00:00:00.000Z"),
+    });
 
     expect(result.map((entry) => entry.branch)).toEqual(["feature/new", "feature/old"]);
     expect(dependencies.checkLocalBranchExists).toHaveBeenCalledWith({
@@ -112,7 +115,10 @@ describe("listRestorableDeletedWorktrees", () => {
     ];
     const dependencies = buildDependencies(entries);
 
-    const result = await deletedWorktreesUsecase.listRestorableDeletedWorktrees({ dependencies });
+    const result = await deletedWorktreesUsecase.listRestorableDeletedWorktrees({
+      dependencies,
+      now: () => new Date("2026-05-16T00:00:00.000Z"),
+    });
 
     expect(result).toHaveLength(1);
     expect(result[0]?.worktreePath).toBe("/worktrees/new");

@@ -84,12 +84,10 @@ describe("buildCodexSessionEntries", () => {
       {
         id: "019dd94f-27e0-7ad1-8d17-3d628ac5d16b",
         title: "Main",
-        subtitle: null,
         threadId: "019dd94f-27e0-7ad1-8d17-3d628ac5d16b",
         sessionPath: "/tmp/019dd94f-27e0-7ad1-8d17-3d628ac5d16b.jsonl",
         updatedAt: 100,
         icon: { source: Icon.Message, tintColor: undefined },
-        statusText: null,
         isArchived: false,
       },
     ]);
@@ -117,7 +115,7 @@ describe("buildCodexSessionEntries", () => {
     expect(entries.map((entry) => entry.title)).toEqual(["New", "Middle", "Old"]);
   });
 
-  it("ステータスと指示待ちを表示情報へ反映する", () => {
+  it("ステータスと指示待ちをアイコン色へ反映する", () => {
     const entries = buildCodexSessionEntries([
       buildTitle({
         title: "Working",
@@ -137,13 +135,25 @@ describe("buildCodexSessionEntries", () => {
       }),
     ]);
 
-    expect(new Map(entries.map((entry) => [entry.title, { icon: entry.icon, statusText: entry.statusText }]))).toEqual(
+    expect(new Map(entries.map((entry) => [entry.title, entry.icon]))).toEqual(
       new Map([
-        ["Working", { icon: { source: Icon.Message, tintColor: Color.Green }, statusText: "Working" }],
-        ["Done", { icon: { source: Icon.Message, tintColor: Color.Blue }, statusText: "Done" }],
-        ["Waiting", { icon: { source: Icon.Message, tintColor: Color.Yellow }, statusText: "Waiting" }],
+        ["Working", { source: Icon.Message, tintColor: Color.Green }],
+        ["Done", { source: Icon.Message, tintColor: Color.Blue }],
+        ["Waiting", { source: Icon.Message, tintColor: Color.Yellow }],
       ]),
     );
+  });
+
+  it("最新レスポンス本文を選択肢の表示情報に含めない", () => {
+    const entries = buildCodexSessionEntries([
+      buildTitle({
+        title: "Readable title",
+        latestMessage: "This response body should not appear in the session selector",
+        sessionPath: "/tmp/019dd94f-27e0-7ad1-8d17-3d628ac5d16b.jsonl",
+      }),
+    ]);
+
+    expect(entries[0]).not.toHaveProperty("subtitle");
   });
 
   it("thread id を抽出できないセッションは候補にしない", () => {
@@ -191,7 +201,7 @@ describe("resolveCodexSessionOpenPlan", () => {
     expect(result.kind).toBe("select");
   });
 
-  it("メインセッションが複数あっても保存済み thread が候補にあれば直接開く", () => {
+  it("メインセッションが複数あれば保存済み thread が候補にあっても選択画面へ遷移する", () => {
     const result = resolveCodexSessionOpenPlan({
       sessions: [
         buildTitle({ title: "Main A", sessionPath: "/tmp/019dd94f-27e0-7ad1-8d17-3d628ac5d16b.jsonl" }),
@@ -200,10 +210,7 @@ describe("resolveCodexSessionOpenPlan", () => {
       storedThreadId: "119DD94F-27E0-7AD1-8D17-3D628AC5D16B",
     });
 
-    expect(result).toEqual({
-      kind: "open-thread",
-      threadId: "119dd94f-27e0-7ad1-8d17-3d628ac5d16b",
-    });
+    expect(result.kind).toBe("select");
   });
 
   it("メインセッションが1件だけならその thread を直接開く", () => {
