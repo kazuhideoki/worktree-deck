@@ -21,12 +21,10 @@ export function formatOpenWorktreeInIdeActionTitle(ideAppTitle = "Zed"): string 
 type CodexSessionEntry = {
   id: string;
   title: string;
-  subtitle: string | null;
   threadId: string;
   sessionPath: string;
   updatedAt: number;
   icon: { source: Icon; tintColor?: Color };
-  statusText: string | null;
   isArchived: boolean;
 };
 
@@ -108,16 +106,13 @@ export function buildCodexSessionEntries(
       if (visibility === "archived" && !isArchived) {
         return null;
       }
-      const status = resolveCodexSessionStatus(session);
       return {
         id: threadId,
         title: session.title,
-        subtitle: session.latestMessage,
         threadId,
         sessionPath,
         updatedAt: session.updatedAt,
-        icon: { source: Icon.Message, tintColor: status.tintColor },
-        statusText: status.text,
+        icon: { source: Icon.Message, tintColor: resolveCodexSessionIconTintColor(session) },
         isArchived,
       };
     })
@@ -411,7 +406,6 @@ function CodexSessionListItem({
       key={entry.id}
       id={entry.id}
       title={entry.title}
-      subtitle={entry.subtitle ?? undefined}
       icon={entry.icon}
       accessories={buildSessionAccessories(entry)}
       actions={
@@ -453,19 +447,19 @@ function CodexSessionListItem({
 }
 
 /**
- * Codex セッションの状態表示を解決する
+ * Codex セッションの状態に応じたアイコン色を解決する
  */
-function resolveCodexSessionStatus(session: WorktreeTitle): { text: string | null; tintColor?: Color } {
+function resolveCodexSessionIconTintColor(session: WorktreeTitle): Color | undefined {
   if (session.isWaitingForUser === true) {
-    return { text: "Waiting", tintColor: Color.Yellow };
+    return Color.Yellow;
   }
   if (session.status === "working") {
-    return { text: "Working", tintColor: Color.Green };
+    return Color.Green;
   }
   if (session.status === "done") {
-    return { text: "Done", tintColor: Color.Blue };
+    return Color.Blue;
   }
-  return { text: null };
+  return undefined;
 }
 
 /**
@@ -473,14 +467,7 @@ function resolveCodexSessionStatus(session: WorktreeTitle): { text: string | nul
  */
 function buildSessionAccessories(entry: CodexSessionEntry): List.Item.Accessory[] {
   const updatedAtText = formatUpdatedAt(entry.updatedAt);
-  const accessories: List.Item.Accessory[] = [];
-  if (entry.statusText) {
-    accessories.push({ text: entry.statusText, icon: entry.icon });
-  }
-  if (updatedAtText) {
-    accessories.push({ text: updatedAtText });
-  }
-  return accessories;
+  return updatedAtText ? [{ text: updatedAtText }] : [];
 }
 
 /**

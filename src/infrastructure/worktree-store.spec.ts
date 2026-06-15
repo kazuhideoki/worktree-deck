@@ -971,6 +971,72 @@ describe("loadTitlesForPaths", () => {
     }
   });
 
+  it("巨大な画像 payload を含むセッションでもタイトル一覧を読み込む", async () => {
+    const codexHome = await mkdtemp(join(tmpdir(), "worktree-deck-codex-home-"));
+    const worktreePath = "/tmp/repo-a/large-image";
+    try {
+      await createSessionFile({
+        codexHome,
+        fileName: "session-large-image.jsonl",
+        body: [
+          JSON.stringify({
+            timestamp: "2026-05-03T10:00:00.000Z",
+            type: "event_msg",
+            payload: {
+              type: "user_message",
+              message: `Large image title\n<environment_context>\n<cwd>${worktreePath}</cwd>\n</environment_context>`,
+            },
+          }),
+          JSON.stringify({
+            timestamp: "2026-05-03T10:01:00.000Z",
+            type: "response_item",
+            payload: {
+              type: "function_call_output",
+              call_id: "call-image",
+              output: [{ type: "input_image", image_url: `data:image/png;base64,${"A".repeat(300_000)}` }],
+            },
+          }),
+          JSON.stringify({
+            timestamp: "2026-05-03T10:02:00.000Z",
+            type: "response_item",
+            payload: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "Using the review-by-sub-agents skill." }],
+              phase: "commentary",
+            },
+          }),
+          JSON.stringify({
+            timestamp: "2026-05-03T10:03:00.000Z",
+            type: "response_item",
+            payload: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "Done" }],
+              phase: "final_answer",
+            },
+          }),
+        ].join("\n"),
+      });
+
+      const result = await loadTitlesForPaths(
+        buildLoadTitlesArgs({
+          codexHome,
+          paths: [worktreePath],
+        }),
+      );
+
+      expect(result.get(worktreePath)?.[0]).toMatchObject({
+        title: "Large image title",
+        status: "done",
+        latestMessage: "🤖 Done",
+        skillUsages: [{ name: "review-by-sub-agents", timestamp: "2026-05-03T10:02:00.000Z" }],
+      });
+    } finally {
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
   it("review セッションの lifecycle は review 継続と完了を区別する", async () => {
     const codexHome = await mkdtemp(join(tmpdir(), "worktree-deck-codex-home-"));
     const reviewWorkingPath = "/tmp/repo-a/review-working";
