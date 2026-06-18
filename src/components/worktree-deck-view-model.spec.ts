@@ -25,6 +25,7 @@ function buildTitleEntry(args: {
   sessionKind?: WorktreeTitle["sessionKind"];
   isWaitingForUser?: boolean;
   skillUsages?: WorktreeTitle["skillUsages"];
+  provider?: WorktreeTitle["provider"];
 }): WorktreeTitle {
   return {
     title: args.title,
@@ -35,6 +36,7 @@ function buildTitleEntry(args: {
     sessionKind: args.sessionKind ?? "main",
     isWaitingForUser: args.isWaitingForUser,
     skillUsages: args.skillUsages,
+    provider: args.provider,
   };
 }
 
@@ -112,7 +114,7 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       [
-        "| 📝 | Implement feature |",
+        "| 📝 | `CA` Implement feature |",
         "| --- | --- |",
         "| 🌿 | 🌿 main (+2 -1)  ⚠️ dirty |",
         "| 🧰 | `github:yeet` ×2, `imagegen` |",
@@ -133,8 +135,48 @@ describe("worktree-deck-view-model", () => {
     });
 
     expect(markdown).toBe(
-      ["| 📝 | Implement feature |", "| --- | --- |", "| 🌿 | No git status |", "| 🧰 | None |", "", "Done"].join("\n"),
+      ["| 📝 | `CA` Implement feature |", "| --- | --- |", "| 🌿 | No git status |", "| 🧰 | None |", "", "Done"].join(
+        "\n",
+      ),
     );
+  });
+
+  it("cc セッションは provider タグを CC で表示する", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [buildTitleEntry({ title: "Claude session", latestMessage: "Done", updatedAt: 100, provider: "cc" })],
+    });
+
+    expect(markdown).toContain("| 📝 | `CC` Claude session |");
+  });
+
+  it("ca セッション（provider 未指定含む）は provider タグを CA で表示する", () => {
+    const ccMarkdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [buildTitleEntry({ title: "Codex session", latestMessage: "Done", updatedAt: 100, provider: "ca" })],
+    });
+    const defaultMarkdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [buildTitleEntry({ title: "Codex session", latestMessage: "Done", updatedAt: 100 })],
+    });
+
+    expect(ccMarkdown).toContain("| 📝 | `CA` Codex session |");
+    expect(defaultMarkdown).toContain("| 📝 | `CA` Codex session |");
+  });
+
+  it("セッション未取得のプレースホルダには provider タグを付けない", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [],
+    });
+
+    expect(markdown).toContain("| 📝 | feature-a |");
+    expect(markdown).not.toContain("`CA`");
+    expect(markdown).not.toContain("`CC`");
   });
 
   it("Git 情報の同じ行末に PR リンクを表示する", () => {
@@ -160,7 +202,7 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       [
-        "| 📝 | Implement feature |",
+        "| 📝 | `CA` Implement feature |",
         "| --- | --- |",
         "| 🌿 | 🌿 main (+1 -0)  ✅ synced  [PR\u00A0#42\u00A0Open](https://github.com/example/repo/pull/42) |",
         "| 🧰 | None |",
@@ -194,7 +236,7 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       [
-        "| 📝 | First session title |",
+        "| 📝 | `CA` First session title |",
         "| --- | --- |",
         "| 🌿 | No git status |",
         "| 🧰 | `imagegen` |",

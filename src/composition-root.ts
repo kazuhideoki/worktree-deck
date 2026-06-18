@@ -77,6 +77,7 @@ import {
   loadLatestSessionMessages,
   loadSessionMessages,
 } from "./infrastructure/codex-session-file-store";
+import { loadClaudeTitlesForPaths } from "./infrastructure/claude-session-file-store";
 import {
   loadCreateStartMode,
   loadPreferredIdeApp,
@@ -173,6 +174,51 @@ type WorktreeDeckCompositionRoot = {
 };
 
 /**
+ * provider 別のタイトルマップをパスごとに結合する
+ */
+function mergeTitlesByPath(...maps: Map<string, WorktreeTitle[]>[]): Map<string, WorktreeTitle[]> {
+  const merged = new Map<string, WorktreeTitle[]>();
+  for (const map of maps) {
+    for (const [path, entries] of map) {
+      const existing = merged.get(path);
+      if (existing) {
+        existing.push(...entries);
+      } else {
+        merged.set(path, [...entries]);
+      }
+    }
+  }
+  for (const entries of merged.values()) {
+    entries.sort((left, right) => {
+      if (right.updatedAt !== left.updatedAt) {
+        return right.updatedAt - left.updatedAt;
+      }
+      return right.title.localeCompare(left.title);
+    });
+  }
+  return merged;
+}
+
+/**
+ * ca / cc 双方のセッションタイトルをまとめて読み込む
+ */
+async function loadMergedTitlesForPaths(args: {
+  paths: string[];
+  env: NodeJS.ProcessEnv;
+  homeDir: string | null;
+  timingLabelPrefix?: string;
+  logTiming?: (label: string, elapsedMs: number) => void;
+}): Promise<Map<string, WorktreeTitle[]>> {
+  const [codexTitles, claudeTitles] = await Promise.all([
+    loadTitlesForPaths(args).catch(() => new Map<string, WorktreeTitle[]>()),
+    loadClaudeTitlesForPaths({ paths: args.paths, env: args.env, homeDir: args.homeDir }).catch(
+      () => new Map<string, WorktreeTitle[]>(),
+    ),
+  ]);
+  return mergeTitlesByPath(codexTitles, claudeTitles);
+}
+
+/**
  * worktree-deck の依存を1箇所で組み立てる
  */
 function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
@@ -252,7 +298,7 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
       loadOpenAppMetaByWorktreePath,
     },
     loadWorktreeDeckTitlesSnapshotDependencies: {
-      loadTitlesForPaths,
+      loadTitlesForPaths: loadMergedTitlesForPaths,
       attachWorktreeTitles,
     },
     loadWorktreeDeckDetailsSnapshotDependencies: {

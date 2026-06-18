@@ -411,17 +411,27 @@ export function buildSortedSectionEntries(args: {
 }
 
 /**
+ * セッション供給元を示すタグを返す（未指定は ca 相当）
+ */
+function formatProviderTag(provider: WorktreeTitle["provider"]): string {
+  return provider === "cc" ? "`CC`" : "`CA`";
+}
+
+/**
  * セッションタイトル表示用の Markdown を整形する
  */
 export function formatTitleEntry(
   entry: WorktreeTitle,
   gitStatus: string | null = null,
   pullRequest: WorktreePullRequestInfo | null = null,
+  showProviderTag = true,
 ): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
   const gitStatusWithPullRequest = formatGitStatusWithPullRequest(gitStatus ?? "No git status", pullRequest);
+  const truncatedTitle = truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS);
+  const titleCell = showProviderTag ? `${formatProviderTag(entry.provider)} ${truncatedTitle}` : truncatedTitle;
   const rows = [
-    ["📝", truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS)],
+    ["📝", titleCell],
     ["🌿", gitStatusWithPullRequest],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
   ];
@@ -730,6 +740,7 @@ export function buildDetailMarkdown({
     },
     gitStatus,
     pullRequest ?? null,
+    false,
   );
 }
 

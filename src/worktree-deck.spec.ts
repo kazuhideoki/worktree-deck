@@ -139,7 +139,7 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("| 📝 | ESLintのルールを強化したい。 |");
+    expect(result).toContain("| 📝 | `CA` ESLintのルールを強化したい。 |");
     expect(result).toContain("middle progress");
     expect(result).not.toContain("| 📝 | Review: tighten lint rules |");
   });
@@ -162,7 +162,7 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("| 📝 | Older Session |");
+    expect(result).toContain("| 📝 | `CA` Older Session |");
     expect(result).toContain("Latest message");
     expect(result).not.toContain("| 📝 | Latest Session |");
   });
@@ -189,7 +189,7 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("| 📝 | Review: latest |");
+    expect(result).toContain("| 📝 | `CA` Review: latest |");
     expect(result).toContain("latest review message");
     expect(result).not.toContain("| 📝 | Review: older |");
   });
@@ -314,7 +314,7 @@ describe("formatTitleEntry", () => {
 
     const result = formatTitleEntry(entry);
 
-    expect(result).toContain("| 📝 | power-mode normal で無操作時ロック時のパスワード要求... |");
+    expect(result).toContain("| 📝 | `CA` power-mode normal で無操作時ロック時のパスワード要求... |");
     expect(result).not.toContain("を修正");
   });
 
@@ -392,7 +392,7 @@ describe("formatTitleEntry", () => {
 
     expect(result).toBe(
       [
-        "| 📝 | Session Title |",
+        "| 📝 | `CA` Session Title |",
         "| --- | --- |",
         "| 🌿 | No git status |",
         "| 🧰 | None |",

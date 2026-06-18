@@ -22,6 +22,7 @@ function buildTitle(args: {
   sessionKind?: WorktreeTitle["sessionKind"];
   isWaitingForUser?: boolean;
   skillUsages?: WorktreeTitle["skillUsages"];
+  provider?: WorktreeTitle["provider"];
 }): WorktreeTitle {
   return {
     title: args.title,
@@ -31,6 +32,7 @@ function buildTitle(args: {
     sessionKind: args.sessionKind ?? "main",
     isWaitingForUser: args.isWaitingForUser,
     skillUsages: args.skillUsages,
+    provider: args.provider,
   };
 }
 
@@ -333,6 +335,52 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
     });
 
     expect(cache?.titlesByPath["/tmp/repo"]).toEqual([title]);
+  });
+
+  it("provider が round-trip で保持される", () => {
+    const title = buildTitle({
+      title: "Claude session",
+      latestMessage: null,
+      updatedAt: 100,
+      provider: "cc",
+    });
+
+    const cache = normalizeWorktreeDeckDisplayCache({
+      version: 5,
+      worktreesByPath: {},
+      titlesByPath: {
+        "/tmp/repo": [title],
+      },
+      originLastCommitByPath: {},
+      originBranchByPath: {},
+      openAppMetaByPath: {},
+    });
+
+    expect(cache?.titlesByPath["/tmp/repo"]?.[0]?.provider).toBe("cc");
+  });
+
+  it("不正な provider は undefined に正規化する", () => {
+    const cache = normalizeWorktreeDeckDisplayCache({
+      version: 5,
+      worktreesByPath: {},
+      titlesByPath: {
+        "/tmp/repo": [
+          {
+            title: "Session",
+            latestMessage: null,
+            updatedAt: 100,
+            status: null,
+            sessionKind: "main",
+            provider: "xx",
+          },
+        ],
+      },
+      originLastCommitByPath: {},
+      originBranchByPath: {},
+      openAppMetaByPath: {},
+    });
+
+    expect(cache?.titlesByPath["/tmp/repo"]?.[0]?.provider).toBeUndefined();
   });
 
   it("不正な PR 情報を含む表示キャッシュは復元しない", () => {

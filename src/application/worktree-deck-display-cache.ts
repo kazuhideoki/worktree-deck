@@ -4,6 +4,7 @@ import {
   type SessionKind,
   type SessionSkillUsage,
 } from "../domain/session-log-parser.service";
+import { isSessionProvider } from "../domain/session-provider";
 import { worktreeOpenAppService, type WorktreeOpenAppMeta } from "../domain/worktree-open-app.service";
 import type { Worktree, WorktreePullRequestInfo } from "./worktree.entity";
 import type { WorktreeTitle } from "./worktree-title.entity";
@@ -128,6 +129,7 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
     const sessionKind = normalizeSessionKind(entry.sessionKind);
     const isWaitingForUser = typeof entry.isWaitingForUser === "boolean" ? entry.isWaitingForUser : undefined;
     const skillUsages = normalizeSessionSkillUsages(entry.skillUsages);
+    const provider = isSessionProvider(entry.provider) ? entry.provider : undefined;
     if (title == null || title.length === 0 || updatedAt == null || sessionKind == null) {
       return null;
     }
@@ -141,6 +143,7 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
       sessionKind,
       isWaitingForUser,
       skillUsages,
+      provider,
     });
   }
   return entries;

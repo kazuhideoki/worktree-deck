@@ -5,6 +5,7 @@ import type {
   SessionSkillUsage as ParserSessionSkillUsage,
   SessionStatus as ParserSessionStatus,
 } from "../domain/session-log-parser.service";
+import type { SessionProvider } from "../domain/session-provider";
 
 export type SessionKind = ParserSessionKind;
 type SessionStatus = ParserSessionStatus;
@@ -20,6 +21,10 @@ export type WorktreeTitle = {
   sessionKind: SessionKind;
   isWaitingForUser?: boolean;
   skillUsages?: SessionSkillUsage[];
+  /**
+   * セッション供給元（未指定は ca 相当として扱う）
+   */
+  provider?: SessionProvider;
 };
 
 /**
