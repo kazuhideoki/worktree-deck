@@ -43,6 +43,15 @@ const SESSIONS_DIR_NAME = "sessions";
 const SESSION_FILE_EXTENSION = ".jsonl";
 const LIVE_SESSION_FILE_EXTENSION = ".json";
 /**
+ * ユーザーの回答/承認を待っているとみなす waitingFor の値
+ *
+ * Claude Code の status="waiting" は permission prompt / sandbox request /
+ * worker request / dialog open / input needed に分かれる。このうち
+ * 「ユーザーが応答しないと進めない」ものだけを待ち扱いにする。
+ * dialog open(/resume 等のメニュー)や input needed(単なる入力待ち)は除外する。
+ */
+const USER_WAITING_REASONS = new Set<string>(["permission prompt", "sandbox request"]);
+/**
  * Claude タイトルキャッシュのキー接頭辞
  */
 const TITLES_CACHE_KEY_PREFIX = "worktree-deck.claude-titles-cache.v1";
@@ -159,6 +168,7 @@ type ClaudeLiveSession = {
   sessionId: string;
   cwd: string;
   status: "idle" | "busy" | "waiting";
+  waitingFor: string | null;
 };
 
 /**
@@ -185,10 +195,11 @@ function normalizeLiveSession(value: unknown): ClaudeLiveSession | null {
   const sessionId = typeof raw.sessionId === "string" ? raw.sessionId : null;
   const cwd = typeof raw.cwd === "string" ? raw.cwd : null;
   const status = raw.status === "idle" || raw.status === "busy" || raw.status === "waiting" ? raw.status : null;
+  const waitingFor = typeof raw.waitingFor === "string" ? raw.waitingFor : null;
   if (pid == null || sessionId == null || cwd == null || status == null || !isProcessAlive(pid)) {
     return null;
   }
-  return { sessionId, cwd, status };
+  return { sessionId, cwd, status, waitingFor };
 }
 
 /**
@@ -212,7 +223,9 @@ async function loadWaitingLiveSessions(sessionsRoot: string | null): Promise<Cla
     try {
       const raw = await fs.readFile(join(sessionsRoot, entry.name), "utf8");
       const session = normalizeLiveSession(JSON.parse(raw) as unknown);
-      if (session?.status === "waiting") {
+      // permission prompt / sandbox request のみ「ユーザー待ち」とする
+      // (dialog open: /resume 等のメニュー、input needed: 単なる入力待ち、worker request は除外)
+      if (session?.status === "waiting" && session.waitingFor != null && USER_WAITING_REASONS.has(session.waitingFor)) {
         sessions.push(session);
       }
     } catch {

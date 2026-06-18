@@ -119,7 +119,7 @@ describe("loadClaudeTitlesForPaths", () => {
     expect(result.get(worktreePath)).toHaveLength(1);
   });
 
-  it("生存中の Claude Code ライブセッションが waiting ならユーザー待ちとして返す", async () => {
+  it("生存中の waiting(permission prompt) ライブセッションはユーザー待ちとして返す", async () => {
     const worktreePath = "/Users/me/work/repo";
     const sessionId = "f803f9cd-42dd-41e7-ab10-002f1787aa84";
     await writeSession(toProjectFolderName(worktreePath), `${sessionId}.jsonl`, [
@@ -136,6 +136,7 @@ describe("loadClaudeTitlesForPaths", () => {
       sessionId,
       cwd: worktreePath,
       status: "waiting",
+      waitingFor: "permission prompt",
       updatedAt: Date.now(),
     });
 
@@ -146,6 +147,58 @@ describe("loadClaudeTitlesForPaths", () => {
       isWaitingForUser: true,
       provider: "cc",
     });
+  });
+
+  it("waitingFor が sandbox request でもユーザー待ちとして返す", async () => {
+    const worktreePath = "/Users/me/work/repo";
+    const sessionId = "f803f9cd-42dd-41e7-ab10-002f1787aa84";
+    await writeSession(toProjectFolderName(worktreePath), `${sessionId}.jsonl`, [
+      { type: "user", cwd: worktreePath, message: { role: "user", content: "やって" } },
+      { type: "ai-title", aiTitle: "サンドボックス承認待ち" },
+      {
+        type: "assistant",
+        cwd: worktreePath,
+        message: { role: "assistant", content: [{ type: "tool_use", id: "x", name: "Bash" }], stop_reason: "tool_use" },
+      },
+    ]);
+    await writeLiveSession(`${process.pid}.json`, {
+      pid: process.pid,
+      sessionId,
+      cwd: worktreePath,
+      status: "waiting",
+      waitingFor: "sandbox request",
+      updatedAt: Date.now(),
+    });
+
+    const result = await loadClaudeTitlesForPaths({ paths: [worktreePath], env: {}, homeDir: root });
+
+    expect(result.get(worktreePath)?.[0]?.isWaitingForUser).toBe(true);
+  });
+
+  it("waitingFor が dialog open(/resume 等のメニュー)のセッションは待ち扱いにしない", async () => {
+    const worktreePath = "/Users/me/work/repo";
+    const sessionId = "f803f9cd-42dd-41e7-ab10-002f1787aa84";
+    await writeSession(toProjectFolderName(worktreePath), `${sessionId}.jsonl`, [
+      { type: "user", cwd: worktreePath, message: { role: "user", content: "やって" } },
+      { type: "ai-title", aiTitle: "メニュー操作中" },
+      {
+        type: "assistant",
+        cwd: worktreePath,
+        message: { role: "assistant", content: [{ type: "text", text: "どう進めますか？" }], stop_reason: "end_turn" },
+      },
+    ]);
+    await writeLiveSession(`${process.pid}.json`, {
+      pid: process.pid,
+      sessionId,
+      cwd: worktreePath,
+      status: "waiting",
+      waitingFor: "dialog open",
+      updatedAt: Date.now(),
+    });
+
+    const result = await loadClaudeTitlesForPaths({ paths: [worktreePath], env: {}, homeDir: root });
+
+    expect(result.get(worktreePath)?.[0]?.isWaitingForUser).toBe(false);
   });
 
   it("終了済み pid の waiting ライブセッションはユーザー待ちとして返さない", async () => {
@@ -165,6 +218,7 @@ describe("loadClaudeTitlesForPaths", () => {
       sessionId,
       cwd: worktreePath,
       status: "waiting",
+      waitingFor: "permission prompt",
       updatedAt: Date.now(),
     });
 
@@ -190,6 +244,7 @@ describe("loadClaudeTitlesForPaths", () => {
       sessionId: "99999999-9999-9999-9999-999999999999", // ログに存在しない別 id
       cwd: worktreePath,
       status: "waiting",
+      waitingFor: "permission prompt",
       updatedAt: Date.now(),
     });
 
