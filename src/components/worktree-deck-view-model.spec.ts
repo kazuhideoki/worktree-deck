@@ -114,7 +114,7 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       [
-        "| 📝 | `CA` Implement feature |",
+        "| 📝 | Implement feature |",
         "| --- | --- |",
         "| 🌿 | 🌿 main (+2 -1)  ⚠️ dirty |",
         "| 🧰 | `github:yeet` ×2, `imagegen` |",
@@ -135,23 +135,21 @@ describe("worktree-deck-view-model", () => {
     });
 
     expect(markdown).toBe(
-      ["| 📝 | `CA` Implement feature |", "| --- | --- |", "| 🌿 | No git status |", "| 🧰 | None |", "", "Done"].join(
-        "\n",
-      ),
+      ["| 📝 | Implement feature |", "| --- | --- |", "| 🌿 | No git status |", "| 🧰 | None |", "", "Done"].join("\n"),
     );
   });
 
-  it("cc セッションは provider タグを CC で表示する", () => {
+  it("cc セッションでもタイトルには provider アイコンを表示しない", () => {
     const markdown = buildDetailMarkdown({
       title: "feature-a",
       isTitlesLoading: false,
       titles: [buildTitleEntry({ title: "Claude session", latestMessage: "Done", updatedAt: 100, provider: "cc" })],
     });
 
-    expect(markdown).toContain("| 📝 | `CC` Claude session |");
+    expect(markdown).toContain("| 📝 | Claude session |");
   });
 
-  it("ca セッション（provider 未指定含む）は provider タグを CA で表示する", () => {
+  it("ca セッション（provider 未指定含む）でもタイトルには provider アイコンを表示しない", () => {
     const ccMarkdown = buildDetailMarkdown({
       title: "feature-a",
       isTitlesLoading: false,
@@ -163,11 +161,27 @@ describe("worktree-deck-view-model", () => {
       titles: [buildTitleEntry({ title: "Codex session", latestMessage: "Done", updatedAt: 100 })],
     });
 
-    expect(ccMarkdown).toContain("| 📝 | `CA` Codex session |");
-    expect(defaultMarkdown).toContain("| 📝 | `CA` Codex session |");
+    expect(ccMarkdown).toContain("| 📝 | Codex session |");
+    expect(defaultMarkdown).toContain("| 📝 | Codex session |");
   });
 
-  it("セッション未取得のプレースホルダには provider タグを付けない", () => {
+  it("assistant の最新返信は provider ごとのアイコンで表示する", () => {
+    const codexMarkdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [buildTitleEntry({ title: "Codex session", latestMessage: "🤖 Done", updatedAt: 100, provider: "ca" })],
+    });
+    const claudeMarkdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      titles: [buildTitleEntry({ title: "Claude session", latestMessage: "🤖 Done", updatedAt: 100, provider: "cc" })],
+    });
+
+    expect(codexMarkdown.endsWith("\n\n![Codex](codex-agent-inline-icon.png) Done")).toBe(true);
+    expect(claudeMarkdown.endsWith("\n\n![Claude](claude-agent-inline-icon.png) Done")).toBe(true);
+  });
+
+  it("セッション未取得のプレースホルダにも provider アイコンを付けない", () => {
     const markdown = buildDetailMarkdown({
       title: "feature-a",
       isTitlesLoading: false,
@@ -175,8 +189,8 @@ describe("worktree-deck-view-model", () => {
     });
 
     expect(markdown).toContain("| 📝 | feature-a |");
-    expect(markdown).not.toContain("`CA`");
-    expect(markdown).not.toContain("`CC`");
+    expect(markdown).not.toContain("![Codex]");
+    expect(markdown).not.toContain("![Claude]");
   });
 
   it("Git 情報の同じ行末に PR リンクを表示する", () => {
@@ -202,7 +216,7 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       [
-        "| 📝 | `CA` Implement feature |",
+        "| 📝 | Implement feature |",
         "| --- | --- |",
         "| 🌿 | 🌿 main (+1 -0)  ✅ synced  [PR\u00A0#42\u00A0Open](https://github.com/example/repo/pull/42) |",
         "| 🧰 | None |",
@@ -236,7 +250,7 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       [
-        "| 📝 | `CA` First session title |",
+        "| 📝 | First session title |",
         "| --- | --- |",
         "| 🌿 | No git status |",
         "| 🧰 | `imagegen` |",

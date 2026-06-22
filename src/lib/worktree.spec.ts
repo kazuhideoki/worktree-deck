@@ -283,6 +283,8 @@ describe("loadTitlesForPaths", () => {
   it("session file が未作成でも明示セッションタイトルを表示する", async () => {
     const storageHome = await mkdtemp(join(tmpdir(), "worktree-session-title-home-"));
     const storageDir = join(storageHome, ".worktree-deck", "storage");
+    const createdAt = new Date(Date.now() - 1000).toISOString();
+    const updatedAt = new Date().toISOString();
     await mkdir(storageDir, { recursive: true });
     await writeFile(
       join(storageDir, "worktree-session-titles.json"),
@@ -292,8 +294,8 @@ describe("loadTitlesForPaths", () => {
           worktreePath,
           title: "セッションタイトル生成",
           source: "auto-start",
-          createdAt: "2026-05-20T00:00:00.000Z",
-          updatedAt: "2026-05-20T00:00:01.000Z",
+          createdAt,
+          updatedAt,
         },
       }),
       "utf8",
@@ -317,8 +319,8 @@ describe("loadTitlesForPaths", () => {
           title: "セッションタイトル生成",
           status: "working",
           latestMessage: null,
-          updatedAt: Date.parse("2026-05-20T00:00:01.000Z"),
-          startedAt: Date.parse("2026-05-20T00:00:00.000Z"),
+          updatedAt: Date.parse(updatedAt),
+          startedAt: Date.parse(createdAt),
           sessionKind: "main",
         }),
       ]);

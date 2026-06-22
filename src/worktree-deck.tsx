@@ -1754,6 +1754,7 @@ export default function Command() {
                     isTitlesLoading,
                     lastCommitAt: entry.lastCommitAt,
                     openApp,
+                    assetsPath: environment.assetsPath,
                     useLastCommitSeparator: false,
                   });
                   const detailMarkdown = buildScrollableDetailMarkdown(
@@ -1856,6 +1857,7 @@ export default function Command() {
                   behindCount: item.behindCount ?? null,
                   pullRequest: item.pullRequest ?? null,
                   openApp,
+                  assetsPath: environment.assetsPath,
                 });
                 const detailMarkdown = buildScrollableDetailMarkdown(
                   rawDetailMarkdown,

@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { basename, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   type Worktree,
@@ -74,6 +75,14 @@ const SKILL_DETAIL_MAX_COLUMNS = 28;
  * 詳細テーブルに直接表示するスキル種類数
  */
 const SKILL_DETAIL_VISIBLE_COUNT = 2;
+
+/**
+ * セッション供給元アイコンの Markdown 画像パス
+ */
+const SESSION_PROVIDER_ICON_ASSETS: Record<NonNullable<WorktreeTitle["provider"]>, { alt: string; file: string }> = {
+  ca: { alt: "Codex", file: "codex-agent-inline-icon.png" },
+  cc: { alt: "Claude", file: "claude-agent-inline-icon.png" },
+};
 
 /**
  * タイトル一覧にユーザー指示待ちが含まれるか判定する
@@ -413,8 +422,25 @@ export function buildSortedSectionEntries(args: {
 /**
  * セッション供給元を示すタグを返す（未指定は ca 相当）
  */
-function formatProviderTag(provider: WorktreeTitle["provider"]): string {
-  return provider === "cc" ? "`CC`" : "`CA`";
+function formatProviderTag(provider: WorktreeTitle["provider"], assetsPath?: string | null): string {
+  const asset = provider === "cc" ? SESSION_PROVIDER_ICON_ASSETS.cc : SESSION_PROVIDER_ICON_ASSETS.ca;
+  const source = assetsPath ? pathToFileURL(join(assetsPath, asset.file)).href : asset.file;
+  return `![${asset.alt}](${source})`;
+}
+
+/**
+ * 最新メッセージ内の assistant 絵文字を供給元アイコンへ置き換える
+ */
+function formatLatestMessageLeadingIcon(
+  value: string,
+  provider: WorktreeTitle["provider"],
+  assetsPath?: string | null,
+): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("🤖 ")) {
+    return trimmed;
+  }
+  return `${formatProviderTag(provider, assetsPath)} ${trimmed.slice("🤖 ".length)}`;
 }
 
 /**
@@ -424,20 +450,19 @@ export function formatTitleEntry(
   entry: WorktreeTitle,
   gitStatus: string | null = null,
   pullRequest: WorktreePullRequestInfo | null = null,
-  showProviderTag = true,
+  assetsPath?: string | null,
 ): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
   const gitStatusWithPullRequest = formatGitStatusWithPullRequest(gitStatus ?? "No git status", pullRequest);
   const truncatedTitle = truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS);
-  const titleCell = showProviderTag ? `${formatProviderTag(entry.provider)} ${truncatedTitle}` : truncatedTitle;
   const rows = [
-    ["📝", titleCell],
+    ["📝", truncatedTitle],
     ["🌿", gitStatusWithPullRequest],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
   ];
   const [headerRow, ...bodyRows] = rows.map(([key, value]) => `| ${key} | ${formatTableValue(value)} |`);
   const table = [headerRow, "| --- | --- |", ...bodyRows].join("\n");
-  return `${table}\n\n${formatLatestMessageBlock(latestMessage)}`;
+  return `${table}\n\n${formatLatestMessageBlock(latestMessage, entry.provider, assetsPath)}`;
 }
 
 /**
@@ -524,8 +549,12 @@ function formatTableValue(value: string): string {
 /**
  * 最新回答の Markdown ブロックを作る
  */
-function formatLatestMessageBlock(value: string): string {
-  return value.trim();
+function formatLatestMessageBlock(
+  value: string,
+  provider: WorktreeTitle["provider"],
+  assetsPath?: string | null,
+): string {
+  return formatLatestMessageLeadingIcon(value, provider, assetsPath);
 }
 
 /**
@@ -689,6 +718,7 @@ export function buildDetailMarkdown({
   behindCount,
   pullRequest,
   openApp,
+  assetsPath,
   useLastCommitSeparator = true,
 }: {
   title: string;
@@ -702,6 +732,7 @@ export function buildDetailMarkdown({
   behindCount?: number | null;
   pullRequest?: WorktreePullRequestInfo | null;
   openApp?: WorktreeOpenApp | null;
+  assetsPath?: string | null;
   useLastCommitSeparator?: boolean;
 }): string {
   void openApp;
@@ -728,7 +759,7 @@ export function buildDetailMarkdown({
   }
   const gitStatus = lines.length > 0 ? lines.join("\n") : null;
   if (detailTitle) {
-    return formatTitleEntry(detailTitle, gitStatus, pullRequest ?? null);
+    return formatTitleEntry(detailTitle, gitStatus, pullRequest ?? null, assetsPath);
   }
   return formatTitleEntry(
     {
@@ -740,7 +771,7 @@ export function buildDetailMarkdown({
     },
     gitStatus,
     pullRequest ?? null,
-    false,
+    assetsPath,
   );
 }
 
