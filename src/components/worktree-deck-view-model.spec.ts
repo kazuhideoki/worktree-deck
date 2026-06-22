@@ -201,16 +201,18 @@ describe("worktree-deck-view-model", () => {
       baseRef: "main",
       aheadCount: 1,
       behindCount: 0,
-      pullRequest: {
-        number: 42,
-        title: "Add feature",
-        url: "https://github.com/example/repo/pull/42",
-        state: "OPEN",
-        isDraft: false,
-        reviewDecision: null,
-        headRefName: "feature-a",
-        baseRefName: "main",
-      },
+      pullRequests: [
+        {
+          number: 42,
+          title: "Add feature",
+          url: "https://github.com/example/repo/pull/42",
+          state: "OPEN",
+          isDraft: false,
+          reviewDecision: null,
+          headRefName: "feature-a",
+          baseRefName: "main",
+        },
+      ],
       titles: [buildTitleEntry({ title: "Implement feature", latestMessage: "Done", updatedAt: 100 })],
     });
 
@@ -223,6 +225,45 @@ describe("worktree-deck-view-model", () => {
         "",
         "Done",
       ].join("\n"),
+    );
+  });
+
+  it("Git 情報の同じ行末に複数 PR リンクを表示する", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      mergeStatus: "synced",
+      baseRef: "main",
+      aheadCount: 1,
+      behindCount: 0,
+      pullRequests: [
+        {
+          number: 42,
+          title: "Add feature",
+          url: "https://github.com/example/repo/pull/42",
+          state: "OPEN",
+          isDraft: false,
+          reviewDecision: null,
+          headRefName: "feature-a",
+          baseRefName: "main",
+        },
+        {
+          number: 43,
+          title: "Backport feature",
+          url: "https://github.com/example/repo/pull/43",
+          state: "OPEN",
+          isDraft: true,
+          reviewDecision: null,
+          headRefName: "feature-a",
+          baseRefName: "release",
+        },
+      ],
+      titles: [buildTitleEntry({ title: "Implement feature", latestMessage: "Done", updatedAt: 100 })],
+    });
+
+    expect(markdown).toContain(
+      "✅ synced  [PR\u00A0#42\u00A0Open](https://github.com/example/repo/pull/42)  " +
+        "[PR\u00A0#43\u00A0Draft](https://github.com/example/repo/pull/43)",
     );
   });
 

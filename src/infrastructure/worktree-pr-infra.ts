@@ -29,9 +29,9 @@ const execFileAsync = promisify(execFile);
 const PULL_REQUEST_URL_PATTERN = /https?:\/\/\S+/;
 
 /**
- * gh pr view で取得する JSON フィールド
+ * gh pr list で取得する JSON フィールド
  */
-const PULL_REQUEST_VIEW_JSON_FIELDS = [
+const PULL_REQUEST_LIST_JSON_FIELDS = [
   "number",
   "title",
   "url",
@@ -124,28 +124,28 @@ export function createDefaultResolveWorktreePullRequestTitleDependencies(): Reso
  */
 export async function loadPullRequestInfoByWorktreePath(
   worktrees: Worktree[],
-): Promise<Map<string, WorktreePullRequestInfo | null>> {
+): Promise<Map<string, WorktreePullRequestInfo[]>> {
   const envPath = buildCommandPath(process.env.PATH);
   const command = resolveGhCommand(envPath);
   if (!command) {
     return new Map();
   }
   const entries = await Promise.all(
-    worktrees.map(async (item): Promise<[string, WorktreePullRequestInfo | null] | null> => {
+    worktrees.map(async (item): Promise<[string, WorktreePullRequestInfo[]] | null> => {
       const branch = worktreePullRequestService.normalizeHeadBranch(item.branch);
       if (branch === null) {
         return null;
       }
-      const info = await fetchPullRequestInfoForBranch({
+      const pullRequests = await fetchPullRequestInfoForBranch({
         command,
         envPath,
         worktreePath: item.path,
         branch,
       });
-      return [item.path, info];
+      return [item.path, pullRequests];
     }),
   );
-  return new Map(entries.filter((entry): entry is [string, WorktreePullRequestInfo | null] => entry !== null));
+  return new Map(entries.filter((entry): entry is [string, WorktreePullRequestInfo[]] => entry !== null));
 }
 
 /**
@@ -195,18 +195,18 @@ async function createWorktreePullRequest(plan: WorktreePullRequestPlan): Promise
 }
 
 /**
- * gh pr view で指定ブランチの PR 情報を取得する
+ * gh pr list で指定ブランチの PR 情報を取得する
  */
 async function fetchPullRequestInfoForBranch(args: {
   command: string;
   envPath: string;
   worktreePath: string;
   branch: string;
-}): Promise<WorktreePullRequestInfo | null> {
+}): Promise<WorktreePullRequestInfo[]> {
   try {
     const { stdout } = await execFileAsync(
       args.command,
-      ["pr", "view", args.branch, "--json", PULL_REQUEST_VIEW_JSON_FIELDS],
+      ["pr", "list", "--head", args.branch, "--json", PULL_REQUEST_LIST_JSON_FIELDS],
       {
         cwd: args.worktreePath,
         env: {
@@ -215,29 +215,42 @@ async function fetchPullRequestInfoForBranch(args: {
         },
       },
     );
-    return parsePullRequestViewJson(stdout);
+    return parsePullRequestListJson(stdout);
   } catch (error) {
     if (isMissingExternalCommandError(error)) {
-      return null;
+      return [];
     }
-    return null;
+    return [];
   }
 }
 
 /**
- * gh pr view の JSON 出力を表示用 PR 情報へ変換する
+ * gh pr list の JSON 出力を表示用 PR 情報配列へ変換する
  */
-export function parsePullRequestViewJson(stdout: string): WorktreePullRequestInfo | null {
+export function parsePullRequestListJson(stdout: string): WorktreePullRequestInfo[] {
   let raw: unknown;
   try {
     raw = JSON.parse(stdout);
   } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.flatMap((entry) => {
+    const pullRequest = parsePullRequestEntry(entry);
+    return pullRequest === null ? [] : [pullRequest];
+  });
+}
+
+/**
+ * gh 由来の1件分 JSON を表示用 PR 情報へ変換する
+ */
+function parsePullRequestEntry(value: unknown): WorktreePullRequestInfo | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return null;
-  }
-  const entry = raw as Record<string, unknown>;
+  const entry = value as Record<string, unknown>;
   if (typeof entry.number !== "number" || !Number.isFinite(entry.number)) {
     return null;
   }

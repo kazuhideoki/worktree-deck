@@ -449,15 +449,15 @@ function formatLatestMessageLeadingIcon(
 export function formatTitleEntry(
   entry: WorktreeTitle,
   gitStatus: string | null = null,
-  pullRequest: WorktreePullRequestInfo | null = null,
+  pullRequests: WorktreePullRequestInfo[] = [],
   assetsPath?: string | null,
 ): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
-  const gitStatusWithPullRequest = formatGitStatusWithPullRequest(gitStatus ?? "No git status", pullRequest);
+  const gitStatusWithPullRequests = formatGitStatusWithPullRequests(gitStatus ?? "No git status", pullRequests);
   const truncatedTitle = truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS);
   const rows = [
     ["📝", truncatedTitle],
-    ["🌿", gitStatusWithPullRequest],
+    ["🌿", gitStatusWithPullRequests],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
   ];
   const [headerRow, ...bodyRows] = rows.map(([key, value]) => `| ${key} | ${formatTableValue(value)} |`);
@@ -576,9 +576,9 @@ function formatPullRequestState(pullRequest: WorktreePullRequestInfo): string {
 /**
  * Markdown 詳細内の PR リンクを組み立てる
  */
-function formatPullRequestLink(pullRequest: WorktreePullRequestInfo | null): string {
-  if (pullRequest === null || pullRequest.url.trim().length === 0) {
-    return "";
+function formatPullRequestLink(pullRequest: WorktreePullRequestInfo): string | null {
+  if (pullRequest.url.trim().length === 0) {
+    return null;
   }
   const state = formatPullRequestState(pullRequest);
   const label = ["PR", `#${pullRequest.number}`, state].filter(Boolean).join("\u00A0");
@@ -588,14 +588,18 @@ function formatPullRequestLink(pullRequest: WorktreePullRequestInfo | null): str
 /**
  * Git 状態の同じ行末に PR リンクを追加する
  */
-function formatGitStatusWithPullRequest(gitStatus: string, pullRequest: WorktreePullRequestInfo | null): string {
-  const pullRequestLink = formatPullRequestLink(pullRequest);
-  if (!pullRequestLink) {
+function formatGitStatusWithPullRequests(gitStatus: string, pullRequests: WorktreePullRequestInfo[]): string {
+  const pullRequestLinks = pullRequests.flatMap((pullRequest) => {
+    const link = formatPullRequestLink(pullRequest);
+    return link === null ? [] : [link];
+  });
+  if (pullRequestLinks.length === 0) {
     return gitStatus;
   }
   const lines = gitStatus.split(/\r?\n/);
   const firstLine = lines[0]?.trimEnd() ?? "";
-  return [firstLine ? `${firstLine}  ${pullRequestLink}` : pullRequestLink, ...lines.slice(1)].join("\n");
+  const pullRequestText = pullRequestLinks.join("  ");
+  return [firstLine ? `${firstLine}  ${pullRequestText}` : pullRequestText, ...lines.slice(1)].join("\n");
 }
 
 /**
@@ -716,7 +720,7 @@ export function buildDetailMarkdown({
   baseRef,
   aheadCount,
   behindCount,
-  pullRequest,
+  pullRequests,
   openApp,
   assetsPath,
   useLastCommitSeparator = true,
@@ -730,7 +734,7 @@ export function buildDetailMarkdown({
   baseRef?: string | null;
   aheadCount?: number | null;
   behindCount?: number | null;
-  pullRequest?: WorktreePullRequestInfo | null;
+  pullRequests?: WorktreePullRequestInfo[];
   openApp?: WorktreeOpenApp | null;
   assetsPath?: string | null;
   useLastCommitSeparator?: boolean;
@@ -759,7 +763,7 @@ export function buildDetailMarkdown({
   }
   const gitStatus = lines.length > 0 ? lines.join("\n") : null;
   if (detailTitle) {
-    return formatTitleEntry(detailTitle, gitStatus, pullRequest ?? null, assetsPath);
+    return formatTitleEntry(detailTitle, gitStatus, pullRequests ?? [], assetsPath);
   }
   return formatTitleEntry(
     {
@@ -770,7 +774,7 @@ export function buildDetailMarkdown({
       sessionKind: "main",
     },
     gitStatus,
-    pullRequest ?? null,
+    pullRequests ?? [],
     assetsPath,
   );
 }

@@ -50,7 +50,7 @@ function buildWorktree(args: {
   baseRef?: string | null;
   aheadCount?: number | null;
   behindCount?: number | null;
-  pullRequest?: WorktreePullRequestInfo | null;
+  pullRequests?: WorktreePullRequestInfo[];
 }): Worktree {
   return {
     repo: args.repo,
@@ -63,7 +63,7 @@ function buildWorktree(args: {
     baseRef: args.baseRef,
     aheadCount: args.aheadCount,
     behindCount: args.behindCount,
-    pullRequest: args.pullRequest,
+    pullRequests: args.pullRequests,
   };
 }
 
@@ -116,7 +116,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
           baseRef: "main",
           aheadCount: 0,
           behindCount: 0,
-          pullRequest,
+          pullRequests: [pullRequest],
         }),
       ],
       titlesByPath: new Map([["/tmp/repo", [title]]]),
@@ -126,7 +126,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
     });
 
     expect(cache).toEqual({
-      version: 5,
+      version: 6,
       worktreesByPath: {
         "/tmp/repo/feature-a": {
           titleEntries: [title],
@@ -135,7 +135,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
           baseRef: "main",
           aheadCount: 0,
           behindCount: 0,
-          pullRequest,
+          pullRequests: [pullRequest],
         },
       },
       titlesByPath: {
@@ -178,7 +178,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
           repo: "repo",
           path: "/tmp/repo/feature-a",
           branch: "feature-a",
-          pullRequest: null,
+          pullRequests: [],
         }),
       ],
       titlesByPath: new Map(),
@@ -187,7 +187,7 @@ describe("buildWorktreeDeckDisplayCache", () => {
       openAppMetaByPath: new Map(),
     });
 
-    expect(cache.worktreesByPath["/tmp/repo/feature-a"]).toEqual({ pullRequest: null });
+    expect(cache.worktreesByPath["/tmp/repo/feature-a"]).toEqual({ pullRequests: [] });
     expect(hasWorktreeDeckDisplayCacheData(cache)).toBe(true);
   });
 });
@@ -213,7 +213,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
       ],
       mappings: [buildMapping("/tmp/repo", "repo")],
       cache: {
-        version: 5,
+        version: 6,
         worktreesByPath: {
           "/tmp/repo/feature-a": {
             titleEntries: [title],
@@ -222,7 +222,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
             baseRef: "main",
             aheadCount: 0,
             behindCount: 0,
-            pullRequest,
+            pullRequests: [pullRequest],
           },
         },
         titlesByPath: {
@@ -257,7 +257,7 @@ describe("applyWorktreeDeckDisplayCache", () => {
         baseRef: "main",
         aheadCount: 0,
         behindCount: 0,
-        pullRequest,
+        pullRequests: [pullRequest],
       }),
     ]);
     expect(restored.titlesByPath).toEqual(new Map([["/tmp/repo", [title]]]));
@@ -294,7 +294,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
   it("title が文字列でない表示キャッシュは例外にせず復元しない", () => {
     expect(
       normalizeWorktreeDeckDisplayCache({
-        version: 5,
+        version: 6,
         worktreesByPath: {},
         titlesByPath: {
           "/tmp/repo": [
@@ -324,7 +324,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
     });
 
     const cache = normalizeWorktreeDeckDisplayCache({
-      version: 5,
+      version: 6,
       worktreesByPath: {},
       titlesByPath: {
         "/tmp/repo": [title],
@@ -346,7 +346,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
     });
 
     const cache = normalizeWorktreeDeckDisplayCache({
-      version: 5,
+      version: 6,
       worktreesByPath: {},
       titlesByPath: {
         "/tmp/repo": [title],
@@ -361,7 +361,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
 
   it("不正な provider は undefined に正規化する", () => {
     const cache = normalizeWorktreeDeckDisplayCache({
-      version: 5,
+      version: 6,
       worktreesByPath: {},
       titlesByPath: {
         "/tmp/repo": [
@@ -386,19 +386,21 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
   it("不正な PR 情報を含む表示キャッシュは復元しない", () => {
     expect(
       normalizeWorktreeDeckDisplayCache({
-        version: 5,
+        version: 6,
         worktreesByPath: {
           "/tmp/repo/feature-a": {
-            pullRequest: {
-              number: 42,
-              title: "Add feature",
-              url: "",
-              state: "OPEN",
-              isDraft: false,
-              reviewDecision: null,
-              headRefName: "feature-a",
-              baseRefName: "main",
-            },
+            pullRequests: [
+              {
+                number: 42,
+                title: "Add feature",
+                url: "",
+                state: "OPEN",
+                isDraft: false,
+                reviewDecision: null,
+                headRefName: "feature-a",
+                baseRefName: "main",
+              },
+            ],
           },
         },
         titlesByPath: {},

@@ -95,7 +95,7 @@ export type LoadWorktreeDeckDetailsSnapshotDependencies = {
     baseRef: string;
   }): Promise<{ aheadCount: number; behindCount: number } | null>;
   resolveMergeTargetRef(worktreePath: string): Promise<string | null>;
-  loadPullRequestInfoByWorktreePath(worktrees: Worktree[]): Promise<Map<string, WorktreePullRequestInfo | null>>;
+  loadPullRequestInfoByWorktreePath(worktrees: Worktree[]): Promise<Map<string, WorktreePullRequestInfo[]>>;
 };
 
 /**
@@ -203,7 +203,7 @@ function collectOriginPaths(args: {
  */
 function attachWorktreePullRequestInfo(
   worktrees: Worktree[],
-  pullRequestInfoByPath: Map<string, WorktreePullRequestInfo | null>,
+  pullRequestInfoByPath: Map<string, WorktreePullRequestInfo[]>,
 ): Worktree[] {
   if (pullRequestInfoByPath.size === 0) {
     return worktrees;
@@ -214,7 +214,7 @@ function attachWorktreePullRequestInfo(
     }
     return {
       ...item,
-      pullRequest: pullRequestInfoByPath.get(item.path) ?? null,
+      pullRequests: pullRequestInfoByPath.get(item.path) ?? [],
     };
   });
 }
@@ -453,7 +453,7 @@ async function loadDetailsSnapshot(args: {
   let originBranchByPath = new Map<string, string | null>();
   let baseRefByPath = new Map<string, string>();
   let openAppMetaByPath = new Map<string, WorktreeOpenAppMeta>();
-  let pullRequestInfoByPath = new Map<string, WorktreePullRequestInfo | null>();
+  let pullRequestInfoByPath = new Map<string, WorktreePullRequestInfo[]>();
   const originPaths = collectOriginPaths({ worktrees: args.worktrees, mappings: args.mappings, includeOriginEntries });
   const worktreePaths = args.worktrees.map((item) => item.path);
   const displayPaths = collectDisplayPaths({
@@ -516,7 +516,7 @@ async function loadDetailsSnapshot(args: {
         task: () => args.dependencies.loadPullRequestInfoByWorktreePath(args.worktrees),
       });
     } catch {
-      return new Map<string, WorktreePullRequestInfo | null>();
+      return new Map<string, WorktreePullRequestInfo[]>();
     }
   })();
   const [originData, loadedBaseRefByPath, loadedOpenAppMetaByPath, loadedPullRequestInfoByPath] = await Promise.all([

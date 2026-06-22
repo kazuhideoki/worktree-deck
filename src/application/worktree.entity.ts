@@ -29,5 +29,5 @@ export type Worktree = {
   baseRef?: string | null;
   aheadCount?: number | null;
   behindCount?: number | null;
-  pullRequest?: WorktreePullRequestInfo | null;
+  pullRequests?: WorktreePullRequestInfo[];
 };

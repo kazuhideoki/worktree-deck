@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createDefaultCreateWorktreePullRequestDependencies,
-  parsePullRequestViewJson,
+  parsePullRequestListJson,
   resolveFirstCommitTitle,
 } from "./worktree-pr-infra";
 
@@ -95,10 +95,35 @@ describe("resolveFirstCommitTitle", () => {
   });
 });
 
-describe("parsePullRequestViewJson", () => {
-  it("gh pr view の JSON から PR 情報を復元する", () => {
-    const info = parsePullRequestViewJson(
-      JSON.stringify({
+describe("parsePullRequestListJson", () => {
+  it("gh pr list の JSON から PR 情報配列を復元する", () => {
+    const info = parsePullRequestListJson(
+      JSON.stringify([
+        {
+          number: 12,
+          title: "Add login",
+          url: "https://github.com/example/repo/pull/12",
+          state: "OPEN",
+          isDraft: true,
+          reviewDecision: "REVIEW_REQUIRED",
+          headRefName: "feature/login",
+          baseRefName: "main",
+        },
+        {
+          number: 13,
+          title: "Add login to release",
+          url: "https://github.com/example/repo/pull/13",
+          state: "OPEN",
+          isDraft: false,
+          reviewDecision: "",
+          headRefName: "feature/login",
+          baseRefName: "release",
+        },
+      ]),
+    );
+
+    expect(info).toEqual([
+      {
         number: 12,
         title: "Add login",
         url: "https://github.com/example/repo/pull/12",
@@ -107,24 +132,23 @@ describe("parsePullRequestViewJson", () => {
         reviewDecision: "REVIEW_REQUIRED",
         headRefName: "feature/login",
         baseRefName: "main",
-      }),
-    );
-
-    expect(info).toEqual({
-      number: 12,
-      title: "Add login",
-      url: "https://github.com/example/repo/pull/12",
-      state: "OPEN",
-      isDraft: true,
-      reviewDecision: "REVIEW_REQUIRED",
-      headRefName: "feature/login",
-      baseRefName: "main",
-    });
+      },
+      {
+        number: 13,
+        title: "Add login to release",
+        url: "https://github.com/example/repo/pull/13",
+        state: "OPEN",
+        isDraft: false,
+        reviewDecision: null,
+        headRefName: "feature/login",
+        baseRefName: "release",
+      },
+    ]);
   });
 
-  it("PR URL が無い JSON は復元しない", () => {
-    expect(parsePullRequestViewJson(JSON.stringify({ number: 12, url: "" }))).toBeNull();
-    expect(parsePullRequestViewJson("not-json")).toBeNull();
+  it("PR URL が無い entry は復元しない", () => {
+    expect(parsePullRequestListJson(JSON.stringify([{ number: 12, url: "" }]))).toEqual([]);
+    expect(parsePullRequestListJson("not-json")).toEqual([]);
   });
 });
 

@@ -12,7 +12,7 @@ import type { WorktreeTitle } from "./worktree-title.entity";
 /**
  * 表示キャッシュの互換性管理用バージョン
  */
-const WORKTREE_DECK_DISPLAY_CACHE_VERSION = 5;
+const WORKTREE_DECK_DISPLAY_CACHE_VERSION = 6;
 
 /**
  * 1件の worktree 表示キャッシュ
@@ -25,7 +25,7 @@ export type WorktreeDeckDisplayCacheEntry = {
   baseRef?: string | null;
   aheadCount?: number | null;
   behindCount?: number | null;
-  pullRequest?: WorktreePullRequestInfo | null;
+  pullRequests?: WorktreePullRequestInfo[];
 };
 
 /**
@@ -64,13 +64,13 @@ function cloneTitles(entries: WorktreeTitle[] | undefined): WorktreeTitle[] | un
 /**
  * PR 情報を表示キャッシュ用に複製する
  */
-function clonePullRequestInfo(
-  pullRequest: WorktreePullRequestInfo | null | undefined,
-): WorktreePullRequestInfo | null | undefined {
-  if (pullRequest === undefined || pullRequest === null) {
-    return pullRequest;
+function clonePullRequestInfoList(
+  pullRequests: WorktreePullRequestInfo[] | undefined,
+): WorktreePullRequestInfo[] | undefined {
+  if (pullRequests === undefined) {
+    return undefined;
   }
-  return { ...pullRequest };
+  return pullRequests.map((pullRequest) => ({ ...pullRequest }));
 }
 
 /**
@@ -186,6 +186,24 @@ function normalizePullRequestInfo(value: unknown): WorktreePullRequestInfo | nul
 }
 
 /**
+ * キャッシュ由来の PR 情報配列を正規化する
+ */
+function normalizePullRequestInfoList(value: unknown): WorktreePullRequestInfo[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const result: WorktreePullRequestInfo[] = [];
+  for (const entry of value) {
+    const normalized = normalizePullRequestInfo(entry);
+    if (normalized == null) {
+      return null;
+    }
+    result.push(normalized);
+  }
+  return result;
+}
+
+/**
  * 1件の worktree 表示キャッシュを正規化する
  */
 function normalizeDisplayCacheEntry(value: unknown): WorktreeDeckDisplayCacheEntry | null {
@@ -230,13 +248,8 @@ function normalizeDisplayCacheEntry(value: unknown): WorktreeDeckDisplayCacheEnt
   if (raw.behindCount != null && behindCount === undefined) {
     return null;
   }
-  const pullRequest =
-    raw.pullRequest === undefined
-      ? undefined
-      : raw.pullRequest === null
-        ? null
-        : normalizePullRequestInfo(raw.pullRequest);
-  if (raw.pullRequest !== undefined && raw.pullRequest !== null && pullRequest === null) {
+  const pullRequests = raw.pullRequests === undefined ? undefined : normalizePullRequestInfoList(raw.pullRequests);
+  if (raw.pullRequests !== undefined && pullRequests === null) {
     return null;
   }
   return {
@@ -247,7 +260,7 @@ function normalizeDisplayCacheEntry(value: unknown): WorktreeDeckDisplayCacheEnt
     baseRef,
     aheadCount,
     behindCount,
-    pullRequest,
+    pullRequests: pullRequests ?? undefined,
   };
 }
 
@@ -357,7 +370,7 @@ function hasDisplayCacheEntryData(entry: WorktreeDeckDisplayCacheEntry): boolean
     entry.baseRef != null ||
     entry.aheadCount != null ||
     entry.behindCount != null ||
-    entry.pullRequest !== undefined
+    entry.pullRequests !== undefined
   );
 }
 
@@ -404,7 +417,7 @@ export function buildWorktreeDeckDisplayCache(args: {
       baseRef: item.baseRef,
       aheadCount: item.aheadCount,
       behindCount: item.behindCount,
-      pullRequest: clonePullRequestInfo(item.pullRequest),
+      pullRequests: clonePullRequestInfoList(item.pullRequests),
     };
     if (!hasDisplayCacheEntryData(entry)) {
       continue;
@@ -501,8 +514,8 @@ export function applyWorktreeDeckDisplayCache(args: {
       baseRef: cached.baseRef ?? item.baseRef,
       aheadCount: cached.aheadCount ?? item.aheadCount,
       behindCount: cached.behindCount ?? item.behindCount,
-      pullRequest:
-        cached.pullRequest !== undefined ? (clonePullRequestInfo(cached.pullRequest) ?? null) : item.pullRequest,
+      pullRequests:
+        cached.pullRequests !== undefined ? (clonePullRequestInfoList(cached.pullRequests) ?? []) : item.pullRequests,
     };
   });
 

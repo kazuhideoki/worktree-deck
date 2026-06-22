@@ -236,16 +236,18 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
           new Map([
             [
               "/repo/a",
-              {
-                number: 12,
-                title: "Add feature",
-                url: "https://github.com/example/repo/pull/12",
-                state: "OPEN",
-                isDraft: false,
-                reviewDecision: null,
-                headRefName: "feature",
-                baseRefName: "main",
-              },
+              [
+                {
+                  number: 12,
+                  title: "Add feature",
+                  url: "https://github.com/example/repo/pull/12",
+                  state: "OPEN",
+                  isDraft: false,
+                  reviewDecision: null,
+                  headRefName: "feature",
+                  baseRefName: "main",
+                },
+              ],
             ],
           ]),
       ),
@@ -283,16 +285,18 @@ describe("worktreeDeckSnapshotUsecase.loadDetailsSnapshot", () => {
         baseRef: "main",
         aheadCount: 2,
         behindCount: 1,
-        pullRequest: {
-          number: 12,
-          title: "Add feature",
-          url: "https://github.com/example/repo/pull/12",
-          state: "OPEN",
-          isDraft: false,
-          reviewDecision: null,
-          headRefName: "feature",
-          baseRefName: "main",
-        },
+        pullRequests: [
+          {
+            number: 12,
+            title: "Add feature",
+            url: "https://github.com/example/repo/pull/12",
+            state: "OPEN",
+            isDraft: false,
+            reviewDecision: null,
+            headRefName: "feature",
+            baseRefName: "main",
+          },
+        ],
       },
       {
         repo: "repo",

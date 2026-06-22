@@ -1527,16 +1527,21 @@ export default function Command() {
   /**
    * 取得済み PR をブラウザで開く Action を返す
    */
-  const renderOpenPullRequestAction = useCallback((pullRequest: WorktreePullRequestInfo | null | undefined) => {
-    if (!pullRequest) {
+  const renderOpenPullRequestActions = useCallback((pullRequests: WorktreePullRequestInfo[] | undefined) => {
+    if (pullRequests === undefined || pullRequests.length === 0) {
       return null;
     }
     return (
-      <Action.OpenInBrowser
-        title={`Open Pull Request #${pullRequest.number}`}
-        icon={Icon.Globe}
-        url={pullRequest.url}
-      />
+      <>
+        {pullRequests.map((pullRequest) => (
+          <Action.OpenInBrowser
+            key={pullRequest.url}
+            title={`Open Pull Request #${pullRequest.number}`}
+            icon={Icon.Globe}
+            url={pullRequest.url}
+          />
+        ))}
+      </>
     );
   }, []);
 
@@ -1855,7 +1860,7 @@ export default function Command() {
                   baseRef: item.baseRef ?? null,
                   aheadCount: item.aheadCount ?? null,
                   behindCount: item.behindCount ?? null,
-                  pullRequest: item.pullRequest ?? null,
+                  pullRequests: item.pullRequests ?? [],
                   openApp,
                   assetsPath: environment.assetsPath,
                 });
@@ -1921,7 +1926,7 @@ export default function Command() {
                           shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
                           onAction={() => void openLatestSessionForPath(item.path)}
                         />
-                        {renderOpenPullRequestAction(item.pullRequest)}
+                        {renderOpenPullRequestActions(item.pullRequests)}
                         <Action.ShowInFinder path={item.path} icon={Icon.Folder} />
                         <Action.CopyToClipboard title="Copy Path" icon={Icon.Clipboard} content={item.path} />
                         <Action.CopyToClipboard title="Copy Repository" icon={Icon.Clipboard} content={item.repo} />
