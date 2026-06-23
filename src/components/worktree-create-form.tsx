@@ -25,6 +25,15 @@ import {
   parseAutoStartImagePathsText,
 } from "../application/auto-start-image-input.usecase";
 import { createWorktreeUsecase, type WorktreeCreateContext } from "../application/create-worktree.usecase";
+import {
+  CLAUDE_MODEL_OPTIONS,
+  DEFAULT_CLAUDE_INITIAL_SESSION_METADATA,
+  normalizeClaudeModel,
+  normalizeClaudePermissionMode,
+  type ClaudeInitialSessionMetadata,
+  type ClaudeModelAlias,
+  type ClaudePermissionMode,
+} from "../application/start-claude-initial-session.usecase";
 import { startWorktreeAutoStartJobUsecase } from "../application/start-worktree-auto-start-job.usecase";
 import {
   resolveCodexPermissionMetadata,
@@ -36,6 +45,7 @@ import {
   type CodexReasoningEffort,
   type CodexServiceTier,
 } from "../application/start-codex-initial-session.usecase";
+import { type SessionProvider } from "../domain/session-provider";
 import { worktreeOpenAppUsecase } from "../application/worktree-open-app.usecase";
 import { resolveWorktreeDeckCompositionRoot } from "../composition-root";
 import { type RepositoryMapping } from "../domain/repository-mapping.service";
@@ -48,6 +58,7 @@ import { buildBranchOptions, formatExecErrorMessage, type BranchOption } from ".
 const CREATE_WORKTREE_FORM_ITEM_IDS = {
   initialPrompt: "initialPrompt",
   imagePaths: "imagePaths",
+  provider: "provider",
   model: "model",
   serviceTier: "serviceTier",
   reasoningEffort: "reasoningEffort",
@@ -79,6 +90,7 @@ const CREATE_WORKTREE_FORM_FOCUS_RESTORE_DELAY_MS = 0;
  */
 const CREATE_WORKTREE_FOCUSABLE_ITEM_IDS: readonly CreateWorktreeFocusableItemId[] = [
   CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt,
+  CREATE_WORKTREE_FORM_ITEM_IDS.provider,
   CREATE_WORKTREE_FORM_ITEM_IDS.model,
   CREATE_WORKTREE_FORM_ITEM_IDS.serviceTier,
   CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort,
@@ -101,6 +113,9 @@ export const CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS = {
   autoStart: "worktree-deck.create-worktree-form.auto-start",
   initialPrompt: "worktree-deck.create-worktree-form.initial-prompt",
   imagePathsText: "worktree-deck.create-worktree-form.image-paths-text",
+  provider: "worktree-deck.create-worktree-form.provider",
+  claudeModel: "worktree-deck.create-worktree-form.claude-model",
+  claudePermissions: "worktree-deck.create-worktree-form.claude-permissions",
   model: "worktree-deck.create-worktree-form.codex-model",
   serviceTier: "worktree-deck.create-worktree-form.codex-service-tier",
   reasoningEffort: "worktree-deck.create-worktree-form.codex-reasoning-effort",
@@ -117,6 +132,11 @@ export const CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS = {
  * Create Worktree フォームの既定起動アプリ
  */
 const DEFAULT_CREATE_WORKTREE_OPEN_APP: WorktreeOpenApp = "zed";
+
+/**
+ * Auto Start の既定 provider（既存挙動どおり Codex）
+ */
+const DEFAULT_CREATE_WORKTREE_PROVIDER: SessionProvider = "ca";
 
 /**
  * Codex 初回セッションの既定メタ情報
@@ -245,6 +265,18 @@ export function CreateWorktreeForm({
     approvalsReviewer: DEFAULT_CODEX_INITIAL_SESSION_METADATA.approvalsReviewer,
     webSearch: DEFAULT_CODEX_INITIAL_SESSION_METADATA.webSearch,
   });
+  const [providerDraft, setProviderDraft] = useCachedState<SessionProvider>(
+    CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.provider,
+    DEFAULT_CREATE_WORKTREE_PROVIDER,
+  );
+  const [claudeModelDraft, setClaudeModelDraft] = useCachedState<ClaudeModelAlias>(
+    CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeModel,
+    DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.model,
+  );
+  const [claudePermissionDraft, setClaudePermissionDraft] = useCachedState<ClaudePermissionMode>(
+    CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudePermissions,
+    DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.permissionMode,
+  );
   const [branchDraft, setBranchDraft] = useCachedState<string>(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.branch, "");
   const [openAppDraft, setOpenAppDraft] = useCachedState<WorktreeOpenApp>(
     CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.openApp,
@@ -258,6 +290,7 @@ export function CreateWorktreeForm({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const focusedFormItemIdRef = useRef<CreateWorktreeFocusableItemId>(CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt);
   const initialPromptRef = useRef<Form.TextArea>(null);
+  const providerRef = useRef<Form.Dropdown>(null);
   const modelRef = useRef<Form.Dropdown>(null);
   const serviceTierRef = useRef<Form.Dropdown>(null);
   const reasoningEffortRef = useRef<Form.Dropdown>(null);
@@ -305,6 +338,7 @@ export function CreateWorktreeForm({
   const focusCreateWorktreeFormItem = useCallback((itemId: CreateWorktreeFocusableItemId) => {
     const refs = {
       [CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt]: initialPromptRef,
+      [CREATE_WORKTREE_FORM_ITEM_IDS.provider]: providerRef,
       [CREATE_WORKTREE_FORM_ITEM_IDS.model]: modelRef,
       [CREATE_WORKTREE_FORM_ITEM_IDS.serviceTier]: serviceTierRef,
       [CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort]: reasoningEffortRef,
@@ -323,12 +357,13 @@ export function CreateWorktreeForm({
       itemId: focusedFormItemIdRef.current,
       autoStart: autoStartDraft,
       hasBaseBranchError: Boolean(branchErrorMessage),
+      provider: providerDraft,
     });
 
     setTimeout(() => {
       focusCreateWorktreeFormItem(itemId);
     }, CREATE_WORKTREE_FORM_FOCUS_RESTORE_DELAY_MS);
-  }, [autoStartDraft, branchErrorMessage, focusCreateWorktreeFormItem]);
+  }, [autoStartDraft, branchErrorMessage, focusCreateWorktreeFormItem, providerDraft]);
 
   useEffect(() => {
     let cancelled = false;
@@ -443,7 +478,7 @@ export function CreateWorktreeForm({
     let cancelled = false;
 
     const run = async () => {
-      if (!autoStartDraft || !selectedRepo) {
+      if (!autoStartDraft || !selectedRepo || providerDraft !== "ca") {
         return;
       }
       try {
@@ -474,7 +509,15 @@ export function CreateWorktreeForm({
     return () => {
       cancelled = true;
     };
-  }, [autoStartDraft, selectedRepo, setModelDraft, setPermissionsDraft, setReasoningEffortDraft, setServiceTierDraft]);
+  }, [
+    autoStartDraft,
+    providerDraft,
+    selectedRepo,
+    setModelDraft,
+    setPermissionsDraft,
+    setReasoningEffortDraft,
+    setServiceTierDraft,
+  ]);
 
   const handleToggleAutoStart = useCallback(() => {
     setAutoStartDraft((current) => !current);
@@ -730,17 +773,26 @@ export function CreateWorktreeForm({
          */
         const runAutoStart = async () => {
           try {
+            const provider = resolveProvider(values.provider);
+            const commonCommand = {
+              repoRoot,
+              baseBranch,
+              initialPrompt: initialPrompt ?? "",
+              imagePaths,
+              scriptPath: scriptPath ?? "",
+              mapValue,
+              openApp: resolveCreateFormOpenApp(values.openApp),
+            };
+            const command =
+              provider === "cc"
+                ? { ...commonCommand, provider: "cc" as const, claude: buildClaudeInitialSessionMetadata(values) }
+                : {
+                    ...commonCommand,
+                    provider: "ca" as const,
+                    metadata: buildCodexInitialSessionMetadata(values, customPermissionMetadataDraft),
+                  };
             const result = await startWorktreeAutoStartJobUsecase.start({
-              command: {
-                repoRoot,
-                baseBranch,
-                initialPrompt: initialPrompt ?? "",
-                imagePaths,
-                scriptPath: scriptPath ?? "",
-                mapValue,
-                openApp: resolveCreateFormOpenApp(values.openApp),
-                metadata: buildCodexInitialSessionMetadata(values, customPermissionMetadataDraft),
-              },
+              command,
               dependencies: WORKTREE_DECK_COMPOSITION_ROOT.startWorktreeAutoStartJobDependencies,
             });
             await resetCreateWorktreeFormDraftStorage();
@@ -868,6 +920,9 @@ export function CreateWorktreeForm({
     );
   }
 
+  // 画像添付は Codex(ca) のみ。Claude(cc) は `claude -p` に画像を渡さないため隠す
+  const showImageAttachments = autoStartDraft && providerDraft !== "cc";
+
   return (
     <Form
       isLoading={isLoading || isGeneralSettingsLoading}
@@ -884,7 +939,7 @@ export function CreateWorktreeForm({
             shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
             onAction={handleToggleAutoStart}
           />
-          {autoStartDraft ? (
+          {showImageAttachments ? (
             <Action
               title="Attach Clipboard Image"
               icon={Icon.Image}
@@ -894,7 +949,7 @@ export function CreateWorktreeForm({
               }}
             />
           ) : null}
-          {autoStartDraft ? (
+          {showImageAttachments ? (
             <Action
               title="Attach Latest Screenshot"
               icon={Icon.Image}
@@ -904,7 +959,7 @@ export function CreateWorktreeForm({
               }}
             />
           ) : null}
-          {autoStartDraft ? (
+          {showImageAttachments ? (
             <Action
               title="Attach Selected Finder Images"
               icon={Icon.Finder}
@@ -914,7 +969,7 @@ export function CreateWorktreeForm({
               }}
             />
           ) : null}
-          {autoStartDraft ? (
+          {showImageAttachments ? (
             <Action
               title="Preview Images"
               icon={Icon.Image}
@@ -922,7 +977,7 @@ export function CreateWorktreeForm({
               onAction={handlePreviewImagePaths}
             />
           ) : null}
-          {autoStartDraft && imagePaths.length > 0 ? (
+          {showImageAttachments && imagePaths.length > 0 ? (
             <Action
               title="Clear Images"
               icon={Icon.XMarkCircle}
@@ -938,6 +993,7 @@ export function CreateWorktreeForm({
         : buildCreateWorktreeFormItemOrder({
             autoStart: autoStartDraft,
             hasBaseBranchError: Boolean(branchErrorMessage),
+            provider: providerDraft,
           }).map((itemId) => {
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt) {
               return (
@@ -962,7 +1018,40 @@ export function CreateWorktreeForm({
                 />
               );
             }
+            if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.provider) {
+              return (
+                <Form.Dropdown
+                  key={itemId}
+                  id="provider"
+                  ref={providerRef}
+                  title="Agent"
+                  value={providerDraft}
+                  onChange={(value) => setProviderDraft(resolveProvider(value))}
+                  onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.provider)}
+                >
+                  <Form.Dropdown.Item value="ca" title="Codex" />
+                  <Form.Dropdown.Item value="cc" title="Claude Code" />
+                </Form.Dropdown>
+              );
+            }
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.model) {
+              if (providerDraft === "cc") {
+                return (
+                  <Form.Dropdown
+                    key={itemId}
+                    id="model"
+                    ref={modelRef}
+                    title="Model"
+                    value={normalizeClaudeModel(claudeModelDraft)}
+                    onChange={(value) => setClaudeModelDraft(normalizeClaudeModel(value))}
+                    onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.model)}
+                  >
+                    {CLAUDE_MODEL_OPTIONS.map((model) => (
+                      <Form.Dropdown.Item key={model} value={model} title={model} />
+                    ))}
+                  </Form.Dropdown>
+                );
+              }
               return (
                 <Form.Dropdown
                   key={itemId}
@@ -1014,6 +1103,24 @@ export function CreateWorktreeForm({
               );
             }
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.permissions) {
+              if (providerDraft === "cc") {
+                return (
+                  <Form.Dropdown
+                    key={itemId}
+                    id="permissions"
+                    ref={permissionsRef}
+                    title="Permissions"
+                    value={normalizeClaudePermissionMode(claudePermissionDraft)}
+                    onChange={(value) => setClaudePermissionDraft(normalizeClaudePermissionMode(value))}
+                    onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.permissions)}
+                  >
+                    <Form.Dropdown.Item value="bypassPermissions" title="Bypass (autonomous)" />
+                    <Form.Dropdown.Item value="acceptEdits" title="Accept Edits" />
+                    <Form.Dropdown.Item value="plan" title="Plan" />
+                    <Form.Dropdown.Item value="default" title="Default" />
+                  </Form.Dropdown>
+                );
+              }
               return (
                 <Form.Dropdown
                   key={itemId}
@@ -1316,6 +1423,7 @@ function ImageAttachmentsPreview({
 type CreateWorktreeFormValues = {
   initialPrompt: string;
   imagePaths?: string[];
+  provider: string;
   model: string;
   serviceTier: string;
   reasoningEffort: string;
@@ -1556,6 +1664,9 @@ export async function resetCreateWorktreeFormDraftStorage(
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.autoStart),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.initialPrompt),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.imagePathsText),
+    dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.provider),
+    dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeModel),
+    dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudePermissions),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.model),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.serviceTier),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.reasoningEffort),
@@ -1576,10 +1687,12 @@ export function resolveCreateWorktreeFormFocusRestoreItemId(args: {
   itemId: CreateWorktreeFormItemId;
   autoStart: boolean;
   hasBaseBranchError: boolean;
+  provider?: SessionProvider;
 }): CreateWorktreeFocusableItemId {
   const visibleItemIds = buildCreateWorktreeFormItemOrder({
     autoStart: args.autoStart,
     hasBaseBranchError: args.hasBaseBranchError,
+    provider: args.provider,
   });
   if (visibleItemIds.includes(args.itemId) && isCreateWorktreeFocusableItemId(args.itemId)) {
     return args.itemId;
@@ -1604,6 +1717,23 @@ function buildCodexInitialSessionMetadata(
     reasoningEffort: resolveReasoningEffort(values.reasoningEffort),
     ...permissionMetadata,
   };
+}
+
+/**
+ * フォーム値から Claude 初回セッションのメタ情報を組み立てる
+ */
+function buildClaudeInitialSessionMetadata(values: CreateWorktreeFormValues): ClaudeInitialSessionMetadata {
+  return {
+    model: normalizeClaudeModel(values.model),
+    permissionMode: normalizeClaudePermissionMode(values.permissions),
+  };
+}
+
+/**
+ * provider のフォーム値を正規化する
+ */
+function resolveProvider(value: string | undefined): SessionProvider {
+  return value === "cc" ? "cc" : "ca";
 }
 
 /**
@@ -1686,24 +1816,31 @@ function buildWorktreeCreateContext(): WorktreeCreateContext {
 export function buildCreateWorktreeFormItemOrder(args: {
   autoStart: boolean;
   hasBaseBranchError: boolean;
+  provider?: SessionProvider;
 }): CreateWorktreeFormItemId[] {
   if (args.autoStart) {
-    const items: CreateWorktreeFormItemId[] = [
-      CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt,
-      CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths,
-    ];
+    const provider = args.provider ?? DEFAULT_CREATE_WORKTREE_PROVIDER;
+    const items: CreateWorktreeFormItemId[] = [CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt];
+    // 画像添付は Codex のみ対応（cc の `claude -p` には画像を渡さないため非表示）
+    if (provider === "ca") {
+      items.push(CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths);
+    }
     items.push(CREATE_WORKTREE_FORM_ITEM_IDS.repoRoot, CREATE_WORKTREE_FORM_ITEM_IDS.baseBranch);
     if (args.hasBaseBranchError) {
       items.push(CREATE_WORKTREE_FORM_ITEM_IDS.baseBranchError);
     }
-    items.push(
-      CREATE_WORKTREE_FORM_ITEM_IDS.openApp,
-      CREATE_WORKTREE_FORM_ITEM_IDS.spacing,
-      CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort,
-      CREATE_WORKTREE_FORM_ITEM_IDS.model,
-      CREATE_WORKTREE_FORM_ITEM_IDS.serviceTier,
-      CREATE_WORKTREE_FORM_ITEM_IDS.permissions,
-    );
+    items.push(CREATE_WORKTREE_FORM_ITEM_IDS.openApp, CREATE_WORKTREE_FORM_ITEM_IDS.spacing);
+    items.push(CREATE_WORKTREE_FORM_ITEM_IDS.provider);
+    if (provider === "ca") {
+      items.push(
+        CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort,
+        CREATE_WORKTREE_FORM_ITEM_IDS.model,
+        CREATE_WORKTREE_FORM_ITEM_IDS.serviceTier,
+        CREATE_WORKTREE_FORM_ITEM_IDS.permissions,
+      );
+    } else {
+      items.push(CREATE_WORKTREE_FORM_ITEM_IDS.model, CREATE_WORKTREE_FORM_ITEM_IDS.permissions);
+    }
     return items;
   }
 

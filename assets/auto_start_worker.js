@@ -26,6 +26,9 @@ const INVALID_BRANCH_NAME_PATTERN = /[\s~^:?*[\]\\]/;
 const REPOSITORY_MAPPING_STORAGE_FILE = "repository-mappings.json";
 const UNSAFE_WORKTREE_PATH_SEGMENT_PATTERN = /[<>:"\\|?*\u0000-\u001f]+/g;
 const SESSION_TITLE_MAX_LENGTH_CHARS = 80;
+const CLAUDE_MODEL_ALIASES = ["opus", "sonnet", "haiku"];
+const CLAUDE_PERMISSION_MODES = ["default", "acceptEdits", "bypassPermissions", "plan"];
+const CLAUDE_DEFAULT_PERMISSION_MODE = "bypassPermissions";
 
 /**
  * job の現在状態を読み込む
@@ -121,6 +124,9 @@ function formatMissingCommandMessage(command) {
   }
   if (command === "codex") {
     return "Codex CLI is required for Codex actions. Install Codex and ensure it is available in PATH.";
+  }
+  if (command === "claude") {
+    return "Claude CLI is required for Claude actions. Install Claude Code and ensure it is available in PATH.";
   }
   return `${command} command was not found in PATH.`;
 }
@@ -1010,6 +1016,189 @@ function buildCodexTurnInput(payload) {
 }
 
 /**
+ * Claude model alias を `--model` 引数値へ正規化する（default は省略=null）
+ */
+function normalizeClaudeModelArg(value) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return CLAUDE_MODEL_ALIASES.includes(trimmed) ? trimmed : null;
+}
+
+/**
+ * Claude permission mode を有効値へ正規化する
+ */
+function normalizeClaudePermissionModeArg(value) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return CLAUDE_PERMISSION_MODES.includes(trimmed) ? trimmed : CLAUDE_DEFAULT_PERMISSION_MODE;
+}
+
+/**
+ * stream-json イベントから session_id を取り出す
+ */
+function extractClaudeSessionId(event) {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+  return typeof event.session_id === "string" && event.session_id.trim() ? event.session_id.trim() : null;
+}
+
+/**
+ * result イベントが失敗を示すか判定する
+ */
+function isClaudeResultError(resultEvent) {
+  if (!resultEvent) {
+    return false;
+  }
+  if (resultEvent.is_error === true) {
+    return true;
+  }
+  return typeof resultEvent.subtype === "string" && resultEvent.subtype !== "success";
+}
+
+/**
+ * Claude 失敗時の英語エラーメッセージを stdout/stderr から組み立てる
+ */
+function buildClaudeErrorMessage(context) {
+  if (context.apiErrorMessage) {
+    return context.apiErrorMessage;
+  }
+  if (context.resultEvent) {
+    if (typeof context.resultEvent.result === "string" && context.resultEvent.result.trim()) {
+      return context.resultEvent.result.trim();
+    }
+    if (typeof context.resultEvent.subtype === "string" && context.resultEvent.subtype.trim()) {
+      return `Claude turn failed: ${context.resultEvent.subtype.trim()}`;
+    }
+  }
+  if (context.stderr) {
+    return context.stderr;
+  }
+  return `claude failed with exit code ${context.code ?? "unknown"}.`;
+}
+
+/**
+ * Claude 初回セッションを `claude -p` で開始し session_id を返す
+ *
+ * stream-json の system/init から session_id を取り出した時点で onSessionStarted を呼び、
+ * turn の最後まで待ってから成否を判定する。認証失敗等は stdout JSON / stderr から拾う。
+ */
+async function startClaudeSession(payload, worktreePath, onSessionStarted) {
+  const claudeMetadata = payload.claude && typeof payload.claude === "object" ? payload.claude : {};
+  const args = ["-p", "--output-format", "stream-json", "--verbose"];
+  const model = normalizeClaudeModelArg(claudeMetadata.model);
+  if (model) {
+    args.push("--model", model);
+  }
+  args.push("--permission-mode", normalizeClaudePermissionModeArg(claudeMetadata.permissionMode));
+
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn("claude", args, {
+        cwd: worktreePath,
+        env: { ...process.env, PATH: buildCommandPath(process.env.PATH) },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error) {
+      reject(normalizeMissingCommandError(error, "claude"));
+      return;
+    }
+
+    let sessionId = null;
+    let resultEvent = null;
+    let apiErrorMessage = null;
+    let stdoutBuffer = "";
+    const stderrChunks = [];
+    let settled = false;
+    let sessionNotified = false;
+    // onSessionStarted の完了を待ってから成否を確定し、job state 書き込みの競合を防ぐ
+    let sessionStartedPromise = Promise.resolve();
+
+    const handleEvent = (event) => {
+      const eventSessionId = extractClaudeSessionId(event);
+      if (eventSessionId && !sessionId) {
+        sessionId = eventSessionId;
+      }
+      if (event && event.type === "result") {
+        resultEvent = event;
+      }
+      if (event && event.type === "system" && event.subtype === "error" && typeof event.error === "string") {
+        apiErrorMessage = event.error.trim() || apiErrorMessage;
+      }
+    };
+
+    // session_id 判明後に一度だけ onSessionStarted を呼ぶ（data / close 双方から使う）
+    const maybeNotifySessionStarted = () => {
+      if (sessionId && !sessionNotified && onSessionStarted) {
+        sessionNotified = true;
+        sessionStartedPromise = Promise.resolve(onSessionStarted(sessionId)).catch(() => {});
+      }
+    };
+
+    child.stdout.on("data", (chunk) => {
+      stdoutBuffer += chunk.toString("utf8");
+      let newlineIndex = stdoutBuffer.indexOf("\n");
+      while (newlineIndex !== -1) {
+        const line = stdoutBuffer.slice(0, newlineIndex).trim();
+        stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+        newlineIndex = stdoutBuffer.indexOf("\n");
+        if (!line) {
+          continue;
+        }
+        try {
+          handleEvent(JSON.parse(line));
+        } catch {
+          // stream-json 以外の行は無視する
+        }
+      }
+      maybeNotifySessionStarted();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderrChunks.push(chunk);
+    });
+
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(normalizeMissingCommandError(error, "claude"));
+    });
+
+    child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      const trailing = stdoutBuffer.trim();
+      if (trailing) {
+        try {
+          handleEvent(JSON.parse(trailing));
+        } catch {
+          // 末尾の不完全な行は無視する
+        }
+      }
+      // 末尾行で初めて session_id が判明した場合もここで通知する
+      maybeNotifySessionStarted();
+      const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+      // 先に onSessionStarted（starting-turn / title 保存）を完了させてから succeeded を書く
+      void sessionStartedPromise.then(() => {
+        if (code === 0 && sessionId && !isClaudeResultError(resultEvent) && !apiErrorMessage) {
+          resolve(sessionId);
+          return;
+        }
+        reject(new Error(buildClaudeErrorMessage({ apiErrorMessage, resultEvent, stderr, code })));
+      });
+    });
+
+    // claude が stdin を読まず終了した場合の EPIPE で worker を落とさない
+    // （実際の成否は close / error ハンドラが確定する）
+    child.stdin.on("error", () => {});
+    child.stdin.end(payload.initialPrompt);
+  });
+}
+
+/**
  * CLI 引数から payload を復元する
  */
 async function parsePayload() {
@@ -1062,32 +1251,52 @@ async function main() {
     await runWarningStep(warnings, "Failed to save open app", () =>
       saveOpenApp(payload, worktreePath, payload.openApp),
     );
-    await writeJobState(payload, { status: "starting-codex", branch, worktreePath, warnings });
-    const threadId = await startCodexSession(payload, worktreePath, async (startedThreadId, client) => {
-      await runWarningStep(warnings, "Failed to save Codex thread", () =>
-        saveOpenApp(payload, worktreePath, payload.openApp, payload.openApp === "codex-app" ? startedThreadId : null),
-      );
-      await runWarningStep(warnings, "Failed to save session title", () =>
-        saveSessionTitle(payload, worktreePath, startedThreadId, sessionTitle),
-      );
-      await runWarningStep(warnings, "Failed to set Codex thread title", () =>
-        setCodexThreadName(client, startedThreadId, sessionTitle),
-      );
-      await writeJobState(payload, {
-        status: "starting-turn",
-        branch,
-        sessionTitle,
-        worktreePath,
-        threadId: startedThreadId,
-        warnings,
+    let threadId;
+    if (payload.provider === "cc") {
+      await writeJobState(payload, { status: "starting-claude", branch, sessionTitle, worktreePath, warnings });
+      threadId = await startClaudeSession(payload, worktreePath, async (startedSessionId) => {
+        await runWarningStep(warnings, "Failed to save session title", () =>
+          saveSessionTitle(payload, worktreePath, startedSessionId, sessionTitle),
+        );
+        await writeJobState(payload, {
+          status: "starting-turn",
+          branch,
+          sessionTitle,
+          worktreePath,
+          threadId: startedSessionId,
+          provider: "cc",
+          warnings,
+        });
       });
-    });
+    } else {
+      await writeJobState(payload, { status: "starting-codex", branch, worktreePath, warnings });
+      threadId = await startCodexSession(payload, worktreePath, async (startedThreadId, client) => {
+        await runWarningStep(warnings, "Failed to save Codex thread", () =>
+          saveOpenApp(payload, worktreePath, payload.openApp, payload.openApp === "codex-app" ? startedThreadId : null),
+        );
+        await runWarningStep(warnings, "Failed to save session title", () =>
+          saveSessionTitle(payload, worktreePath, startedThreadId, sessionTitle),
+        );
+        await runWarningStep(warnings, "Failed to set Codex thread title", () =>
+          setCodexThreadName(client, startedThreadId, sessionTitle),
+        );
+        await writeJobState(payload, {
+          status: "starting-turn",
+          branch,
+          sessionTitle,
+          worktreePath,
+          threadId: startedThreadId,
+          warnings,
+        });
+      });
+    }
     await writeJobState(payload, {
       status: "succeeded",
       branch,
       sessionTitle,
       worktreePath,
       threadId,
+      provider: payload.provider === "cc" ? "cc" : "ca",
       branchGenerationWarning,
       sessionTitleGenerationWarning,
       warnings,

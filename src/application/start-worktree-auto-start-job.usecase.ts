@@ -1,10 +1,11 @@
+import type { ClaudeInitialSessionMetadata } from "./start-claude-initial-session.usecase";
 import type { CodexInitialSessionMetadata } from "./start-codex-initial-session.usecase";
 import type { WorktreeOpenApp } from "../domain/worktree-open-app.service";
 
 /**
- * Auto Start job を開始する入力値
+ * provider 共通の Auto Start job 入力値
  */
-export type StartWorktreeAutoStartJobCommand = {
+type StartWorktreeAutoStartJobCommandBase = {
   repoRoot: string;
   baseBranch: string;
   initialPrompt: string;
@@ -12,8 +13,17 @@ export type StartWorktreeAutoStartJobCommand = {
   scriptPath: string;
   mapValue: string;
   openApp: WorktreeOpenApp;
-  metadata: CodexInitialSessionMetadata;
 };
+
+/**
+ * Auto Start job を開始する入力値（provider で適用メタ情報が分岐する）
+ *
+ * - ca = Codex（App Server へ thread/start）
+ * - cc = Claude Code（`claude -p` を CLI 実行）
+ */
+export type StartWorktreeAutoStartJobCommand =
+  | (StartWorktreeAutoStartJobCommandBase & { provider: "ca"; metadata: CodexInitialSessionMetadata })
+  | (StartWorktreeAutoStartJobCommandBase & { provider: "cc"; claude: ClaudeInitialSessionMetadata });
 
 /**
  * Auto Start job の開始結果
@@ -54,14 +64,20 @@ async function start(args: {
   if (!mapValue) {
     throw new Error("Repository mapping is required.");
   }
-  return args.dependencies.startJob({
-    ...args.command,
+  const base = {
     repoRoot,
     baseBranch,
     initialPrompt,
     imagePaths,
     mapValue,
-  });
+    scriptPath: args.command.scriptPath,
+    openApp: args.command.openApp,
+  };
+  return args.dependencies.startJob(
+    args.command.provider === "cc"
+      ? { ...base, provider: "cc", claude: args.command.claude }
+      : { ...base, provider: "ca", metadata: args.command.metadata },
+  );
 }
 
 /**

@@ -71,6 +71,13 @@
       "required": false,
       "placeholder": "1",
       "default": "1"
+    },
+    {
+      "name": "CLAUDE_CODE_OAUTH_TOKEN",
+      "title": "Claude Code OAuth Token",
+      "description": "Token from `claude setup-token` for Claude Auto Start. The background worker cannot read the macOS Keychain, so a token is required to authenticate the Claude CLI.",
+      "type": "password",
+      "required": false
     }
   ],
   "dependencies": {

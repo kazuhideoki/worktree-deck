@@ -72,6 +72,7 @@ describe("startWorktreeAutoStartJob", () => {
       scriptPath: fixture.scriptPath,
       mapValue: "app-a",
       openApp: "zed",
+      provider: "ca",
       metadata: {
         model: "gpt-5.5",
         serviceTier: "default",
@@ -118,6 +119,7 @@ describe("startWorktreeAutoStartJob", () => {
         scriptPath: fixture.scriptPath,
         mapValue: "app-a",
         openApp: "zed",
+        provider: "ca",
         metadata: {
           model: "gpt-5.5",
           serviceTier: "default",

@@ -9,6 +9,7 @@ type RaycastManifestPreference = {
   title?: string;
   required?: boolean;
   default?: string;
+  type?: string;
 };
 
 type RaycastManifestCommand = {
@@ -43,7 +44,7 @@ describe("raycast-preferences", () => {
     });
   });
 
-  it("manifest の Preferences は公開用の 4 項目だけを持つ", async () => {
+  it("manifest の Preferences は公開用の 5 項目だけを持つ", async () => {
     const manifest = await loadManifest();
     const names = manifest.preferences.map((preference) => preference.name);
 
@@ -52,9 +53,20 @@ describe("raycast-preferences", () => {
       "CODEX_HOME",
       "WORKTREE_DECK_SEARCH_DAYS",
       "WORKTREE_DECK_DONE_THRESHOLD_DAYS",
+      "CLAUDE_CODE_OAUTH_TOKEN",
     ]);
     expect(names).not.toContain("WORKTREE_DECK_STORAGE_DIR");
     expect(names).not.toContain("WORKTREE_NAME_DELIMITER");
+  });
+
+  it("Claude Auto Start 用トークンは任意の password preference として持つ", async () => {
+    const manifest = await loadManifest();
+    const preferencesByName = new Map(manifest.preferences.map((preference) => [preference.name, preference]));
+
+    expect(preferencesByName.get("CLAUDE_CODE_OAUTH_TOKEN")).toMatchObject({
+      type: "password",
+      required: false,
+    });
   });
 
   it("manifest の必須 path Preferences は home-relative default を表示する", async () => {

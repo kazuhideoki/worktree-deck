@@ -91,6 +91,7 @@ import { worktreePullUsecase } from "./application/worktree-pull.usecase";
 import { worktreePullRequestUsecase } from "./application/worktree-pull-request.usecase";
 import { worktreeSessionFileUsecase } from "./application/worktree-session-file.usecase";
 import { worktreeOpenAppUsecase } from "./application/worktree-open-app.usecase";
+import { resolveClaudeResumeCommand } from "./application/worktree-title.entity";
 import { applyRaycastPreferencesToProcessEnv } from "./raycast-preferences";
 import {
   resolveWorktreeDeckCompositionRoot,
@@ -1849,6 +1850,7 @@ export default function Command() {
                 const openApp = resolveOpenAppForPath(item.path);
                 const threadId = resolveThreadIdForPath(item.path);
                 const titles = item.titleEntries ?? [];
+                const claudeResumeCommand = resolveClaudeResumeCommand(titles);
                 const branchTitle = formatBranchTitle({ branch: item.branch, titles });
                 const rawDetailMarkdown = buildDetailMarkdown({
                   title: branchTitle,
@@ -1926,7 +1928,19 @@ export default function Command() {
                           shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
                           onAction={() => void openLatestSessionForPath(item.path)}
                         />
+<<<<<<< HEAD
                         {renderOpenPullRequestActions(item.pullRequests)}
+=======
+                        {claudeResumeCommand ? (
+                          <Action.CopyToClipboard
+                            title="Copy Claude Resume Command (First Session)"
+                            icon={Icon.Terminal}
+                            shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+                            content={claudeResumeCommand}
+                          />
+                        ) : null}
+                        {renderOpenPullRequestAction(item.pullRequest)}
+>>>>>>> feature/claude-auto-start-sdk-design
                         <Action.ShowInFinder path={item.path} icon={Icon.Folder} />
                         <Action.CopyToClipboard title="Copy Path" icon={Icon.Clipboard} content={item.path} />
                         <Action.CopyToClipboard title="Copy Repository" icon={Icon.Clipboard} content={item.repo} />

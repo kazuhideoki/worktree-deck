@@ -54,7 +54,8 @@
 
 ## 4. 設定・保存先の境界
 
-- Raycast Preferences は command entrypoint で `process.env` 互換値へ反映し、実行パスとしきい値を扱う。対象は `GIT_WORKTREE_PATH`, `CODEX_HOME`, `WORKTREE_DECK_SEARCH_DAYS`, `WORKTREE_DECK_DONE_THRESHOLD_DAYS`。
+- Raycast Preferences は command entrypoint で `process.env` 互換値へ反映し、実行パスとしきい値を扱う。対象は `GIT_WORKTREE_PATH`, `CODEX_HOME`, `WORKTREE_DECK_SEARCH_DAYS`, `WORKTREE_DECK_DONE_THRESHOLD_DAYS`, `CLAUDE_CODE_OAUTH_TOKEN`。
+- `CLAUDE_CODE_OAUTH_TOKEN`（password）は Claude Auto Start 用。`applyRaycastPreferencesToProcessEnv()` 経由で `process.env` に載り、detached worker → `claude` 子プロセスへ env 継承で透過する。Auto Start worker は GUI(Raycast)から起動されるため macOS Keychain を非対話で参照できず、Claude の subscription 認証はこの token（`claude setup-token` で発行）でしか通らない。秘匿値なので job state JSON には書かず env 経由のみで渡す。Codex は `~/.codex/auth.json`（ファイル認証）なので worker から読め、token は不要。
 - アプリ所有の JSON 状態は `~/.worktree-deck/storage` に固定する。storage の場所は Raycast Preferences で変更しない。General Settings には preferred IDE と Worktree 作成フォームの既定開始モードを保存する。
 - Raycast LocalStorage は、一覧キャッシュや選択復元など、失敗しても主要処理を止めないキャッシュに使う。
 
