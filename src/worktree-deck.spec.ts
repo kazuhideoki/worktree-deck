@@ -21,6 +21,7 @@ import {
   resolveOpenActionShortcut,
   resolveOpenActionThreadId,
   resolveInitialRepoRoot,
+  COPY_CLAUDE_RESUME_COMMAND_SHORTCUT,
   EDIT_TARGET_BRANCH_SHORTCUT,
   SHOW_DETAILS_SHORTCUT,
   shouldAutoOpenRepositoryMappingOnboarding,
@@ -502,6 +503,11 @@ describe("worktree action shortcuts", () => {
 
   it("target branch 編集アクションは cmd+e を使う", () => {
     expect(EDIT_TARGET_BRANCH_SHORTCUT).toEqual({ modifiers: ["cmd"], key: "e" });
+  });
+
+  it("Claude resume コマンドコピーアクションは restore と重複しない cmd+shift+c を使う", () => {
+    expect(COPY_CLAUDE_RESUME_COMMAND_SHORTCUT).toEqual({ modifiers: ["cmd", "shift"], key: "c" });
+    expect(COPY_CLAUDE_RESUME_COMMAND_SHORTCUT).not.toEqual({ modifiers: ["cmd", "shift"], key: "r" });
   });
 
   it("保存済みアプリが Zed のときは逆側の起動先として CA を返す", () => {

@@ -147,6 +147,11 @@ export const SHOW_DETAILS_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "sh
 export const EDIT_TARGET_BRANCH_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "e" };
 
 /**
+ * Claude resume コマンドコピーアクションのショートカット
+ */
+export const COPY_CLAUDE_RESUME_COMMAND_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "shift"], key: "c" };
+
+/**
  * 保存済みアプリと逆側で開くアクションを Raycast の secondary action 位置に置くための添字
  *
  * Raycast の List では 2 番目の Action が自動的に Cmd+Enter になる。
@@ -1932,7 +1937,7 @@ export default function Command() {
                           <Action.CopyToClipboard
                             title="Copy Claude Resume Command (First Session)"
                             icon={Icon.Terminal}
-                            shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+                            shortcut={COPY_CLAUDE_RESUME_COMMAND_SHORTCUT}
                             content={claudeResumeCommand}
                           />
                         ) : null}
