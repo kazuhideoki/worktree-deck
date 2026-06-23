@@ -1928,9 +1928,6 @@ export default function Command() {
                           shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
                           onAction={() => void openLatestSessionForPath(item.path)}
                         />
-<<<<<<< HEAD
-                        {renderOpenPullRequestActions(item.pullRequests)}
-=======
                         {claudeResumeCommand ? (
                           <Action.CopyToClipboard
                             title="Copy Claude Resume Command (First Session)"
@@ -1939,8 +1936,7 @@ export default function Command() {
                             content={claudeResumeCommand}
                           />
                         ) : null}
-                        {renderOpenPullRequestAction(item.pullRequest)}
->>>>>>> feature/claude-auto-start-sdk-design
+                        {renderOpenPullRequestActions(item.pullRequests)}
                         <Action.ShowInFinder path={item.path} icon={Icon.Folder} />
                         <Action.CopyToClipboard title="Copy Path" icon={Icon.Clipboard} content={item.path} />
                         <Action.CopyToClipboard title="Copy Repository" icon={Icon.Clipboard} content={item.repo} />
