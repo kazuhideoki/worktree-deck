@@ -1089,6 +1089,12 @@ async function startClaudeSession(payload, worktreePath, onSessionStarted) {
     args.push("--model", model);
   }
   args.push("--permission-mode", normalizeClaudePermissionModeArg(claudeMetadata.permissionMode));
+  const imagePaths = Array.isArray(payload.imagePaths)
+    ? payload.imagePaths.filter((path) => typeof path === "string" && path.trim()).map((path) => path.trim())
+    : [];
+  for (const imagePath of imagePaths) {
+    args.push("--image", imagePath);
+  }
 
   return new Promise((resolve, reject) => {
     let child;

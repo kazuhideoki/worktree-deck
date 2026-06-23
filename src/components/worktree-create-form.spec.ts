@@ -45,9 +45,10 @@ describe("buildCreateWorktreeFormItemOrder", () => {
     ]);
   });
 
-  it("Claude(cc) provider では画像添付と Codex 固有項目を出さず model と permissions のみ表示する", () => {
+  it("Claude(cc) provider では Codex 固有項目を出さず画像添付と model と permissions のみ表示する", () => {
     expect(buildCreateWorktreeFormItemOrder({ autoStart: true, hasBaseBranchError: false, provider: "cc" })).toEqual([
       "initialPrompt",
+      "imagePaths",
       "repoRoot",
       "baseBranch",
       "openApp",

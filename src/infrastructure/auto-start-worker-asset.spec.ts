@@ -10,6 +10,12 @@ async function readAutoStartWorkerAsset(): Promise<string> {
 }
 
 describe("auto_start_worker.js", () => {
+  it("Claude セッション開始時に --image フラグで画像パスを渡す", async () => {
+    const source = await readAutoStartWorkerAsset();
+
+    expect(source).toContain('args.push("--image", imagePath)');
+  });
+
   it("Codex app-server の local image 入力形式を使う", async () => {
     const source = await readAutoStartWorkerAsset();
 

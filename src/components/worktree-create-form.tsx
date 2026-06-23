@@ -920,8 +920,7 @@ export function CreateWorktreeForm({
     );
   }
 
-  // 画像添付は Codex(ca) のみ。Claude(cc) は `claude -p` に画像を渡さないため隠す
-  const showImageAttachments = autoStartDraft && providerDraft !== "cc";
+  const showImageAttachments = autoStartDraft;
 
   return (
     <Form
@@ -1821,10 +1820,7 @@ export function buildCreateWorktreeFormItemOrder(args: {
   if (args.autoStart) {
     const provider = args.provider ?? DEFAULT_CREATE_WORKTREE_PROVIDER;
     const items: CreateWorktreeFormItemId[] = [CREATE_WORKTREE_FORM_ITEM_IDS.initialPrompt];
-    // 画像添付は Codex のみ対応（cc の `claude -p` には画像を渡さないため非表示）
-    if (provider === "ca") {
-      items.push(CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths);
-    }
+    items.push(CREATE_WORKTREE_FORM_ITEM_IDS.imagePaths);
     items.push(CREATE_WORKTREE_FORM_ITEM_IDS.repoRoot, CREATE_WORKTREE_FORM_ITEM_IDS.baseBranch);
     if (args.hasBaseBranchError) {
       items.push(CREATE_WORKTREE_FORM_ITEM_IDS.baseBranchError);
