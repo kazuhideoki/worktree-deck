@@ -29,6 +29,7 @@ export type ClaudeSessionParseState = {
   lastConversationRole: "user" | "assistant" | null;
   lastAssistantStopReason: string | null;
   pendingToolUseIds: Set<string>;
+  resolvedToolUseIds: Set<string>;
   waitingToolUseIds: Set<string>;
 };
 
@@ -69,6 +70,7 @@ function createParseState(): ClaudeSessionParseState {
     lastConversationRole: null,
     lastAssistantStopReason: null,
     pendingToolUseIds: new Set<string>(),
+    resolvedToolUseIds: new Set<string>(),
     waitingToolUseIds: new Set<string>(),
   };
 }
@@ -192,6 +194,7 @@ function applyUserEntry(state: ClaudeSessionParseState, value: Record<string, un
   }
   const toolResultIds = extractToolResultIds(message.content);
   for (const id of toolResultIds) {
+    state.resolvedToolUseIds.add(id);
     state.pendingToolUseIds.delete(id);
     state.waitingToolUseIds.delete(id);
   }
@@ -220,6 +223,10 @@ function applyAssistantEntry(state: ClaudeSessionParseState, value: Record<strin
     return;
   }
   for (const toolUse of extractToolUses(message.content)) {
+    // Claude Code は tool_result 行が対応する tool_use 行より先に記録されることがある。
+    if (state.resolvedToolUseIds.has(toolUse.id)) {
+      continue;
+    }
     state.pendingToolUseIds.add(toolUse.id);
     if (WAITING_TOOL_USE_NAMES.has(toolUse.name)) {
       state.waitingToolUseIds.add(toolUse.id);

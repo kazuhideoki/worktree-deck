@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { LocalStorage } from "@raycast/api";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadClaudeTitlesForPaths, toProjectFolderName } from "./claude-session-file-store";
 
@@ -19,6 +20,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -276,6 +278,62 @@ describe("loadClaudeTitlesForPaths", () => {
     const result = await loadClaudeTitlesForPaths({ paths: [worktreePath], env: {}, homeDir: root });
 
     expect(result.get(worktreePath)?.[0]?.isWaitingForUser).toBe(false);
+  });
+
+  it("キャッシュ済み working でも生存中 idle セッションなら done に補正する", async () => {
+    const worktreePath = "/Users/me/work/repo";
+    const sessionId = "f803f9cd-42dd-41e7-ab10-002f1787aa84";
+    await writeSession(toProjectFolderName(worktreePath), `${sessionId}.jsonl`, [
+      { type: "user", cwd: worktreePath, message: { role: "user", content: "やって" } },
+      { type: "ai-title", aiTitle: "idle の完了セッション" },
+      {
+        type: "assistant",
+        cwd: worktreePath,
+        message: { role: "assistant", content: [{ type: "text", text: "完了" }], stop_reason: "end_turn" },
+      },
+    ]);
+    const sessionPath = join(projectsRoot, toProjectFolderName(worktreePath), `${sessionId}.jsonl`);
+    const sessionStat = await stat(sessionPath);
+    const storage = new Map<string, string>();
+    const cacheKey = `worktree-deck.claude-titles-cache.v2:${Buffer.from(projectsRoot).toString("base64")}`;
+    storage.set(
+      cacheKey,
+      JSON.stringify({
+        cachedAt: Date.now(),
+        files: {
+          [sessionPath]: {
+            mtimeMs: sessionStat.mtimeMs,
+            size: sessionStat.size,
+            updatedAt: sessionStat.mtimeMs,
+            startedAt: null,
+            title: "idle の完了セッション",
+            latestMessage: "🤖 古いキャッシュ",
+            status: "working",
+            cwds: [worktreePath],
+            isWaitingForUser: true,
+          },
+        },
+      }),
+    );
+    vi.spyOn(LocalStorage, "getItem").mockImplementation(async (key: string) => storage.get(key) ?? null);
+    vi.spyOn(LocalStorage, "setItem").mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+    await writeLiveSession(`${process.pid}.json`, {
+      pid: process.pid,
+      sessionId,
+      cwd: worktreePath,
+      status: "idle",
+      updatedAt: Date.now(),
+    });
+
+    const result = await loadClaudeTitlesForPaths({ paths: [worktreePath], env: {}, homeDir: root });
+
+    expect(result.get(worktreePath)?.[0]).toMatchObject({
+      title: "idle の完了セッション",
+      status: "done",
+      isWaitingForUser: false,
+    });
   });
 
   it("対応フォルダが無ければ空を返す", async () => {

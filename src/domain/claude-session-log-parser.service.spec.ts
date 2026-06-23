@@ -80,6 +80,16 @@ describe("claudeSessionLogParserService", () => {
     expect(result.status).toBe("done");
   });
 
+  it("tool_result が対応する tool_use より先に出ても pending に戻さない", () => {
+    const result = parseLines([
+      userLine("調べて"),
+      userLine([{ type: "tool_result", tool_use_id: "t1", content: "結果" }]),
+      assistantLine([{ type: "tool_use", id: "t1", name: "Read" }], "tool_use"),
+      assistantLine([{ type: "text", text: "終わり" }], "end_turn"),
+    ]);
+    expect(result.status).toBe("done");
+  });
+
   it("AskUserQuestion が未解決なら isWaitingForUser かつ working", () => {
     const result = parseLines([
       userLine("やって"),

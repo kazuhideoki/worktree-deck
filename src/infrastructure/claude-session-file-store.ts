@@ -54,7 +54,7 @@ const USER_WAITING_REASONS = new Set<string>(["permission prompt", "sandbox requ
 /**
  * Claude タイトルキャッシュのキー接頭辞
  */
-const TITLES_CACHE_KEY_PREFIX = "worktree-deck.claude-titles-cache.v1";
+const TITLES_CACHE_KEY_PREFIX = "worktree-deck.claude-titles-cache.v2";
 
 /**
  * working を done 扱いにする経過日数を取得する
@@ -203,9 +203,9 @@ function normalizeLiveSession(value: unknown): ClaudeLiveSession | null {
 }
 
 /**
- * sessions/*.json からライブの waiting セッションを読む
+ * sessions/*.json から生存中のライブセッションを読む
  */
-async function loadWaitingLiveSessions(sessionsRoot: string | null): Promise<ClaudeLiveSession[]> {
+async function loadLiveSessions(sessionsRoot: string | null): Promise<ClaudeLiveSession[]> {
   if (!sessionsRoot || !existsSync(sessionsRoot)) {
     return [];
   }
@@ -223,9 +223,7 @@ async function loadWaitingLiveSessions(sessionsRoot: string | null): Promise<Cla
     try {
       const raw = await fs.readFile(join(sessionsRoot, entry.name), "utf8");
       const session = normalizeLiveSession(JSON.parse(raw) as unknown);
-      // permission prompt / sandbox request のみ「ユーザー待ち」とする
-      // (dialog open: /resume 等のメニュー、input needed: 単なる入力待ち、worker request は除外)
-      if (session?.status === "waiting" && session.waitingFor != null && USER_WAITING_REASONS.has(session.waitingFor)) {
+      if (session) {
         sessions.push(session);
       }
     } catch {
@@ -355,10 +353,15 @@ function resolveSessionIdFromLogPath(sessionPath: string): string {
  */
 function applyWaitingLiveSessions(args: {
   titlesByPath: Map<string, Map<string, WorktreeTitle>>;
-  waitingSessions: ClaudeLiveSession[];
+  liveSessions: ClaudeLiveSession[];
   pathEntries: ReturnType<typeof sessionLogParserService.buildPathEntries>;
 }): void {
-  for (const session of args.waitingSessions) {
+  for (const session of args.liveSessions) {
+    // permission prompt / sandbox request のみ「ユーザー待ち」とする
+    // (dialog open: /resume 等のメニュー、input needed: 単なる入力待ち、worker request は除外)
+    if (session.status !== "waiting" || session.waitingFor == null || !USER_WAITING_REASONS.has(session.waitingFor)) {
+      continue;
+    }
     const matchedPath = sessionLogParserService.matchPath(session.cwd, args.pathEntries);
     if (!matchedPath) {
       continue;
@@ -373,6 +376,36 @@ function applyWaitingLiveSessions(args: {
     );
     if (matchedEntry) {
       matchedEntry[1].isWaitingForUser = true;
+    }
+  }
+}
+
+/**
+ * idle のライブセッションは cached working を done に補正する
+ */
+function applyIdleAsDoneLiveSessions(args: {
+  titlesByPath: Map<string, Map<string, WorktreeTitle>>;
+  liveSessions: ClaudeLiveSession[];
+  pathEntries: ReturnType<typeof sessionLogParserService.buildPathEntries>;
+}): void {
+  for (const session of args.liveSessions) {
+    if (session.status !== "idle") {
+      continue;
+    }
+    const matchedPath = sessionLogParserService.matchPath(session.cwd, args.pathEntries);
+    if (!matchedPath) {
+      continue;
+    }
+    const entries = args.titlesByPath.get(matchedPath);
+    if (!entries) {
+      continue;
+    }
+    const matchedEntry = Array.from(entries.entries()).find(
+      ([sessionPath]) => resolveSessionIdFromLogPath(sessionPath) === session.sessionId,
+    );
+    if (matchedEntry && matchedEntry[1].status === "working") {
+      matchedEntry[1].status = "done";
+      matchedEntry[1].isWaitingForUser = false;
     }
   }
 }
@@ -405,6 +438,7 @@ export async function loadClaudeTitlesForPaths(args: {
   }
 
   const pathEntries = sessionLogParserService.buildPathEntries(args.paths);
+  const liveSessions = await loadLiveSessions(sessionsRoot);
   const cacheKey = buildTitlesCacheKey(projectsRoot);
   const cachedStorage = await loadTitlesCacheStorage(cacheKey);
   const cachedFiles = cachedStorage?.files ?? {};
@@ -489,7 +523,12 @@ export async function loadClaudeTitlesForPaths(args: {
 
   applyWaitingLiveSessions({
     titlesByPath,
-    waitingSessions: await loadWaitingLiveSessions(sessionsRoot),
+    liveSessions,
+    pathEntries,
+  });
+  applyIdleAsDoneLiveSessions({
+    titlesByPath,
+    liveSessions,
     pathEntries,
   });
 
