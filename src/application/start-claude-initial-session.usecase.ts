@@ -1,0 +1,80 @@
+/**
+ * Claude モデル alias の選択値
+ *
+ * "default" は `--model` を渡さず CLI 既定モデルを使うことを表す。
+ */
+export type ClaudeModelAlias = "default" | "opus" | "sonnet" | "haiku";
+
+/**
+ * Claude permission mode の選択値（`claude --permission-mode` に対応）
+ *
+ * - bypassPermissions = 全許可（自律実行）
+ * - acceptEdits = 編集のみ自動許可
+ * - plan = プランモード
+ * - default = 既定（都度確認だが -p では確認できず拒否扱い）
+ */
+export type ClaudePermissionMode = "default" | "acceptEdits" | "bypassPermissions" | "plan";
+
+/**
+ * 初回 Claude セッションに適用するメタ情報
+ */
+export type ClaudeInitialSessionMetadata = {
+  model: ClaudeModelAlias;
+  permissionMode: ClaudePermissionMode;
+};
+
+/**
+ * Claude モデル選択肢
+ */
+export const CLAUDE_MODEL_OPTIONS: readonly ClaudeModelAlias[] = ["default", "opus", "sonnet", "haiku"];
+
+/**
+ * Claude permission mode 選択肢（自律実行を既定に並べる）
+ */
+export const CLAUDE_PERMISSION_MODE_OPTIONS: readonly ClaudePermissionMode[] = [
+  "bypassPermissions",
+  "acceptEdits",
+  "plan",
+  "default",
+];
+
+/**
+ * Claude 初回セッションの既定メタ情報
+ *
+ * Auto Start はバックグラウンド自律実行なので、編集もコマンドも進められる
+ * bypassPermissions を既定にする（-p では都度承認ができないため）。
+ */
+export const DEFAULT_CLAUDE_INITIAL_SESSION_METADATA: ClaudeInitialSessionMetadata = {
+  model: "default",
+  permissionMode: "bypassPermissions",
+};
+
+/**
+ * model alias を有効値へ正規化する
+ */
+export function normalizeClaudeModel(value: string): ClaudeModelAlias {
+  const trimmed = value.trim();
+  return CLAUDE_MODEL_OPTIONS.includes(trimmed as ClaudeModelAlias)
+    ? (trimmed as ClaudeModelAlias)
+    : DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.model;
+}
+
+/**
+ * permission mode を有効値へ正規化する
+ */
+export function normalizeClaudePermissionMode(value: string): ClaudePermissionMode {
+  const trimmed = value.trim();
+  return CLAUDE_PERMISSION_MODE_OPTIONS.includes(trimmed as ClaudePermissionMode)
+    ? (trimmed as ClaudePermissionMode)
+    : DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.permissionMode;
+}
+
+/**
+ * UI 由来のメタ情報をセッション開始に使う値へ正規化する
+ */
+export function normalizeClaudeMetadata(metadata: ClaudeInitialSessionMetadata): ClaudeInitialSessionMetadata {
+  return {
+    model: normalizeClaudeModel(metadata.model),
+    permissionMode: normalizeClaudePermissionMode(metadata.permissionMode),
+  };
+}

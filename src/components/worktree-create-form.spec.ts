@@ -37,9 +37,23 @@ describe("buildCreateWorktreeFormItemOrder", () => {
       "baseBranch",
       "openApp",
       "spacing",
+      "provider",
       "reasoningEffort",
       "model",
       "serviceTier",
+      "permissions",
+    ]);
+  });
+
+  it("Claude(cc) provider では画像添付と Codex 固有項目を出さず model と permissions のみ表示する", () => {
+    expect(buildCreateWorktreeFormItemOrder({ autoStart: true, hasBaseBranchError: false, provider: "cc" })).toEqual([
+      "initialPrompt",
+      "repoRoot",
+      "baseBranch",
+      "openApp",
+      "spacing",
+      "provider",
+      "model",
       "permissions",
     ]);
   });
@@ -71,6 +85,7 @@ describe("buildCreateWorktreeFormItemOrder", () => {
       "baseBranchError",
       "openApp",
       "spacing",
+      "provider",
       "reasoningEffort",
       "model",
       "serviceTier",
@@ -292,6 +307,9 @@ describe("resetCreateWorktreeFormDraftStorage", () => {
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.autoStart);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.initialPrompt);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.imagePathsText);
+    expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.provider);
+    expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeModel);
+    expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudePermissions);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.model);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.serviceTier);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.reasoningEffort);
@@ -302,6 +320,6 @@ describe("resetCreateWorktreeFormDraftStorage", () => {
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.webSearch);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.branch);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.openApp);
-    expect(removeItemMock).toHaveBeenCalledTimes(13);
+    expect(removeItemMock).toHaveBeenCalledTimes(16);
   });
 });

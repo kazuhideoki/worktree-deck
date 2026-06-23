@@ -18,6 +18,7 @@ function buildCommand(overrides: Partial<StartWorktreeAutoStartJobCommand> = {})
     scriptPath: "/tmp/dev-flow/assets/git_worktree_wrap.sh",
     mapValue: "app-a",
     openApp: "zed",
+    provider: "ca",
     metadata: {
       model: "gpt-5.5",
       serviceTier: "default",
@@ -28,7 +29,7 @@ function buildCommand(overrides: Partial<StartWorktreeAutoStartJobCommand> = {})
       webSearch: "cached",
     },
     ...overrides,
-  };
+  } as StartWorktreeAutoStartJobCommand;
 }
 
 /**
@@ -55,6 +56,24 @@ describe("start", () => {
       jobId: "job-1",
       statePath: "/tmp/storage/auto-start-jobs/job-1.json",
     });
+  });
+
+  it("Claude(cc) provider の claude メタ情報を依存ポートへ渡す", async () => {
+    const command = buildCommand({
+      provider: "cc",
+      claude: { model: "opus", permissionMode: "bypassPermissions" },
+      metadata: undefined,
+    } as Partial<StartWorktreeAutoStartJobCommand>);
+    const dependencies = buildDependencies();
+
+    await startWorktreeAutoStartJobUsecase.start({ command, dependencies });
+
+    expect(dependencies.startJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "cc",
+        claude: { model: "opus", permissionMode: "bypassPermissions" },
+      }),
+    );
   });
 
   it("画像パスの空白を除いて依存ポートへ渡す", async () => {
