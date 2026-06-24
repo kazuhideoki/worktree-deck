@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildPullRequestListArgs,
   createDefaultCreateWorktreePullRequestDependencies,
   parsePullRequestListJson,
   resolveFirstCommitTitle,
@@ -92,6 +93,21 @@ describe("resolveFirstCommitTitle", () => {
     const title = await resolveFirstCommitTitle({ repoRoot, baseRef: "main", headRef: "feature/empty" });
 
     expect(title).toBeNull();
+  });
+});
+
+describe("buildPullRequestListArgs", () => {
+  it("closed / merged PR も取得するため state all を指定する", () => {
+    expect(buildPullRequestListArgs("feature/login")).toEqual([
+      "pr",
+      "list",
+      "--head",
+      "feature/login",
+      "--state",
+      "all",
+      "--json",
+      "number,title,url,state,isDraft,reviewDecision,headRefName,baseRefName",
+    ]);
   });
 });
 

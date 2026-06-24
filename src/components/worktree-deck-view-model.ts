@@ -558,19 +558,32 @@ function formatLatestMessageBlock(
 }
 
 /**
- * PR 状態を詳細表示向けに短く整形する
+ * GitHub enum 由来の状態名を詳細表示向けに短く整形する
+ */
+function formatPullRequestStatusLabel(value: string | null): string {
+  const normalized = value?.trim().toUpperCase() ?? "";
+  if (!normalized || normalized === "UNKNOWN") {
+    return "";
+  }
+  const label = normalized.toLowerCase().replace(/_/g, " ");
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+}
+
+/**
+ * PR の lifecycle 状態を詳細表示向けに短く整形する
  */
 function formatPullRequestState(pullRequest: WorktreePullRequestInfo): string {
   if (pullRequest.isDraft) {
     return "Draft";
   }
-  const normalized = pullRequest.state.trim().toUpperCase();
-  if (!normalized || normalized === "UNKNOWN") {
-    return "";
-  }
-  return normalized.toLowerCase().replace(/(^|_)([a-z])/g, (_match, prefix: string, letter: string) => {
-    return `${prefix === "_" ? " " : ""}${letter.toUpperCase()}`;
-  });
+  return formatPullRequestStatusLabel(pullRequest.state);
+}
+
+/**
+ * PR の review 判定を詳細表示向けに短く整形する
+ */
+function formatPullRequestReviewDecision(pullRequest: WorktreePullRequestInfo): string {
+  return formatPullRequestStatusLabel(pullRequest.reviewDecision);
 }
 
 /**
@@ -581,7 +594,9 @@ function formatPullRequestLink(pullRequest: WorktreePullRequestInfo): string | n
     return null;
   }
   const state = formatPullRequestState(pullRequest);
-  const label = ["PR", `#${pullRequest.number}`, state].filter(Boolean).join("\u00A0");
+  const reviewDecision = formatPullRequestReviewDecision(pullRequest);
+  const status = [state, reviewDecision].filter(Boolean).join(" - ");
+  const label = ["PR", `#${pullRequest.number}`, status].filter(Boolean).join("\u00A0");
   return `[${label}](${pullRequest.url})`;
 }
 

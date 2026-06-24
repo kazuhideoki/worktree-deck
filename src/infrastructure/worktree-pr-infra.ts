@@ -43,6 +43,13 @@ const PULL_REQUEST_LIST_JSON_FIELDS = [
 ].join(",");
 
 /**
+ * branch に紐づく全状態の PR 一覧取得引数を組み立てる
+ */
+export function buildPullRequestListArgs(branch: string): string[] {
+  return ["pr", "list", "--head", branch, "--state", "all", "--json", PULL_REQUEST_LIST_JSON_FIELDS];
+}
+
+/**
  * PATHに追加する代表的な検索ディレクトリ
  */
 const DEFAULT_COMMAND_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
@@ -204,17 +211,13 @@ async function fetchPullRequestInfoForBranch(args: {
   branch: string;
 }): Promise<WorktreePullRequestInfo[]> {
   try {
-    const { stdout } = await execFileAsync(
-      args.command,
-      ["pr", "list", "--head", args.branch, "--json", PULL_REQUEST_LIST_JSON_FIELDS],
-      {
-        cwd: args.worktreePath,
-        env: {
-          ...process.env,
-          PATH: args.envPath,
-        },
+    const { stdout } = await execFileAsync(args.command, buildPullRequestListArgs(args.branch), {
+      cwd: args.worktreePath,
+      env: {
+        ...process.env,
+        PATH: args.envPath,
       },
-    );
+    });
     return parsePullRequestListJson(stdout);
   } catch (error) {
     if (isMissingExternalCommandError(error)) {

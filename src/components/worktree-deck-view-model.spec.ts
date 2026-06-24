@@ -228,6 +228,32 @@ describe("worktree-deck-view-model", () => {
     );
   });
 
+  it("PR リンクに review status を lifecycle status と併記する", () => {
+    const markdown = buildDetailMarkdown({
+      title: "feature-a",
+      isTitlesLoading: false,
+      mergeStatus: "synced",
+      baseRef: "main",
+      aheadCount: 1,
+      behindCount: 0,
+      pullRequests: [
+        {
+          number: 42,
+          title: "Add feature",
+          url: "https://github.com/example/repo/pull/42",
+          state: "MERGED",
+          isDraft: false,
+          reviewDecision: "APPROVED",
+          headRefName: "feature-a",
+          baseRefName: "main",
+        },
+      ],
+      titles: [buildTitleEntry({ title: "Implement feature", latestMessage: "Done", updatedAt: 100 })],
+    });
+
+    expect(markdown).toContain("[PR\u00A0#42\u00A0Merged - Approved](https://github.com/example/repo/pull/42)");
+  });
+
   it("Git 情報の同じ行末に複数 PR リンクを表示する", () => {
     const markdown = buildDetailMarkdown({
       title: "feature-a",
