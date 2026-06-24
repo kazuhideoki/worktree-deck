@@ -1,9 +1,7 @@
 /**
  * Claude モデル alias の選択値
- *
- * "default" は `--model` を渡さず CLI 既定モデルを使うことを表す。
  */
-export type ClaudeModelAlias = "default" | "opus" | "sonnet" | "haiku";
+export type ClaudeModelAlias = "opus" | "sonnet" | "haiku";
 
 /**
  * Claude permission mode の選択値（`claude --permission-mode` に対応）
@@ -26,7 +24,7 @@ export type ClaudeInitialSessionMetadata = {
 /**
  * Claude モデル選択肢
  */
-export const CLAUDE_MODEL_OPTIONS: readonly ClaudeModelAlias[] = ["default", "opus", "sonnet", "haiku"];
+export const CLAUDE_MODEL_OPTIONS: readonly ClaudeModelAlias[] = ["opus", "sonnet", "haiku"];
 
 /**
  * Claude permission mode 選択肢（自律実行を既定に並べる）
@@ -45,7 +43,7 @@ export const CLAUDE_PERMISSION_MODE_OPTIONS: readonly ClaudePermissionMode[] = [
  * bypassPermissions を既定にする（-p では都度承認ができないため）。
  */
 export const DEFAULT_CLAUDE_INITIAL_SESSION_METADATA: ClaudeInitialSessionMetadata = {
-  model: "default",
+  model: "opus",
   permissionMode: "bypassPermissions",
 };
 

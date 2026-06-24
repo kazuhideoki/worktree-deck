@@ -13,6 +13,10 @@ describe("normalizeClaudeModel", () => {
     expect(normalizeClaudeModel(" sonnet ")).toBe("sonnet");
   });
 
+  it("default は選択肢として扱わず既定モデルへ丸める", () => {
+    expect(normalizeClaudeModel("default")).toBe("opus");
+  });
+
   it("未知の値は既定モデルへ丸める", () => {
     expect(normalizeClaudeModel("claude-opus-4-8")).toBe(DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.model);
     expect(normalizeClaudeModel("")).toBe(DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.model);

@@ -139,12 +139,12 @@ Codex 同様に Claude でもバックグラウンド自動起動に対応する
 
 - `StartWorktreeAutoStartJobCommand` を provider 判別共用体にした（`ca`: `metadata` / `cc`: `claude`）。
 - フォームに Agent ドロップダウン（Codex/Claude）を追加。cc 選択時は Codex 固有項目（reasoning effort / fast mode）を隠し、
-  Claude の Model（`default`/`opus`/`sonnet`/`haiku`）と Permissions（`bypassPermissions`/`acceptEdits`/`plan`/`default`）だけを出す。
+  Claude の Model（`opus`/`sonnet`/`haiku`、既定は `opus`）と Permissions（`bypassPermissions`/`acceptEdits`/`plan`/`default`）だけを出す。
 - worker は `payload.provider === "cc"` で `startClaudeSession` に分岐する。
 
 ### 10.2 セッション開始方式（SDK ではなく CLI）
 
-- `claude -p --output-format stream-json --verbose [--model <alias>] --permission-mode <mode>` を
+- `claude -p --output-format stream-json --verbose --model <alias> --permission-mode <mode>` を
   `cwd: worktreePath` で spawn し、prompt は stdin に渡す。
 - `--output-format=stream-json` は `--verbose` 必須。
 - `cwd=worktreePath` により session JSONL が `~/.claude/projects/<cwd変換>/<id>.jsonl` に作られ、

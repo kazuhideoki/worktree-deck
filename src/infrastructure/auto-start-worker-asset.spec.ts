@@ -16,6 +16,13 @@ describe("auto_start_worker.js", () => {
     expect(source).toContain('args.push("--image", imagePath)');
   });
 
+  it("Claude セッション開始時は既定モデル opus を --model で明示する", async () => {
+    const source = await readAutoStartWorkerAsset();
+
+    expect(source).toContain('const CLAUDE_DEFAULT_MODEL = "opus"');
+    expect(source).toContain('args.push("--model", model)');
+  });
+
   it("Codex app-server の local image 入力形式を使う", async () => {
     const source = await readAutoStartWorkerAsset();
 

@@ -27,6 +27,7 @@ const REPOSITORY_MAPPING_STORAGE_FILE = "repository-mappings.json";
 const UNSAFE_WORKTREE_PATH_SEGMENT_PATTERN = /[<>:"\\|?*\u0000-\u001f]+/g;
 const SESSION_TITLE_MAX_LENGTH_CHARS = 80;
 const CLAUDE_MODEL_ALIASES = ["opus", "sonnet", "haiku"];
+const CLAUDE_DEFAULT_MODEL = "opus";
 const CLAUDE_PERMISSION_MODES = ["default", "acceptEdits", "bypassPermissions", "plan"];
 const CLAUDE_DEFAULT_PERMISSION_MODE = "bypassPermissions";
 
@@ -1016,11 +1017,11 @@ function buildCodexTurnInput(payload) {
 }
 
 /**
- * Claude model alias を `--model` 引数値へ正規化する（default は省略=null）
+ * Claude model alias を `--model` 引数値へ正規化する
  */
 function normalizeClaudeModelArg(value) {
   const trimmed = typeof value === "string" ? value.trim() : "";
-  return CLAUDE_MODEL_ALIASES.includes(trimmed) ? trimmed : null;
+  return CLAUDE_MODEL_ALIASES.includes(trimmed) ? trimmed : CLAUDE_DEFAULT_MODEL;
 }
 
 /**
@@ -1085,9 +1086,7 @@ async function startClaudeSession(payload, worktreePath, onSessionStarted) {
   const claudeMetadata = payload.claude && typeof payload.claude === "object" ? payload.claude : {};
   const args = ["-p", "--output-format", "stream-json", "--verbose"];
   const model = normalizeClaudeModelArg(claudeMetadata.model);
-  if (model) {
-    args.push("--model", model);
-  }
+  args.push("--model", model);
   args.push("--permission-mode", normalizeClaudePermissionModeArg(claudeMetadata.permissionMode));
   const imagePaths = Array.isArray(payload.imagePaths)
     ? payload.imagePaths.filter((path) => typeof path === "string" && path.trim()).map((path) => path.trim())
