@@ -27,12 +27,15 @@ import {
 import { createWorktreeUsecase, type WorktreeCreateContext } from "../application/create-worktree.usecase";
 import {
   CLAUDE_MODEL_OPTIONS,
+  CLAUDE_REASONING_EFFORT_OPTIONS,
   DEFAULT_CLAUDE_INITIAL_SESSION_METADATA,
   normalizeClaudeModel,
   normalizeClaudePermissionMode,
+  normalizeClaudeReasoningEffort,
   type ClaudeInitialSessionMetadata,
   type ClaudeModelAlias,
   type ClaudePermissionMode,
+  type ClaudeReasoningEffort,
 } from "../application/start-claude-initial-session.usecase";
 import { startWorktreeAutoStartJobUsecase } from "../application/start-worktree-auto-start-job.usecase";
 import {
@@ -115,6 +118,7 @@ export const CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS = {
   imagePathsText: "worktree-deck.create-worktree-form.image-paths-text",
   provider: "worktree-deck.create-worktree-form.provider",
   claudeModel: "worktree-deck.create-worktree-form.claude-model",
+  claudeReasoningEffort: "worktree-deck.create-worktree-form.claude-reasoning-effort",
   claudePermissions: "worktree-deck.create-worktree-form.claude-permissions",
   model: "worktree-deck.create-worktree-form.codex-model",
   serviceTier: "worktree-deck.create-worktree-form.codex-service-tier",
@@ -272,6 +276,10 @@ export function CreateWorktreeForm({
   const [claudeModelDraft, setClaudeModelDraft] = useCachedState<ClaudeModelAlias>(
     CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeModel,
     DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.model,
+  );
+  const [claudeReasoningEffortDraft, setClaudeReasoningEffortDraft] = useCachedState<ClaudeReasoningEffort>(
+    CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeReasoningEffort,
+    DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.reasoningEffort,
   );
   const [claudePermissionDraft, setClaudePermissionDraft] = useCachedState<ClaudePermissionMode>(
     CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudePermissions,
@@ -1068,6 +1076,23 @@ export function CreateWorktreeForm({
               );
             }
             if (itemId === CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort) {
+              if (providerDraft === "cc") {
+                return (
+                  <Form.Dropdown
+                    key={itemId}
+                    id="reasoningEffort"
+                    ref={reasoningEffortRef}
+                    title="Reasoning Effort"
+                    value={normalizeClaudeReasoningEffort(claudeReasoningEffortDraft)}
+                    onChange={(value) => setClaudeReasoningEffortDraft(normalizeClaudeReasoningEffort(value))}
+                    onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort)}
+                  >
+                    {CLAUDE_REASONING_EFFORT_OPTIONS.map((effort) => (
+                      <Form.Dropdown.Item key={effort} value={effort} title={effort} />
+                    ))}
+                  </Form.Dropdown>
+                );
+              }
               return (
                 <Form.Dropdown
                   key={itemId}
@@ -1665,6 +1690,7 @@ export async function resetCreateWorktreeFormDraftStorage(
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.imagePathsText),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.provider),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeModel),
+    dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeReasoningEffort),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudePermissions),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.model),
     dependencies.removeItem(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.serviceTier),
@@ -1724,6 +1750,7 @@ function buildCodexInitialSessionMetadata(
 function buildClaudeInitialSessionMetadata(values: CreateWorktreeFormValues): ClaudeInitialSessionMetadata {
   return {
     model: normalizeClaudeModel(values.model),
+    reasoningEffort: normalizeClaudeReasoningEffort(values.reasoningEffort),
     permissionMode: normalizeClaudePermissionMode(values.permissions),
   };
 }
@@ -1835,7 +1862,11 @@ export function buildCreateWorktreeFormItemOrder(args: {
         CREATE_WORKTREE_FORM_ITEM_IDS.permissions,
       );
     } else {
-      items.push(CREATE_WORKTREE_FORM_ITEM_IDS.model, CREATE_WORKTREE_FORM_ITEM_IDS.permissions);
+      items.push(
+        CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort,
+        CREATE_WORKTREE_FORM_ITEM_IDS.model,
+        CREATE_WORKTREE_FORM_ITEM_IDS.permissions,
+      );
     }
     return items;
   }

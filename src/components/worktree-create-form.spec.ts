@@ -45,7 +45,7 @@ describe("buildCreateWorktreeFormItemOrder", () => {
     ]);
   });
 
-  it("Claude(cc) provider では Codex 固有項目を出さず画像添付と model と permissions のみ表示する", () => {
+  it("Claude(cc) provider では Claude 用の reasoning effort と model と permissions を表示する", () => {
     expect(buildCreateWorktreeFormItemOrder({ autoStart: true, hasBaseBranchError: false, provider: "cc" })).toEqual([
       "initialPrompt",
       "imagePaths",
@@ -54,6 +54,7 @@ describe("buildCreateWorktreeFormItemOrder", () => {
       "openApp",
       "spacing",
       "provider",
+      "reasoningEffort",
       "model",
       "permissions",
     ]);
@@ -310,6 +311,7 @@ describe("resetCreateWorktreeFormDraftStorage", () => {
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.imagePathsText);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.provider);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeModel);
+    expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudeReasoningEffort);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.claudePermissions);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.model);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.serviceTier);
@@ -321,6 +323,6 @@ describe("resetCreateWorktreeFormDraftStorage", () => {
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.webSearch);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.branch);
     expect(removeItemMock).toHaveBeenCalledWith(CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS.openApp);
-    expect(removeItemMock).toHaveBeenCalledTimes(16);
+    expect(removeItemMock).toHaveBeenCalledTimes(17);
   });
 });

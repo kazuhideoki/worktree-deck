@@ -61,7 +61,7 @@ describe("start", () => {
   it("Claude(cc) provider の claude メタ情報を依存ポートへ渡す", async () => {
     const command = buildCommand({
       provider: "cc",
-      claude: { model: "opus", permissionMode: "bypassPermissions" },
+      claude: { model: "opus", reasoningEffort: "medium", permissionMode: "bypassPermissions" },
       metadata: undefined,
     } as Partial<StartWorktreeAutoStartJobCommand>);
     const dependencies = buildDependencies();
@@ -71,7 +71,7 @@ describe("start", () => {
     expect(dependencies.startJob).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "cc",
-        claude: { model: "opus", permissionMode: "bypassPermissions" },
+        claude: { model: "opus", reasoningEffort: "medium", permissionMode: "bypassPermissions" },
       }),
     );
   });

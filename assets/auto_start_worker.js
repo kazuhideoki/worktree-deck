@@ -28,6 +28,8 @@ const UNSAFE_WORKTREE_PATH_SEGMENT_PATTERN = /[<>:"\\|?*\u0000-\u001f]+/g;
 const SESSION_TITLE_MAX_LENGTH_CHARS = 80;
 const CLAUDE_MODEL_ALIASES = ["opus", "sonnet", "haiku"];
 const CLAUDE_DEFAULT_MODEL = "opus";
+const CLAUDE_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+const CLAUDE_DEFAULT_REASONING_EFFORT = "medium";
 const CLAUDE_PERMISSION_MODES = ["default", "acceptEdits", "bypassPermissions", "plan"];
 const CLAUDE_DEFAULT_PERMISSION_MODE = "bypassPermissions";
 
@@ -1025,6 +1027,14 @@ function normalizeClaudeModelArg(value) {
 }
 
 /**
+ * Claude reasoning effort を `--effort` 引数値へ正規化する
+ */
+function normalizeClaudeReasoningEffortArg(value) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return CLAUDE_REASONING_EFFORTS.includes(trimmed) ? trimmed : CLAUDE_DEFAULT_REASONING_EFFORT;
+}
+
+/**
  * Claude permission mode を有効値へ正規化する
  */
 function normalizeClaudePermissionModeArg(value) {
@@ -1087,6 +1097,7 @@ async function startClaudeSession(payload, worktreePath, onSessionStarted) {
   const args = ["-p", "--output-format", "stream-json", "--verbose"];
   const model = normalizeClaudeModelArg(claudeMetadata.model);
   args.push("--model", model);
+  args.push("--effort", normalizeClaudeReasoningEffortArg(claudeMetadata.reasoningEffort));
   args.push("--permission-mode", normalizeClaudePermissionModeArg(claudeMetadata.permissionMode));
   const imagePaths = Array.isArray(payload.imagePaths)
     ? payload.imagePaths.filter((path) => typeof path === "string" && path.trim()).map((path) => path.trim())

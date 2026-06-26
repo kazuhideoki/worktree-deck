@@ -4,6 +4,11 @@
 export type ClaudeModelAlias = "opus" | "sonnet" | "haiku";
 
 /**
+ * Claude reasoning effort の選択値（`claude --effort` に対応）
+ */
+export type ClaudeReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/**
  * Claude permission mode の選択値（`claude --permission-mode` に対応）
  *
  * - bypassPermissions = 全許可（自律実行）
@@ -18,6 +23,7 @@ export type ClaudePermissionMode = "default" | "acceptEdits" | "bypassPermission
  */
 export type ClaudeInitialSessionMetadata = {
   model: ClaudeModelAlias;
+  reasoningEffort: ClaudeReasoningEffort;
   permissionMode: ClaudePermissionMode;
 };
 
@@ -25,6 +31,17 @@ export type ClaudeInitialSessionMetadata = {
  * Claude モデル選択肢
  */
 export const CLAUDE_MODEL_OPTIONS: readonly ClaudeModelAlias[] = ["opus", "sonnet", "haiku"];
+
+/**
+ * Claude reasoning effort 選択肢
+ */
+export const CLAUDE_REASONING_EFFORT_OPTIONS: readonly ClaudeReasoningEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 
 /**
  * Claude permission mode 選択肢（自律実行を既定に並べる）
@@ -44,6 +61,7 @@ export const CLAUDE_PERMISSION_MODE_OPTIONS: readonly ClaudePermissionMode[] = [
  */
 export const DEFAULT_CLAUDE_INITIAL_SESSION_METADATA: ClaudeInitialSessionMetadata = {
   model: "opus",
+  reasoningEffort: "medium",
   permissionMode: "bypassPermissions",
 };
 
@@ -55,6 +73,16 @@ export function normalizeClaudeModel(value: string): ClaudeModelAlias {
   return CLAUDE_MODEL_OPTIONS.includes(trimmed as ClaudeModelAlias)
     ? (trimmed as ClaudeModelAlias)
     : DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.model;
+}
+
+/**
+ * reasoning effort を有効値へ正規化する
+ */
+export function normalizeClaudeReasoningEffort(value: string): ClaudeReasoningEffort {
+  const trimmed = value.trim();
+  return CLAUDE_REASONING_EFFORT_OPTIONS.includes(trimmed as ClaudeReasoningEffort)
+    ? (trimmed as ClaudeReasoningEffort)
+    : DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.reasoningEffort;
 }
 
 /**
@@ -73,6 +101,7 @@ export function normalizeClaudePermissionMode(value: string): ClaudePermissionMo
 export function normalizeClaudeMetadata(metadata: ClaudeInitialSessionMetadata): ClaudeInitialSessionMetadata {
   return {
     model: normalizeClaudeModel(metadata.model),
+    reasoningEffort: normalizeClaudeReasoningEffort(metadata.reasoningEffort),
     permissionMode: normalizeClaudePermissionMode(metadata.permissionMode),
   };
 }

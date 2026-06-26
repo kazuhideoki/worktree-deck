@@ -23,6 +23,15 @@ describe("auto_start_worker.js", () => {
     expect(source).toContain('args.push("--model", model)');
   });
 
+  it("Claude セッション開始時は reasoning effort を --effort で渡す", async () => {
+    const source = await readAutoStartWorkerAsset();
+
+    expect(source).toContain('const CLAUDE_DEFAULT_REASONING_EFFORT = "medium"');
+    expect(source).toContain(
+      'args.push("--effort", normalizeClaudeReasoningEffortArg(claudeMetadata.reasoningEffort))',
+    );
+  });
+
   it("Codex app-server の local image 入力形式を使う", async () => {
     const source = await readAutoStartWorkerAsset();
 

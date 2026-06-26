@@ -5,6 +5,7 @@ import {
   normalizeClaudeMetadata,
   normalizeClaudeModel,
   normalizeClaudePermissionMode,
+  normalizeClaudeReasoningEffort,
 } from "./start-claude-initial-session.usecase";
 
 describe("normalizeClaudeModel", () => {
@@ -34,10 +35,24 @@ describe("normalizeClaudePermissionMode", () => {
   });
 });
 
+describe("normalizeClaudeReasoningEffort", () => {
+  it("有効な effort はそのまま返す", () => {
+    expect(normalizeClaudeReasoningEffort("high")).toBe("high");
+    expect(normalizeClaudeReasoningEffort(" max ")).toBe("max");
+  });
+
+  it("未知の値は既定 effort へ丸める", () => {
+    expect(normalizeClaudeReasoningEffort("ultra")).toBe(DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.reasoningEffort);
+  });
+});
+
 describe("normalizeClaudeMetadata", () => {
   it("model と permissionMode を併せて正規化する", () => {
-    expect(normalizeClaudeMetadata({ model: " opus ", permissionMode: "yolo" as never })).toEqual({
+    expect(
+      normalizeClaudeMetadata({ model: " opus ", reasoningEffort: "max", permissionMode: "yolo" as never }),
+    ).toEqual({
       model: "opus",
+      reasoningEffort: "max",
       permissionMode: DEFAULT_CLAUDE_INITIAL_SESSION_METADATA.permissionMode,
     });
   });
