@@ -10,10 +10,13 @@ async function readAutoStartWorkerAsset(): Promise<string> {
 }
 
 describe("auto_start_worker.js", () => {
-  it("Claude セッション開始時に --image フラグで画像パスを渡す", async () => {
+  it("Claude セッション開始時に画像を stream-json の image content block で渡す", async () => {
     const source = await readAutoStartWorkerAsset();
 
-    expect(source).toContain('args.push("--image", imagePath)');
+    expect(source).toContain('args.push("--input-format", "stream-json")');
+    expect(source).toContain('blocks.push({ type: "image", source: { type: "base64", media_type: mediaType, data } })');
+    expect(source).toContain('content: [{ type: "text", text: initialPrompt }, ...imageContentBlocks]');
+    expect(source).not.toContain('args.push("--image", imagePath)');
   });
 
   it("Claude セッション開始時は既定モデル opus を --model で明示する", async () => {

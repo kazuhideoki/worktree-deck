@@ -6,7 +6,7 @@ const { mkdtemp, mkdir, readFile, rm, writeFile } = require("node:fs/promises");
 const { existsSync } = require("node:fs");
 const { get } = require("node:http");
 const { homedir, tmpdir } = require("node:os");
-const { delimiter, dirname, join, normalize } = require("node:path");
+const { delimiter, dirname, extname, join, normalize } = require("node:path");
 
 const AUTO_START_METADATA_GENERATION_PROMPT_HEADER = [
   "Generate concise metadata for this task.",
@@ -32,6 +32,13 @@ const CLAUDE_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const CLAUDE_DEFAULT_REASONING_EFFORT = "medium";
 const CLAUDE_PERMISSION_MODES = ["default", "acceptEdits", "bypassPermissions", "plan"];
 const CLAUDE_DEFAULT_PERMISSION_MODE = "bypassPermissions";
+const CLAUDE_IMAGE_MEDIA_TYPES = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
 
 /**
  * job の現在状態を読み込む
@@ -1087,6 +1094,47 @@ function buildClaudeErrorMessage(context) {
 }
 
 /**
+ * Claude の image content block に渡す media_type を拡張子から解決する
+ */
+function resolveClaudeImageMediaType(imagePath) {
+  return CLAUDE_IMAGE_MEDIA_TYPES[extname(imagePath).toLowerCase()] ?? null;
+}
+
+/**
+ * Claude の stream-json 入力用 image content block を組み立てる
+ */
+async function buildClaudeImageContentBlocks(imagePaths) {
+  const blocks = [];
+  for (const imagePath of imagePaths) {
+    const mediaType = resolveClaudeImageMediaType(imagePath);
+    if (!mediaType) {
+      throw new Error(`Unsupported Claude image extension: ${imagePath}`);
+    }
+    let data;
+    try {
+      data = await readFile(imagePath, "base64");
+    } catch {
+      throw new Error(`Failed to read Claude image attachment: ${imagePath}`);
+    }
+    blocks.push({ type: "image", source: { type: "base64", media_type: mediaType, data } });
+  }
+  return blocks;
+}
+
+/**
+ * Claude の stream-json 入力 1 行を構築する
+ */
+function buildClaudeStreamJsonInput(initialPrompt, imageContentBlocks) {
+  return `${JSON.stringify({
+    type: "user",
+    message: {
+      role: "user",
+      content: [{ type: "text", text: initialPrompt }, ...imageContentBlocks],
+    },
+  })}\n`;
+}
+
+/**
  * Claude 初回セッションを `claude -p` で開始し session_id を返す
  *
  * stream-json の system/init から session_id を取り出した時点で onSessionStarted を呼び、
@@ -1102,8 +1150,9 @@ async function startClaudeSession(payload, worktreePath, onSessionStarted) {
   const imagePaths = Array.isArray(payload.imagePaths)
     ? payload.imagePaths.filter((path) => typeof path === "string" && path.trim()).map((path) => path.trim())
     : [];
-  for (const imagePath of imagePaths) {
-    args.push("--image", imagePath);
+  const imageContentBlocks = await buildClaudeImageContentBlocks(imagePaths);
+  if (imageContentBlocks.length > 0) {
+    args.push("--input-format", "stream-json");
   }
 
   return new Promise((resolve, reject) => {
@@ -1210,7 +1259,9 @@ async function startClaudeSession(payload, worktreePath, onSessionStarted) {
     // claude が stdin を読まず終了した場合の EPIPE で worker を落とさない
     // （実際の成否は close / error ハンドラが確定する）
     child.stdin.on("error", () => {});
-    child.stdin.end(payload.initialPrompt);
+    child.stdin.end(
+      imageContentBlocks.length > 0 ? buildClaudeStreamJsonInput(payload.initialPrompt, imageContentBlocks) : payload.initialPrompt,
+    );
   });
 }
 
