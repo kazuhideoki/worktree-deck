@@ -46,6 +46,14 @@ type BuildSectionsWithMappingsOptions = {
 export type SectionEntryOrder = Map<string, number>;
 
 /**
+ * worktree アーカイブ分割後の section entry
+ */
+export type PartitionedArchiveEntries = {
+  visibleEntries: SectionEntry[];
+  archivedEntries: SectionEntry[];
+};
+
+/**
  * セッション状態の優先順位
  */
 const SESSION_STATUS_PRIORITY: Record<NonNullable<WorktreeTitle["status"]>, number> = {
@@ -348,6 +356,28 @@ export function resolveEntryItemId(entry: SectionEntry): string {
     return `origin:${entry.originPath}`;
   }
   return `worktree:${entry.item.path}`;
+}
+
+/**
+ * worktree entry だけをアーカイブ済みとして分割する
+ */
+export function partitionEntriesByWorktreeArchive(
+  entries: SectionEntry[],
+  archivedWorktreePaths: ReadonlySet<string>,
+): PartitionedArchiveEntries {
+  if (archivedWorktreePaths.size === 0) {
+    return { visibleEntries: entries, archivedEntries: [] };
+  }
+  const visibleEntries: SectionEntry[] = [];
+  const archivedEntries: SectionEntry[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "worktree" && archivedWorktreePaths.has(entry.item.path)) {
+      archivedEntries.push(entry);
+    } else {
+      visibleEntries.push(entry);
+    }
+  }
+  return { visibleEntries, archivedEntries };
 }
 
 /**

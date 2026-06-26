@@ -15,6 +15,7 @@ import {
   shouldBlockMergeFormForSyncedWorktree,
   buildMergeConfirmationMessage,
   buildOpenActionPlans,
+  buildWorktreeAccessories,
   formatOpenActionTitle,
   OPEN_ALTERNATE_APP_ACTION_INDEX,
   resolveAlternateOpenApp,
@@ -24,6 +25,7 @@ import {
   COPY_CLAUDE_RESUME_COMMAND_SHORTCUT,
   EDIT_TARGET_BRANCH_SHORTCUT,
   SHOW_DETAILS_SHORTCUT,
+  WORKTREE_ARCHIVE_SHORTCUT,
   shouldAutoOpenRepositoryMappingOnboarding,
   shouldSelectCodexSessionForOpenAction,
   shouldShowRepositoryMappingOnboardingEmptyState,
@@ -508,6 +510,23 @@ describe("worktree action shortcuts", () => {
   it("Claude resume コマンドコピーアクションは restore と重複しない cmd+shift+c を使う", () => {
     expect(COPY_CLAUDE_RESUME_COMMAND_SHORTCUT).toEqual({ modifiers: ["cmd", "shift"], key: "c" });
     expect(COPY_CLAUDE_RESUME_COMMAND_SHORTCUT).not.toEqual({ modifiers: ["cmd", "shift"], key: "r" });
+  });
+
+  it("worktree アーカイブ切り替えアクションは cmd+d を使う", () => {
+    expect(WORKTREE_ARCHIVE_SHORTCUT).toEqual({ modifiers: ["cmd"], key: "d" });
+  });
+
+  it("アーカイブ済み worktree は accessory に Archived tag を追加する", () => {
+    expect(buildWorktreeAccessories({ openApp: "zed", ideApp: "zed", isArchived: true })).toEqual([
+      { icon: { source: "icon", tintColor: "secondaryText" }, tooltip: "Archived" },
+      { icon: { source: "zed-icon.png" }, tooltip: "Zed IDE" },
+    ]);
+  });
+
+  it("通常 worktree は open app accessory だけを表示する", () => {
+    expect(buildWorktreeAccessories({ openApp: "codex-app", ideApp: "zed", isArchived: false })).toEqual([
+      { icon: { source: "codex-app-icon.png" }, tooltip: "Codex App" },
+    ]);
   });
 
   it("保存済みアプリが Zed のときは逆側の起動先として CA を返す", () => {

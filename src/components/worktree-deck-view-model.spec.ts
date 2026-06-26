@@ -7,6 +7,7 @@ import {
   buildSectionsWithMappings,
   buildSortedSectionEntries,
   formatBranchTitle,
+  partitionEntriesByWorktreeArchive,
   parseDisplayMode,
   resolveUnresolvedCodexThreadPaths,
   toggleDisplayMode,
@@ -539,6 +540,45 @@ describe("worktree-deck-view-model", () => {
 
     expect(entries).toHaveLength(1);
     expect(entries[0]?.kind).toBe("worktree");
+  });
+
+  it("worktree アーカイブは worktree entry だけを archived 側へ分割する", () => {
+    const entries = [
+      {
+        kind: "origin" as const,
+        originPath: "/repos/repo-a",
+        titles: [],
+        lastCommitAt: null,
+        branch: null,
+      },
+      {
+        kind: "worktree" as const,
+        item: buildWorktree({
+          repo: "repo-a",
+          path: "/tmp/repo-a~_~feature-a",
+          branch: "feature-a",
+          originPath: "/repos/repo-a",
+        }),
+      },
+      {
+        kind: "worktree" as const,
+        item: buildWorktree({
+          repo: "repo-a",
+          path: "/tmp/repo-a~_~feature-b",
+          branch: "feature-b",
+          originPath: "/repos/repo-a",
+        }),
+      },
+    ];
+
+    const result = partitionEntriesByWorktreeArchive(entries, new Set(["/repos/repo-a", "/tmp/repo-a~_~feature-b"]));
+
+    expect(
+      result.visibleEntries.map((entry) => (entry.kind === "origin" ? entry.originPath : entry.item.path)),
+    ).toEqual(["/repos/repo-a", "/tmp/repo-a~_~feature-a"]);
+    expect(
+      result.archivedEntries.map((entry) => (entry.kind === "origin" ? entry.originPath : entry.item.path)),
+    ).toEqual(["/tmp/repo-a~_~feature-b"]);
   });
 });
 

@@ -62,10 +62,12 @@ import {
   filterEntriesBySearchText,
   formatBranchTitle,
   hasAnySessionWaitingForUser,
+  partitionEntriesByWorktreeArchive,
   parseDisplayMode,
   resolveEntryItemId,
   resolveWorktreeStatus,
   toggleDisplayMode,
+  type SectionEntry,
   type SectionEntryOrder,
   type WorktreeDeckDisplayMode,
 } from "./components/worktree-deck-view-model";
@@ -109,6 +111,7 @@ export {
   buildSectionsWithMappings,
   buildSortedSectionEntries,
   formatTitleEntry,
+  partitionEntriesByWorktreeArchive,
   parseDisplayMode,
   toggleDisplayMode,
 } from "./components/worktree-deck-view-model";
@@ -125,6 +128,21 @@ const DISPLAY_MODE_DROPDOWN_ID = "worktree-deck.display-mode";
  * Codex App セッションアーカイブの保存キー
  */
 const CODEX_SESSION_ARCHIVE_CACHE_KEY = "worktree-deck.codex-session-archive.thread-ids.v1";
+
+/**
+ * worktree アーカイブの保存キー
+ */
+const WORKTREE_ARCHIVE_CACHE_KEY = "worktree-deck.worktree-archive.paths.v1";
+
+/**
+ * worktree アーカイブ section の見出し
+ */
+const ARCHIVED_WORKTREES_SECTION_TITLE = "Archived";
+
+/**
+ * worktree アーカイブ section の内部キー
+ */
+const ARCHIVED_WORKTREES_SECTION_KEY = "__archived_worktrees__";
 
 /**
  * 初期表示時の一覧順を保持する状態
@@ -150,6 +168,11 @@ export const EDIT_TARGET_BRANCH_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd
  * Claude resume コマンドコピーアクションのショートカット
  */
 export const COPY_CLAUDE_RESUME_COMMAND_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "shift"], key: "c" };
+
+/**
+ * worktree アーカイブ切り替えアクションのショートカット
+ */
+export const WORKTREE_ARCHIVE_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "d" };
 
 /**
  * 保存済みアプリと逆側で開くアクションを Raycast の secondary action 位置に置くための添字
@@ -369,6 +392,7 @@ export default function Command() {
     CODEX_SESSION_ARCHIVE_CACHE_KEY,
     [],
   );
+  const [archivedWorktreePaths, setArchivedWorktreePaths] = useCachedState<string[]>(WORKTREE_ARCHIVE_CACHE_KEY, []);
   const shouldRefreshOnPop = useRef(false);
   const displayCacheRef = useRef<WorktreeDeckDisplayCache | null>(displayCache);
   const lastShownErrorIdRef = useRef(0);
@@ -491,6 +515,10 @@ export default function Command() {
   const archivedCodexSessionThreadIdSet = useMemo(() => {
     return new Set(archivedCodexSessionThreadIds.map((threadId) => threadId.trim()).filter(Boolean));
   }, [archivedCodexSessionThreadIds]);
+  const archivedWorktreePathSet = useMemo(() => {
+    return new Set(archivedWorktreePaths.map((path) => path.trim()).filter(Boolean));
+  }, [archivedWorktreePaths]);
+  const shouldApplyWorktreeArchive = displayMode === "worktrees-only";
   const visibleWorktrees = useMemo(
     () => filterVisibleWorktrees({ worktrees, hiddenPaths: hiddenWorktreePaths }),
     [hiddenWorktreePaths, worktrees],
@@ -510,8 +538,9 @@ export default function Command() {
       }),
     [applicablePinnedListOrder?.sectionOrder, displayMode, visibleWorktrees, repositoryMappings, titlesByPath],
   );
-  const visibleSections = useMemo(() => {
-    return sections
+  const sectionDisplay = useMemo(() => {
+    const archivedEntries: SectionEntry[] = [];
+    const visibleSections = sections
       .map((section) => {
         const entries = buildSortedSectionEntries({
           items: section.items,
@@ -523,19 +552,41 @@ export default function Command() {
           entryOrder: applicablePinnedListOrder?.entryOrder,
         });
         const filteredEntries = filterEntriesBySearchText(entries, section.repo, searchTerms);
-        return { section, entries: filteredEntries };
+        if (!shouldApplyWorktreeArchive) {
+          return { section, entries: filteredEntries };
+        }
+        const partitioned = partitionEntriesByWorktreeArchive(filteredEntries, archivedWorktreePathSet);
+        archivedEntries.push(...partitioned.archivedEntries);
+        return { section, entries: partitioned.visibleEntries };
       })
       .filter((entry) => entry.entries.length > 0);
+    return { visibleSections, archivedEntries };
   }, [
     applicablePinnedListOrder?.entryOrder,
+    archivedWorktreePathSet,
     displayMode,
     originBranchByPath,
     originLastCommitByPath,
     searchTerms,
     sections,
+    shouldApplyWorktreeArchive,
     titlesByPath,
   ]);
-  const selectionIndex = useMemo(() => buildSelectionIndex(visibleSections), [visibleSections]);
+  const visibleSections = sectionDisplay.visibleSections;
+  const archivedWorktreeEntries = sectionDisplay.archivedEntries;
+  const renderSections = useMemo(() => {
+    if (!shouldApplyWorktreeArchive || archivedWorktreeEntries.length === 0) {
+      return visibleSections;
+    }
+    return [
+      ...visibleSections,
+      {
+        section: { repo: ARCHIVED_WORKTREES_SECTION_KEY, items: [], mappedOrigins: [] },
+        entries: archivedWorktreeEntries,
+      },
+    ];
+  }, [archivedWorktreeEntries, shouldApplyWorktreeArchive, visibleSections]);
+  const selectionIndex = useMemo(() => buildSelectionIndex(renderSections), [renderSections]);
   /**
    * 表示中の選択 ID を保持し、起動復元完了後だけ永続化する
    */
@@ -578,7 +629,7 @@ export default function Command() {
   const restoreDeletedWorktreeAction = globalActionById.get("restore-deleted-worktree");
   const settingsAction = globalActionById.get("settings");
   const extensionPreferencesAction = globalActionById.get("extension-preferences");
-  const hasVisibleContent = visibleSections.length > 0;
+  const hasVisibleContent = renderSections.length > 0;
   const isRepositoryMappingOnboardingEmptyState = shouldShowRepositoryMappingOnboardingEmptyState({
     searchText,
     mappings: repositoryMappings,
@@ -588,7 +639,7 @@ export default function Command() {
     if (!selectedItemId) {
       return null;
     }
-    for (const { entries } of visibleSections) {
+    for (const { entries } of renderSections) {
       for (const entry of entries) {
         if (resolveEntryItemId(entry) !== selectedItemId) {
           continue;
@@ -603,7 +654,7 @@ export default function Command() {
       }
     }
     return null;
-  }, [repositoryMappings, selectedItemId, visibleSections]);
+  }, [repositoryMappings, renderSections, selectedItemId]);
   const controlledListSelectionItemId = useMemo(
     () =>
       resolveControlledListSelectionItemId({
@@ -1401,6 +1452,42 @@ export default function Command() {
   );
 
   /**
+   * worktree を一覧下部のアーカイブ領域へ移動する
+   */
+  const archiveWorktree = useCallback(
+    async (worktreePath: string): Promise<void> => {
+      const normalizedPath = worktreePath.trim();
+      if (!normalizedPath) {
+        throw new Error("Invalid worktree path.");
+      }
+      setArchivedWorktreePaths((current) => {
+        const next = new Set(current.map((value) => value.trim()).filter(Boolean));
+        next.add(normalizedPath);
+        return Array.from(next).sort();
+      });
+      await showToast({ style: Toast.Style.Success, title: "Worktree archived" });
+    },
+    [setArchivedWorktreePaths],
+  );
+
+  /**
+   * worktree をアーカイブ領域から通常一覧へ戻す
+   */
+  const unarchiveWorktree = useCallback(
+    async (worktreePath: string): Promise<void> => {
+      const normalizedPath = worktreePath.trim();
+      if (!normalizedPath) {
+        throw new Error("Invalid worktree path.");
+      }
+      setArchivedWorktreePaths((current) => {
+        return current.map((value) => value.trim()).filter((value) => value && value !== normalizedPath);
+      });
+      await showToast({ style: Toast.Style.Success, title: "Worktree restored" });
+    },
+    [setArchivedWorktreePaths],
+  );
+
+  /**
    * 指定された起動アプリとセッション数に応じた Open アクションを構築する
    */
   const renderOpenActionItem = useCallback(
@@ -1505,6 +1592,33 @@ export default function Command() {
       );
     },
     [renderOpenActionItem],
+  );
+
+  /**
+   * Worktrees Only 用の worktree アーカイブ操作を描画する
+   */
+  const renderWorktreeArchiveAction = useCallback(
+    (args: { item: Worktree; isArchived: boolean }) => {
+      if (!shouldApplyWorktreeArchive) {
+        return null;
+      }
+      return args.isArchived ? (
+        <Action
+          title="Unarchive Worktree"
+          icon={Icon.ArrowClockwise}
+          shortcut={WORKTREE_ARCHIVE_SHORTCUT}
+          onAction={() => void unarchiveWorktree(args.item.path)}
+        />
+      ) : (
+        <Action
+          title="Archive Worktree"
+          icon={Icon.Box}
+          shortcut={WORKTREE_ARCHIVE_SHORTCUT}
+          onAction={() => void archiveWorktree(args.item.path)}
+        />
+      );
+    },
+    [archiveWorktree, shouldApplyWorktreeArchive, unarchiveWorktree],
   );
 
   /**
@@ -1748,9 +1862,13 @@ export default function Command() {
           }
         />
       ) : (
-        visibleSections.map(({ section, entries }) => {
+        renderSections.map(({ section, entries }) => {
           return (
-            <List.Section key={section.repo} title={section.repo}>
+            <List.Section
+              key={section.repo}
+              title={section.repo === ARCHIVED_WORKTREES_SECTION_KEY ? ARCHIVED_WORKTREES_SECTION_TITLE : section.repo}
+              subtitle={section.repo === ARCHIVED_WORKTREES_SECTION_KEY ? "Worktrees" : undefined}
+            >
               {entries.map((entry) => {
                 const itemId = resolveEntryItemId(entry);
                 if (entry.kind === "origin") {
@@ -1857,6 +1975,8 @@ export default function Command() {
                 const titles = item.titleEntries ?? [];
                 const claudeResumeCommand = resolveClaudeResumeCommand(titles);
                 const branchTitle = formatBranchTitle({ branch: item.branch, titles });
+                const isArchivedWorktree = shouldApplyWorktreeArchive && archivedWorktreePathSet.has(item.path);
+                const displayTitle = isArchivedWorktree ? `${item.repo}: ${branchTitle}` : branchTitle;
                 const rawDetailMarkdown = buildDetailMarkdown({
                   title: branchTitle,
                   titles,
@@ -1886,14 +2006,18 @@ export default function Command() {
                   <List.Item
                     key={itemId}
                     id={itemId}
-                    title={branchTitle}
+                    title={displayTitle}
                     keywords={buildSearchKeywords({
                       repo: item.repo,
                       originPath: item.originPath,
                       branch: item.branch,
                     })}
                     icon={{ source: Icon.Folder, tintColor: statusTint }}
-                    accessories={buildOpenAppAccessory(openApp, preferredIdeApp)}
+                    accessories={buildWorktreeAccessories({
+                      openApp,
+                      ideApp: preferredIdeApp,
+                      isArchived: isArchivedWorktree,
+                    })}
                     detail={<List.Item.Detail markdown={detailMarkdown} />}
                     actions={
                       <ActionPanel>
@@ -1920,6 +2044,7 @@ export default function Command() {
                           }
                         />
                         {renderDetailScrollActions({ itemId, markdown: rawDetailMarkdown })}
+                        {renderWorktreeArchiveAction({ item, isArchived: isArchivedWorktree })}
                         {canPullWorktree ? (
                           <Action
                             title="Pull Worktree"
@@ -1993,7 +2118,7 @@ export default function Command() {
                             title="Remove Worktree"
                             icon={Icon.Trash}
                             style={Action.Style.Destructive}
-                            shortcut={{ modifiers: ["cmd"], key: "d" }}
+                            shortcut={shouldApplyWorktreeArchive ? undefined : WORKTREE_ARCHIVE_SHORTCUT}
                             onAction={() => push(<RemoveWorktreeForm item={item} onRemove={handleRemoveWorktree} />)}
                           />
                         ) : null}
@@ -2040,6 +2165,21 @@ export function canRemoveWorktreeItem(item: Worktree): boolean {
  */
 export function shouldBlockMergeFormForSyncedWorktree(item: Worktree): boolean {
   return item.mergeStatus === "synced";
+}
+
+/**
+ * worktree 行の accessory を組み立てる
+ */
+export function buildWorktreeAccessories(args: {
+  openApp: WorktreeOpenApp;
+  ideApp: WorktreeIdeApp;
+  isArchived: boolean;
+}): List.Item.Accessory[] {
+  const accessories = buildOpenAppAccessory(args.openApp, args.ideApp);
+  if (!args.isArchived) {
+    return accessories;
+  }
+  return [{ icon: { source: Icon.Box, tintColor: Color.SecondaryText }, tooltip: "Archived" }, ...accessories];
 }
 
 /**
