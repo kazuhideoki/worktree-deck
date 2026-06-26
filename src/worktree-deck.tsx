@@ -170,6 +170,27 @@ export const EDIT_TARGET_BRANCH_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd
 export const COPY_CLAUDE_RESUME_COMMAND_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "shift"], key: "c" };
 
 /**
+ * Claude resume コマンドコピー後に worktree を開く依存
+ */
+type OpenWorktreeAfterClaudeResumeCommandCopyDependencies = {
+  openWorktree(path: string): Promise<void>;
+};
+
+/**
+ * Claude resume コマンドコピー後に対象 worktree を開く
+ */
+export async function openWorktreeAfterClaudeResumeCommandCopy(args: {
+  worktreePath: string;
+  dependencies: OpenWorktreeAfterClaudeResumeCommandCopyDependencies;
+}): Promise<void> {
+  const worktreePath = args.worktreePath.trim();
+  if (!worktreePath) {
+    throw new Error("Worktree path is required.");
+  }
+  await args.dependencies.openWorktree(worktreePath);
+}
+
+/**
  * worktree アーカイブ切り替えアクションのショートカット
  */
 export const WORKTREE_ARCHIVE_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "shift"], key: "a" };
@@ -1401,6 +1422,29 @@ export default function Command() {
   );
 
   /**
+   * Claude resume コマンドをコピーしてから IDE を開く
+   */
+  const handleClaudeResumeCommandCopied = useCallback(
+    async (args: { worktreePath: string; openApp: WorktreeOpenApp; threadId: string | null }): Promise<void> => {
+      try {
+        await openWorktreeAfterClaudeResumeCommandCopy({
+          worktreePath: args.worktreePath,
+          dependencies: {
+            openWorktree: (path) => openPathInConfiguredApp(path, args.openApp, args.threadId),
+          },
+        });
+      } catch (error) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Failed to open worktree",
+          message: formatExecErrorMessage(error),
+        });
+      }
+    },
+    [openPathInConfiguredApp],
+  );
+
+  /**
    * 保存済みの固定アプリを解決する
    */
   const resolveOpenAppForPath = useCallback(
@@ -2065,10 +2109,17 @@ export default function Command() {
                         />
                         {claudeResumeCommand ? (
                           <Action.CopyToClipboard
-                            title="Copy Claude Resume Command (First Session)"
+                            title="Copy Claude Resume Command and Open IDE (First Session)"
                             icon={Icon.Terminal}
                             shortcut={COPY_CLAUDE_RESUME_COMMAND_SHORTCUT}
                             content={claudeResumeCommand}
+                            onCopy={() =>
+                              void handleClaudeResumeCommandCopied({
+                                worktreePath: item.path,
+                                openApp,
+                                threadId,
+                              })
+                            }
                           />
                         ) : null}
                         {renderOpenPullRequestActions(item.pullRequests)}

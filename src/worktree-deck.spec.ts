@@ -17,6 +17,7 @@ import {
   buildOpenActionPlans,
   buildWorktreeAccessories,
   formatOpenActionTitle,
+  openWorktreeAfterClaudeResumeCommandCopy,
   OPEN_ALTERNATE_APP_ACTION_INDEX,
   resolveAlternateOpenApp,
   resolveOpenActionShortcut,
@@ -604,6 +605,36 @@ describe("worktree action shortcuts", () => {
     expect(formatOpenActionTitle("zed")).toBe("Open in Zed");
     expect(formatOpenActionTitle("zed", "cursor")).toBe("Open in Cursor");
     expect(formatOpenActionTitle("codex-app")).toBe("Open in CA");
+  });
+});
+
+describe("openWorktreeAfterClaudeResumeCommandCopy", () => {
+  it("Claude resume コマンドコピー後に指定パスを開く", async () => {
+    const events: string[] = [];
+    await openWorktreeAfterClaudeResumeCommandCopy({
+      worktreePath: " /worktrees/app-a ",
+      dependencies: {
+        openWorktree: async (path) => {
+          events.push(`open:${path}`);
+        },
+      },
+    });
+
+    expect(events).toEqual(["open:/worktrees/app-a"]);
+  });
+
+  it("パスが空なら worktree を開かない", async () => {
+    const openWorktree = vi.fn();
+
+    await expect(
+      openWorktreeAfterClaudeResumeCommandCopy({
+        worktreePath: " ",
+        dependencies: {
+          openWorktree,
+        },
+      }),
+    ).rejects.toThrow("Worktree path is required.");
+    expect(openWorktree).not.toHaveBeenCalled();
   });
 });
 
