@@ -1,7 +1,9 @@
 import { LocalStorage } from "@raycast/api";
+import { execFile } from "node:child_process";
 import { appendFile, mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -24,6 +26,7 @@ vi.mock("@raycast/api", () => ({
  * テスト用セッションファイル名
  */
 const SESSION_FILE_NAME = "rollout-test.jsonl";
+const execFileAsync = promisify(execFile);
 
 /**
  * turn_context のログ行を作成する
@@ -151,6 +154,47 @@ async function writeSessionFile(sessionDir: string, lines: string[], filename = 
   const filePath = join(sessionDir, filename);
   await writeFile(filePath, `${lines.join("\n")}\n`, "utf8");
   return filePath;
+}
+
+/**
+ * SQL 文字列リテラルを作成する
+ */
+function quoteSqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * テスト用 Codex state DB を作成する
+ */
+async function writeCodexStateThreads(
+  codexHome: string,
+  rows: {
+    id: string;
+    title: string;
+    cwd: string;
+    rolloutPath: string;
+    updatedAtMs: number;
+    createdAtMs: number;
+  }[],
+): Promise<void> {
+  const dbPath = join(codexHome, "state_5.sqlite");
+  await execFileAsync("sqlite3", [
+    dbPath,
+    [
+      "create table threads (id text primary key, title text not null, cwd text not null, rollout_path text not null, updated_at_ms integer not null, created_at_ms integer not null);",
+      ...rows.map(
+        (row) =>
+          `insert into threads (id, title, cwd, rollout_path, updated_at_ms, created_at_ms) values (${[
+            quoteSqlString(row.id),
+            quoteSqlString(row.title),
+            quoteSqlString(row.cwd),
+            quoteSqlString(row.rolloutPath),
+            row.updatedAtMs.toString(),
+            row.createdAtMs.toString(),
+          ].join(",")});`,
+      ),
+    ].join("\n"),
+  ]);
 }
 
 /**
@@ -374,6 +418,85 @@ describe("loadTitlesForPaths", () => {
     } finally {
       await rm(storageHome, { recursive: true, force: true });
     }
+  });
+
+  it("Codex state に同じ thread id の title がある場合は明示セッションタイトルより優先する", async () => {
+    const storageHome = await mkdtemp(join(tmpdir(), "worktree-session-title-home-"));
+    const storageDir = join(storageHome, ".worktree-deck", "storage");
+    await mkdir(storageDir, { recursive: true });
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16b";
+    await writeFile(
+      join(storageDir, "worktree-session-titles.json"),
+      JSON.stringify({
+        [threadId]: {
+          threadId,
+          worktreePath,
+          title: "Auto Start title",
+          source: "auto-start",
+          createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-20T00:00:01.000Z",
+        },
+      }),
+      "utf8",
+    );
+    const sessionDir = await createSessionDir(codexHome, new Date());
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildSessionMetaLine("cli", threadId),
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Initial prompt title"),
+      buildEventMessageLine("agent_message", "Latest message"),
+    ]);
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "Codex renamed title",
+        cwd: worktreePath,
+        rolloutPath: sessionPath,
+        updatedAtMs: Date.now(),
+        createdAtMs: Date.now() - 1000,
+      },
+    ]);
+
+    try {
+      const titlesByPath = await loadTitlesForPaths({
+        ...buildLoadArgs(codexHome, worktreePath),
+        homeDir: storageHome,
+        env: {
+          ...process.env,
+          CODEX_HOME: codexHome,
+          WORKTREE_DECK_SEARCH_DAYS: "1",
+        } as NodeJS.ProcessEnv,
+      });
+
+      expect(titlesByPath.get(worktreePath)?.[0]?.title).toBe("Codex renamed title");
+    } finally {
+      await rm(storageHome, { recursive: true, force: true });
+    }
+  });
+
+  it("session file が未作成でも Codex state の title を表示する", async () => {
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16c";
+    const updatedAtMs = Date.now();
+    const sessionCwd = join(worktreePath, "packages", "app");
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "Codex state only title",
+        cwd: sessionCwd,
+        rolloutPath: join(codexHome, "sessions", "missing.jsonl"),
+        updatedAtMs,
+        createdAtMs: updatedAtMs - 1000,
+      },
+    ]);
+
+    const titlesByPath = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(titlesByPath.get(worktreePath)?.[0]).toMatchObject({
+      title: "Codex state only title",
+      status: "working",
+      updatedAt: updatedAtMs,
+      sessionKind: "main",
+    });
   });
 
   it("古い explicit-only title は done として表示する", async () => {
