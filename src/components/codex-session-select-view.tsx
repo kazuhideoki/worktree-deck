@@ -1,4 +1,4 @@
-import { Action, ActionPanel, Color, Icon, List, Toast, showToast, useNavigation } from "@raycast/api";
+import { Action, ActionPanel, Color, Icon, List, Toast, type Keyboard, showToast, useNavigation } from "@raycast/api";
 import { useCallback, useState } from "react";
 import type { WorktreeTitle } from "../composition-root";
 import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
@@ -7,6 +7,11 @@ import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
  * Codex App セッション選択アクションのタイトル
  */
 export const SELECT_CODEX_SESSION_ACTION_TITLE = "Select CA Session";
+
+/**
+ * Codex App セッションアーカイブ切り替えアクションのショートカット
+ */
+export const CODEX_SESSION_ARCHIVE_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "shift"], key: "a" };
 
 /**
  * ワークツリーを IDE で開くアクションのタイトルを返す
@@ -420,14 +425,14 @@ function CodexSessionListItem({
             <Action
               title="Unarchive Session"
               icon={Icon.ArrowClockwise}
-              shortcut={{ modifiers: ["cmd"], key: "d" }}
+              shortcut={CODEX_SESSION_ARCHIVE_SHORTCUT}
               onAction={() => void onUnarchiveSession(entry.threadId)}
             />
           ) : (
             <Action
               title="Archive Session"
               icon={Icon.Box}
-              shortcut={{ modifiers: ["cmd"], key: "d" }}
+              shortcut={CODEX_SESSION_ARCHIVE_SHORTCUT}
               onAction={() => void onArchiveSession(entry.threadId)}
             />
           )}

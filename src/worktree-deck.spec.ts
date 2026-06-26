@@ -24,6 +24,7 @@ import {
   resolveInitialRepoRoot,
   COPY_CLAUDE_RESUME_COMMAND_SHORTCUT,
   EDIT_TARGET_BRANCH_SHORTCUT,
+  REMOVE_WORKTREE_SHORTCUT,
   SHOW_DETAILS_SHORTCUT,
   WORKTREE_ARCHIVE_SHORTCUT,
   shouldAutoOpenRepositoryMappingOnboarding,
@@ -512,8 +513,12 @@ describe("worktree action shortcuts", () => {
     expect(COPY_CLAUDE_RESUME_COMMAND_SHORTCUT).not.toEqual({ modifiers: ["cmd", "shift"], key: "r" });
   });
 
-  it("worktree アーカイブ切り替えアクションは cmd+d を使う", () => {
-    expect(WORKTREE_ARCHIVE_SHORTCUT).toEqual({ modifiers: ["cmd"], key: "d" });
+  it("worktree アーカイブ切り替えアクションは cmd+shift+a を使う", () => {
+    expect(WORKTREE_ARCHIVE_SHORTCUT).toEqual({ modifiers: ["cmd", "shift"], key: "a" });
+  });
+
+  it("worktree 削除アクションは cmd+d を使う", () => {
+    expect(REMOVE_WORKTREE_SHORTCUT).toEqual({ modifiers: ["cmd"], key: "d" });
   });
 
   it("アーカイブ済み worktree は accessory に Archived tag を追加する", () => {

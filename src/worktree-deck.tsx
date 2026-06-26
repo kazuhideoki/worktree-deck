@@ -172,7 +172,12 @@ export const COPY_CLAUDE_RESUME_COMMAND_SHORTCUT: Keyboard.Shortcut = { modifier
 /**
  * worktree アーカイブ切り替えアクションのショートカット
  */
-export const WORKTREE_ARCHIVE_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "d" };
+export const WORKTREE_ARCHIVE_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd", "shift"], key: "a" };
+
+/**
+ * worktree 削除アクションのショートカット
+ */
+export const REMOVE_WORKTREE_SHORTCUT: Keyboard.Shortcut = { modifiers: ["cmd"], key: "d" };
 
 /**
  * 保存済みアプリと逆側で開くアクションを Raycast の secondary action 位置に置くための添字
@@ -2118,7 +2123,7 @@ export default function Command() {
                             title="Remove Worktree"
                             icon={Icon.Trash}
                             style={Action.Style.Destructive}
-                            shortcut={shouldApplyWorktreeArchive ? undefined : WORKTREE_ARCHIVE_SHORTCUT}
+                            shortcut={REMOVE_WORKTREE_SHORTCUT}
                             onAction={() => push(<RemoveWorktreeForm item={item} onRemove={handleRemoveWorktree} />)}
                           />
                         ) : null}

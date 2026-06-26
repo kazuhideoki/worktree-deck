@@ -5,6 +5,7 @@ import {
   applyCodexSessionArchiveMove,
   applyCodexSessionArchiveRollback,
   buildCodexSessionEntries,
+  CODEX_SESSION_ARCHIVE_SHORTCUT,
   formatOpenWorktreeInIdeActionTitle,
   resolveCodexSessionOpenPlan,
   SELECT_CODEX_SESSION_ACTION_TITLE,
@@ -270,6 +271,10 @@ describe("resolveCodexSessionOpenPlan", () => {
   it("IDE 起動アクション名は一時起動を示さない", () => {
     expect(formatOpenWorktreeInIdeActionTitle()).toBe("Open in Zed");
     expect(formatOpenWorktreeInIdeActionTitle("Cursor")).toBe("Open in Cursor");
+  });
+
+  it("セッションアーカイブ切り替えアクションは cmd+shift+a を使う", () => {
+    expect(CODEX_SESSION_ARCHIVE_SHORTCUT).toEqual({ modifiers: ["cmd", "shift"], key: "a" });
   });
 });
 
