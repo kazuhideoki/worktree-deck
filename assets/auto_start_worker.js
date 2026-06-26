@@ -19,6 +19,7 @@ const BRANCH_NAME_REASONING_EFFORT = "xhigh";
 const BRANCH_NAME_GENERATION_MAX_ATTEMPTS = 3;
 const CODEX_EXEC_TIMEOUT_MS = 60_000;
 const APP_SERVER_READY_TIMEOUT_MS = 8_000;
+const APP_SERVER_STOP_TIMEOUT_MS = 3_000;
 const JSON_RPC_TIMEOUT_MS = 15_000;
 const DEFAULT_CODEX_APP_SERVER_PORT = 53621;
 const DEFAULT_COMMAND_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
@@ -852,13 +853,37 @@ async function waitForAppServerReady(port) {
 }
 
 /**
+ * app-server が停止するまで待つ
+ */
+async function waitForAppServerStopped(port) {
+  const deadline = Date.now() + APP_SERVER_STOP_TIMEOUT_MS;
+  const readyUrl = buildReadyUrl(port);
+  while (Date.now() < deadline) {
+    if (!(await isHttpOk(readyUrl))) {
+      return true;
+    }
+    await delay(150);
+  }
+  return false;
+}
+
+/**
  * app-server を必要なら起動する
  */
 async function ensureCodexAppServer() {
   const port = resolveAppServerPort();
   if (await isHttpOk(buildReadyUrl(port))) {
+    await restartCodexAppServerIfOutdated(port);
     return buildAppServerEndpoint(port);
   }
+  await startCodexAppServer(port);
+  return buildAppServerEndpoint(port);
+}
+
+/**
+ * app-server を detached process として起動する
+ */
+async function startCodexAppServer(port) {
   const endpoint = buildAppServerEndpoint(port);
   await new Promise((resolve, reject) => {
     let settled = false;
@@ -891,7 +916,6 @@ async function ensureCodexAppServer() {
         reject(error);
       });
   });
-  return endpoint;
 }
 
 /**
@@ -1010,6 +1034,158 @@ async function startCodexSession(payload, worktreePath, onThreadStarted) {
   } finally {
     client.close();
   }
+}
+
+/**
+ * 起動中 app-server が現在の CLI より古ければ再起動する
+ */
+async function restartCodexAppServerIfOutdated(port) {
+  const [runningVersion, currentVersion] = await Promise.all([
+    readRunningCodexAppServerVersion(port),
+    readCurrentCodexCliVersion(),
+  ]);
+  if (!runningVersion || !currentVersion || !isVersionOlder(runningVersion, currentVersion)) {
+    return;
+  }
+  await stopCodexAppServerOnPort(port);
+  await startCodexAppServer(port);
+}
+
+/**
+ * 起動中 app-server の userAgent から Codex version を読む
+ */
+async function readRunningCodexAppServerVersion(port) {
+  let client = null;
+  try {
+    client = await createJsonRpcClient(buildAppServerEndpoint(port));
+    const response = await client.request("initialize", {
+      clientInfo: { name: "worktree-deck", version: "0.0.0" },
+      capabilities: null,
+    });
+    return extractCodexVersionFromText(readString(response?.userAgent));
+  } catch {
+    return null;
+  } finally {
+    client?.close();
+  }
+}
+
+/**
+ * 現在の codex CLI version を読む
+ */
+async function readCurrentCodexCliVersion() {
+  try {
+    const result = await runProcess("codex", ["--version"], {
+      env: { ...process.env, PATH: buildCommandPath(process.env.PATH) },
+    });
+    return extractCodexVersionFromText(result.stdout);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 指定 port を listen している app-server process を停止する
+ */
+async function stopCodexAppServerOnPort(port) {
+  const pids = await findListeningProcessIds(port);
+  if (pids.length === 0) {
+    throw new Error("Codex app-server process was not found.");
+  }
+  for (const pid of pids) {
+    killProcessIfRunning(pid, "SIGTERM");
+  }
+  if (await waitForAppServerStopped(port)) {
+    return;
+  }
+  for (const pid of pids) {
+    killProcessIfRunning(pid, "SIGKILL");
+  }
+  if (!(await waitForAppServerStopped(port))) {
+    throw new Error("Codex app-server did not stop.");
+  }
+}
+
+/**
+ * 指定 port を listen している process id を返す
+ */
+async function findListeningProcessIds(port) {
+  try {
+    const result = await runProcess("lsof", ["-nP", `-tiTCP:${port}`, "-sTCP:LISTEN"], {
+      env: { ...process.env, PATH: buildCommandPath(process.env.PATH) },
+    });
+    return result.stdout
+      .split(/\r?\n/)
+      .map((line) => Number(line.trim()))
+      .filter((pid) => Number.isInteger(pid) && pid > 0);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * process が生きていれば signal を送る
+ */
+function killProcessIfRunning(pid, signal) {
+  try {
+    process.kill(pid, signal);
+  } catch {
+    // 既に終了している場合は停止済みとして扱う
+  }
+}
+
+/**
+ * Codex の version 文字列をテキストから抽出する
+ */
+function extractCodexVersionFromText(text) {
+  const match = /(?:codex-cli|worktree-deck)\/?\s*([0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?)/.exec(text);
+  if (!match) {
+    return null;
+  }
+  return match[1] ?? null;
+}
+
+/**
+ * left が right より古い version か判定する
+ */
+function isVersionOlder(left, right) {
+  const leftParts = parseVersionParts(left);
+  const rightParts = parseVersionParts(right);
+  if (!leftParts || !rightParts) {
+    return false;
+  }
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+    if (leftPart < rightPart) {
+      return true;
+    }
+    if (leftPart > rightPart) {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * version 比較用に数値部分だけを取り出す
+ */
+function parseVersionParts(version) {
+  const core = version.trim().split(/[+-]/)[0] ?? "";
+  const parts = core.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+  const numbers = parts.map((part) => Number(part));
+  return numbers.every((part) => Number.isInteger(part) && part >= 0) ? numbers : null;
+}
+
+/**
+ * unknown から文字列を読む
+ */
+function readString(value) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 /**

@@ -1,8 +1,9 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { get } from "node:http";
 import { homedir } from "node:os";
 import { delimiter } from "node:path";
+import { promisify } from "node:util";
 import type {
   CodexApprovalPolicy,
   CodexApprovalsReviewer,
@@ -27,6 +28,11 @@ const DEFAULT_CODEX_APP_SERVER_PORT = 53621;
 const APP_SERVER_READY_TIMEOUT_MS = 8_000;
 
 /**
+ * app-server 停止待ちタイムアウト
+ */
+const APP_SERVER_STOP_TIMEOUT_MS = 3_000;
+
+/**
  * JSON-RPC 応答待ちタイムアウト
  */
 const JSON_RPC_TIMEOUT_MS = 15_000;
@@ -35,6 +41,11 @@ const JSON_RPC_TIMEOUT_MS = 15_000;
  * PATHに追加する代表的な検索ディレクトリ
  */
 const DEFAULT_COMMAND_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+
+/**
+ * execFile を Promise 化した互換関数
+ */
+const execFileAsync = promisify(execFile);
 
 type JsonObject = Record<string, unknown>;
 
@@ -56,6 +67,10 @@ type WebSocketConstructorLike = new (url: string) => WebSocketLike;
 type JsonRpcClient = {
   request<T>(method: string, params: unknown): Promise<T>;
   close(): void;
+};
+
+type InitializeResponse = {
+  userAgent?: unknown;
 };
 
 /**
@@ -133,15 +148,39 @@ async function waitForAppServerReady(port: number): Promise<void> {
 }
 
 /**
+ * app-server が停止するまで待つ
+ */
+async function waitForAppServerStopped(port: number): Promise<boolean> {
+  const deadline = Date.now() + APP_SERVER_STOP_TIMEOUT_MS;
+  const readyUrl = buildReadyUrl(port);
+  while (Date.now() < deadline) {
+    if (!(await isHttpOk(readyUrl))) {
+      return true;
+    }
+    await delay(150);
+  }
+  return false;
+}
+
+/**
  * app-server を必要に応じて起動し endpoint を返す
  */
 async function ensureCodexAppServer(): Promise<string> {
   const port = resolveAppServerPort();
   const readyUrl = buildReadyUrl(port);
   if (await isHttpOk(readyUrl)) {
+    await restartCodexAppServerIfOutdated(port);
     return buildAppServerEndpoint(port);
   }
 
+  await startCodexAppServer(port);
+  return buildAppServerEndpoint(port);
+}
+
+/**
+ * app-server を detached process として起動する
+ */
+async function startCodexAppServer(port: number): Promise<void> {
   const endpoint = buildAppServerEndpoint(port);
   await new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -177,7 +216,6 @@ async function ensureCodexAppServer(): Promise<string> {
         reject(error);
       });
   });
-  return endpoint;
 }
 
 /**
@@ -279,14 +317,116 @@ async function createJsonRpcClient(endpoint: string): Promise<JsonRpcClient> {
 /**
  * app-server の初期化 request を送る
  */
-async function initializeClient(client: JsonRpcClient): Promise<void> {
-  await client.request("initialize", {
+async function initializeClient(client: JsonRpcClient): Promise<InitializeResponse> {
+  return client.request<InitializeResponse>("initialize", {
     clientInfo: {
       name: "worktree-deck",
       version: "0.0.0",
     },
     capabilities: null,
   });
+}
+
+/**
+ * 起動中 app-server が現在の CLI より古ければ再起動する
+ */
+async function restartCodexAppServerIfOutdated(port: number): Promise<void> {
+  const [runningVersion, currentVersion] = await Promise.all([
+    readRunningCodexAppServerVersion(port),
+    readCurrentCodexCliVersion(),
+  ]);
+  if (!runningVersion || !currentVersion || !isVersionOlder(runningVersion, currentVersion)) {
+    return;
+  }
+  await stopCodexAppServerOnPort(port);
+  await startCodexAppServer(port);
+}
+
+/**
+ * 起動中 app-server の userAgent から Codex version を読む
+ */
+async function readRunningCodexAppServerVersion(port: number): Promise<string | null> {
+  let client: JsonRpcClient | null = null;
+  try {
+    client = await createJsonRpcClient(buildAppServerEndpoint(port));
+    const response = await initializeClient(client);
+    return extractCodexVersionFromText(readString(response.userAgent));
+  } catch {
+    return null;
+  } finally {
+    client?.close();
+  }
+}
+
+/**
+ * 現在の codex CLI version を読む
+ */
+async function readCurrentCodexCliVersion(): Promise<string | null> {
+  try {
+    const result = await execFileAsync("codex", ["--version"], {
+      env: {
+        ...process.env,
+        PATH: buildCommandPath(process.env.PATH),
+      },
+    });
+    return extractCodexVersionFromText(typeof result.stdout === "string" ? result.stdout : "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 指定 port を listen している app-server process を停止する
+ */
+async function stopCodexAppServerOnPort(port: number): Promise<void> {
+  const pids = await findListeningProcessIds(port);
+  if (pids.length === 0) {
+    throw new Error("Codex app-server process was not found.");
+  }
+  for (const pid of pids) {
+    killProcessIfRunning(pid, "SIGTERM");
+  }
+  if (await waitForAppServerStopped(port)) {
+    return;
+  }
+  for (const pid of pids) {
+    killProcessIfRunning(pid, "SIGKILL");
+  }
+  if (!(await waitForAppServerStopped(port))) {
+    throw new Error("Codex app-server did not stop.");
+  }
+}
+
+/**
+ * 指定 port を listen している process id を返す
+ */
+async function findListeningProcessIds(port: number): Promise<number[]> {
+  try {
+    const result = await execFileAsync("lsof", ["-nP", `-tiTCP:${port}`, "-sTCP:LISTEN"], {
+      env: {
+        ...process.env,
+        PATH: buildCommandPath(process.env.PATH),
+      },
+    });
+    const stdout = typeof result.stdout === "string" ? result.stdout : "";
+    return stdout
+      .split(/\r?\n/)
+      .map((line) => Number(line.trim()))
+      .filter((pid) => Number.isInteger(pid) && pid > 0);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * process が生きていれば signal を送る
+ */
+function killProcessIfRunning(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(pid, signal);
+  } catch {
+    // 既に終了している場合は停止済みとして扱う
+  }
 }
 
 /**
@@ -435,6 +575,53 @@ function formatJsonRpcError(error: JsonObject): string {
     return message;
   }
   return "Codex app-server request failed.";
+}
+
+/**
+ * Codex の version 文字列をテキストから抽出する
+ */
+export function extractCodexVersionFromText(text: string): string | null {
+  const match = /(?:codex-cli|worktree-deck)\/?\s*([0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?)/.exec(text);
+  if (!match) {
+    return null;
+  }
+  return match[1] ?? null;
+}
+
+/**
+ * left が right より古い version か判定する
+ */
+export function isVersionOlder(left: string, right: string): boolean {
+  const leftParts = parseVersionParts(left);
+  const rightParts = parseVersionParts(right);
+  if (!leftParts || !rightParts) {
+    return false;
+  }
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+    if (leftPart < rightPart) {
+      return true;
+    }
+    if (leftPart > rightPart) {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * version 比較用に数値部分だけを取り出す
+ */
+function parseVersionParts(version: string): number[] | null {
+  const core = version.trim().split(/[+-]/)[0] ?? "";
+  const parts = core.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+  const numbers = parts.map((part) => Number(part));
+  return numbers.every((part) => Number.isInteger(part) && part >= 0) ? numbers : null;
 }
 
 /**

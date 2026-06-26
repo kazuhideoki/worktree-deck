@@ -6,6 +6,8 @@ import type { CodexInitialSessionMetadata } from "../application/start-codex-ini
 import {
   buildCodexThreadStartParams,
   buildCodexTurnStartParams,
+  extractCodexVersionFromText,
+  isVersionOlder,
   loadCodexInitialSessionDefaultsFromGlobalConfig,
 } from "./codex-app-server-infra";
 
@@ -66,6 +68,40 @@ describe("loadCodexInitialSessionDefaultsFromGlobalConfig", () => {
     const result = await loadCodexInitialSessionDefaultsFromGlobalConfig({ repoRoot: "/repos/app" });
 
     expect(result.serviceTier).toBe("default");
+  });
+});
+
+describe("extractCodexVersionFromText", () => {
+  it("codex --version の出力から version を抽出する", () => {
+    expect(extractCodexVersionFromText("codex-cli 0.142.2")).toBe("0.142.2");
+  });
+
+  it("app-server initialize の userAgent から version を抽出する", () => {
+    expect(
+      extractCodexVersionFromText("worktree-deck/0.142.2 (Mac OS 26.5.1; arm64) dumb (worktree-deck; 0.0.0)"),
+    ).toBe("0.142.2");
+  });
+
+  it("version が見つからない場合は null を返す", () => {
+    expect(extractCodexVersionFromText("unknown")).toBeNull();
+  });
+});
+
+describe("isVersionOlder", () => {
+  it("左辺が右辺より古い場合 true を返す", () => {
+    expect(isVersionOlder("0.141.0", "0.142.2")).toBe(true);
+  });
+
+  it("同一 version の場合 false を返す", () => {
+    expect(isVersionOlder("0.142.2", "0.142.2")).toBe(false);
+  });
+
+  it("左辺が右辺より新しい場合 false を返す", () => {
+    expect(isVersionOlder("0.143.0", "0.142.2")).toBe(false);
+  });
+
+  it("不明な version は false を返す", () => {
+    expect(isVersionOlder("unknown", "0.142.2")).toBe(false);
   });
 });
 
