@@ -103,6 +103,7 @@ import {
   type WorktreePullRequestResult,
   type WorktreeTitle,
 } from "./composition-root";
+import type { SessionProvider } from "./domain/session-provider";
 import { worktreeOpenAppService, type WorktreeOpenApp } from "./domain/worktree-open-app.service";
 import { buildGlobalActionItems, type GlobalActionId } from "./global-actions";
 
@@ -1351,12 +1352,13 @@ export default function Command() {
   /**
    * 指定パスの最新セッションファイルを IDE で開く
    */
-  const openLatestSessionForPath = useCallback(async (path: string): Promise<void> => {
+  const openLatestSessionForPath = useCallback(async (path: string, provider: SessionProvider): Promise<void> => {
+    const label = provider === "ca" ? "Codex" : "Claude";
     const trimmedPath = path.trim();
     if (!trimmedPath) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Failed to open session file",
+        title: `Failed to open ${label} session file`,
         message: "Path is empty.",
       });
       return;
@@ -1364,6 +1366,7 @@ export default function Command() {
     try {
       const result = await worktreeSessionFileUsecase.openLatestSessionFile({
         worktreePath: trimmedPath,
+        provider,
         context: {
           env: process.env,
           cwd: process.cwd(),
@@ -1375,8 +1378,8 @@ export default function Command() {
       if (result.status === "not-found") {
         await showToast({
           style: Toast.Style.Failure,
-          title: "No session file found",
-          message: "No session file found for this worktree.",
+          title: `No ${label} session file found`,
+          message: `No ${label} session file found for this worktree.`,
         });
         return;
       }
@@ -1384,7 +1387,7 @@ export default function Command() {
       const message = formatExecErrorMessage(error);
       await showToast({
         style: Toast.Style.Failure,
-        title: "Failed to open session file",
+        title: `Failed to open ${label} session file`,
         message,
       });
     }
@@ -1997,10 +2000,14 @@ export default function Command() {
                             />
                           ) : null}
                           <Action
-                            title="Open Latest Session File"
+                            title="Open Latest Codex Session File"
                             icon={Icon.Clock}
-                            shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
-                            onAction={() => void openLatestSessionForPath(entry.originPath)}
+                            onAction={() => void openLatestSessionForPath(entry.originPath, "ca")}
+                          />
+                          <Action
+                            title="Open Latest Claude Session File"
+                            icon={Icon.Clock}
+                            onAction={() => void openLatestSessionForPath(entry.originPath, "cc")}
                           />
                           <Action.ShowInFinder path={entry.originPath} icon={Icon.Folder} />
                           <Action.CopyToClipboard
@@ -2102,10 +2109,14 @@ export default function Command() {
                           />
                         ) : null}
                         <Action
-                          title="Open Latest Session File"
+                          title="Open Latest Codex Session File"
                           icon={Icon.Clock}
-                          shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
-                          onAction={() => void openLatestSessionForPath(item.path)}
+                          onAction={() => void openLatestSessionForPath(item.path, "ca")}
+                        />
+                        <Action
+                          title="Open Latest Claude Session File"
+                          icon={Icon.Clock}
+                          onAction={() => void openLatestSessionForPath(item.path, "cc")}
                         />
                         {claudeResumeCommand ? (
                           <Action.CopyToClipboard

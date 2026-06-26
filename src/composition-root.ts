@@ -73,11 +73,14 @@ import {
 import { listLocalBranches } from "./infrastructure/worktree-create-store";
 import {
   findFirstSessionFileByPath,
-  findLatestSessionFileByPath,
+  findLatestSessionFileByPath as findLatestCodexSessionFileByPath,
   loadLatestSessionMessages,
   loadSessionMessages,
 } from "./infrastructure/codex-session-file-store";
-import { loadClaudeTitlesForPaths } from "./infrastructure/claude-session-file-store";
+import {
+  findLatestSessionFileByPath as findLatestClaudeSessionFileByPath,
+  loadClaudeTitlesForPaths,
+} from "./infrastructure/claude-session-file-store";
 import {
   loadCreateStartMode,
   loadPreferredIdeApp,
@@ -255,7 +258,8 @@ function createWorktreeDeckCompositionRoot(): WorktreeDeckCompositionRoot {
     },
     worktreeSessionFileDependencies: {
       findFirstSessionFileByPath,
-      findLatestSessionFileByPath,
+      findLatestCodexSessionFileByPath,
+      findLatestClaudeSessionFileByPath,
       saveCodexThreadIdForWorktreePath,
       openPathInConfiguredIde,
       loadLatestSessionMessages,

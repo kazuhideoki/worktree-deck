@@ -109,6 +109,47 @@ export function toProjectFolderName(path: string): string {
 }
 
 /**
+ * 指定パスに紐づく最新の Claude セッションファイルを取得する
+ *
+ * Claude は projects フォルダ名に cwd を埋め込むため、対応フォルダを特定し
+ * 配下で最も新しく更新されたファイルを返す。該当が無ければ null。
+ */
+export async function findLatestSessionFileByPath(args: {
+  path: string;
+  env: NodeJS.ProcessEnv;
+  homeDir: string | null;
+}): Promise<string | null> {
+  const trimmedPath = args.path.trim();
+  if (!trimmedPath) {
+    return null;
+  }
+  const projectsRoot = await loadClaudeProjectsRoot(args);
+  if (!projectsRoot) {
+    return null;
+  }
+  const folders = await collectMatchingFolders(projectsRoot, [trimmedPath]);
+  const sessionFiles: { path: string; updatedAt: number }[] = [];
+  for (const folder of folders) {
+    sessionFiles.push(...(await collectSessionFiles(folder)));
+  }
+  // 前方一致フォルダには別 worktree のセッションが混ざり得るため、更新が新しい順に
+  // ファイル内 cwd を照合し、対象 worktree に一致する最初のファイルを返す。
+  sessionFiles.sort((left, right) => right.updatedAt - left.updatedAt);
+  const pathEntries = sessionLogParserService.buildPathEntries([trimmedPath]);
+  for (const sessionFile of sessionFiles) {
+    try {
+      const parsed = await parseClaudeSessionFile(sessionFile.path);
+      if (parsed.cwds.some((cwd) => sessionLogParserService.matchPath(cwd, pathEntries))) {
+        return sessionFile.path;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
  * worktree パス群に対応する projects フォルダを特定する
  */
 async function collectMatchingFolders(projectsRoot: string, paths: string[]): Promise<string[]> {

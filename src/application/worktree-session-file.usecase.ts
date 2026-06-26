@@ -1,5 +1,6 @@
 import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
 import type { SessionMessage } from "../domain/session-detail.service";
+import type { SessionProvider } from "../domain/session-provider";
 import type { WorktreeDeckContext } from "./list-worktrees.usecase";
 
 /**
@@ -7,7 +8,8 @@ import type { WorktreeDeckContext } from "./list-worktrees.usecase";
  */
 export type WorktreeSessionFileDependencies = {
   findFirstSessionFileByPath(args: WorktreeDeckContext & { path: string }): Promise<string | null>;
-  findLatestSessionFileByPath(args: WorktreeDeckContext & { path: string }): Promise<string | null>;
+  findLatestCodexSessionFileByPath(args: WorktreeDeckContext & { path: string }): Promise<string | null>;
+  findLatestClaudeSessionFileByPath(args: WorktreeDeckContext & { path: string }): Promise<string | null>;
   saveCodexThreadIdForWorktreePath(path: string, threadId: string): Promise<void>;
   openPathInConfiguredIde(path: string): Promise<void>;
   loadLatestSessionMessages(args: { filePath: string; homeDir: string | null }): Promise<SessionMessage[]>;
@@ -54,6 +56,7 @@ async function resolveAndSaveCodexThreadId(args: {
  */
 async function openLatestSessionFile(args: {
   worktreePath: string;
+  provider: SessionProvider;
   context: WorktreeDeckContext;
   dependencies: WorktreeSessionFileDependencies;
 }): Promise<OpenLatestSessionFileResult> {
@@ -61,7 +64,11 @@ async function openLatestSessionFile(args: {
   if (!worktreePath) {
     return { status: "path-empty" };
   }
-  const sessionPath = await args.dependencies.findLatestSessionFileByPath({
+  const findLatest =
+    args.provider === "ca"
+      ? args.dependencies.findLatestCodexSessionFileByPath
+      : args.dependencies.findLatestClaudeSessionFileByPath;
+  const sessionPath = await findLatest({
     ...args.context,
     path: worktreePath,
   });

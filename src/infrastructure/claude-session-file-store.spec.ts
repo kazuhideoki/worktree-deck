@@ -1,11 +1,15 @@
-import { mkdtemp, mkdir, writeFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { LocalStorage } from "@raycast/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadClaudeTitlesForPaths, toProjectFolderName } from "./claude-session-file-store";
+import {
+  findLatestSessionFileByPath,
+  loadClaudeTitlesForPaths,
+  toProjectFolderName,
+} from "./claude-session-file-store";
 
 let root: string;
 let projectsRoot: string;
@@ -343,5 +347,69 @@ describe("loadClaudeTitlesForPaths", () => {
       homeDir: root,
     });
     expect(result.size).toBe(0);
+  });
+});
+
+describe("findLatestSessionFileByPath", () => {
+  it("対応フォルダ内で最も新しい session file のパスを返す", async () => {
+    const worktreePath = "/Users/me/wt/feature";
+    const folderName = toProjectFolderName(worktreePath);
+    await writeSession(folderName, "older.jsonl", [
+      {
+        type: "user",
+        cwd: worktreePath,
+        message: { role: "user", content: "a" },
+        timestamp: "2026-06-17T00:00:00.000Z",
+      },
+    ]);
+    await writeSession(folderName, "newer.jsonl", [
+      {
+        type: "user",
+        cwd: worktreePath,
+        message: { role: "user", content: "b" },
+        timestamp: "2026-06-17T00:00:00.000Z",
+      },
+    ]);
+    await utimes(join(projectsRoot, folderName, "older.jsonl"), 1000, 1000);
+    await utimes(join(projectsRoot, folderName, "newer.jsonl"), 2000, 2000);
+
+    const result = await findLatestSessionFileByPath({ path: worktreePath, env: {}, homeDir: root });
+
+    expect(result).toBe(join(projectsRoot, folderName, "newer.jsonl"));
+  });
+
+  it("対応フォルダが無ければ null を返す", async () => {
+    const result = await findLatestSessionFileByPath({ path: "/Users/me/no/match", env: {}, homeDir: root });
+
+    expect(result).toBeNull();
+  });
+
+  it("前方一致する別 worktree のより新しいセッションは cwd 不一致なら返さない", async () => {
+    const worktreePath = "/Users/me/wt/feature";
+    const siblingPath = "/Users/me/wt/feature-2";
+    const ownFolder = toProjectFolderName(worktreePath);
+    const siblingFolder = toProjectFolderName(siblingPath);
+    await writeSession(ownFolder, "own.jsonl", [
+      {
+        type: "user",
+        cwd: worktreePath,
+        message: { role: "user", content: "a" },
+        timestamp: "2026-06-17T00:00:00.000Z",
+      },
+    ]);
+    await writeSession(siblingFolder, "sibling.jsonl", [
+      {
+        type: "user",
+        cwd: siblingPath,
+        message: { role: "user", content: "b" },
+        timestamp: "2026-06-17T00:00:00.000Z",
+      },
+    ]);
+    await utimes(join(projectsRoot, ownFolder, "own.jsonl"), 1000, 1000);
+    await utimes(join(projectsRoot, siblingFolder, "sibling.jsonl"), 2000, 2000);
+
+    const result = await findLatestSessionFileByPath({ path: worktreePath, env: {}, homeDir: root });
+
+    expect(result).toBe(join(projectsRoot, ownFolder, "own.jsonl"));
   });
 });

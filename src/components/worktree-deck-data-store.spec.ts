@@ -141,7 +141,8 @@ function buildRequest(
       },
       sessionFile: {
         findFirstSessionFileByPath: vi.fn(async () => null),
-        findLatestSessionFileByPath: vi.fn(async () => null),
+        findLatestCodexSessionFileByPath: vi.fn(async () => null),
+        findLatestClaudeSessionFileByPath: vi.fn(async () => null),
         saveCodexThreadIdForWorktreePath: vi.fn(async () => undefined),
         openPathInConfiguredIde: vi.fn(async () => undefined),
         loadLatestSessionMessages: vi.fn(async () => []),

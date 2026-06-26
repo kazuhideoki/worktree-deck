@@ -9,7 +9,8 @@ import type { WorktreeDeckContext } from "./list-worktrees.usecase";
 function buildDependencies(): WorktreeSessionFileDependencies {
   return {
     findFirstSessionFileByPath: vi.fn(async () => null),
-    findLatestSessionFileByPath: vi.fn(async () => null),
+    findLatestCodexSessionFileByPath: vi.fn(async () => null),
+    findLatestClaudeSessionFileByPath: vi.fn(async () => null),
     saveCodexThreadIdForWorktreePath: vi.fn(async () => undefined),
     openPathInConfiguredIde: vi.fn(async () => undefined),
     loadLatestSessionMessages: vi.fn(async () => []),
@@ -71,16 +72,48 @@ describe("resolveAndSaveCodexThreadId", () => {
 describe("openLatestSessionFile", () => {
   it("最新 session file を IDE で開く", async () => {
     const dependencies = buildDependencies();
-    vi.mocked(dependencies.findLatestSessionFileByPath).mockResolvedValueOnce("/tmp/latest.jsonl");
+    vi.mocked(dependencies.findLatestCodexSessionFileByPath).mockResolvedValueOnce("/tmp/codex.jsonl");
 
     await expect(
       worktreeSessionFileUsecase.openLatestSessionFile({
         worktreePath: "/repo/wt",
+        provider: "ca",
         context: buildContext(),
         dependencies,
       }),
-    ).resolves.toEqual({ status: "opened", sessionPath: "/tmp/latest.jsonl" });
-    expect(dependencies.openPathInConfiguredIde).toHaveBeenCalledWith("/tmp/latest.jsonl");
+    ).resolves.toEqual({ status: "opened", sessionPath: "/tmp/codex.jsonl" });
+    expect(dependencies.openPathInConfiguredIde).toHaveBeenCalledWith("/tmp/codex.jsonl");
+    expect(dependencies.findLatestClaudeSessionFileByPath).not.toHaveBeenCalled();
+  });
+
+  it("claude の最新 session file を IDE で開く", async () => {
+    const dependencies = buildDependencies();
+    vi.mocked(dependencies.findLatestClaudeSessionFileByPath).mockResolvedValueOnce("/tmp/claude.jsonl");
+
+    await expect(
+      worktreeSessionFileUsecase.openLatestSessionFile({
+        worktreePath: "/repo/wt",
+        provider: "cc",
+        context: buildContext(),
+        dependencies,
+      }),
+    ).resolves.toEqual({ status: "opened", sessionPath: "/tmp/claude.jsonl" });
+    expect(dependencies.openPathInConfiguredIde).toHaveBeenCalledWith("/tmp/claude.jsonl");
+    expect(dependencies.findLatestCodexSessionFileByPath).not.toHaveBeenCalled();
+  });
+
+  it("該当 session file が無ければ not-found を返す", async () => {
+    const dependencies = buildDependencies();
+
+    await expect(
+      worktreeSessionFileUsecase.openLatestSessionFile({
+        worktreePath: "/repo/wt",
+        provider: "cc",
+        context: buildContext(),
+        dependencies,
+      }),
+    ).resolves.toEqual({ status: "not-found" });
+    expect(dependencies.openPathInConfiguredIde).not.toHaveBeenCalled();
   });
 
   it("path が空なら session 探索を行わない", async () => {
@@ -89,10 +122,12 @@ describe("openLatestSessionFile", () => {
     await expect(
       worktreeSessionFileUsecase.openLatestSessionFile({
         worktreePath: " ",
+        provider: "ca",
         context: buildContext(),
         dependencies,
       }),
     ).resolves.toEqual({ status: "path-empty" });
-    expect(dependencies.findLatestSessionFileByPath).not.toHaveBeenCalled();
+    expect(dependencies.findLatestCodexSessionFileByPath).not.toHaveBeenCalled();
+    expect(dependencies.findLatestClaudeSessionFileByPath).not.toHaveBeenCalled();
   });
 });
