@@ -1510,6 +1510,11 @@ async function main() {
           provider: "cc",
           warnings,
         });
+        // Claude は作業完了まで startClaudeSession が resolve しないため、
+        // Codex と同様に作業開始時(session_id 判明時)に通知する。
+        // ここで "completed" と出すと後続のターン失敗時の "failed" 通知と矛盾するため、
+        // 開始を表す文言にして二重通知が矛盾しないようにする
+        notify("Auto Start started", formatCompletionNotificationMessage(branch, sessionTitle, branchGenerationWarning));
       });
     } else {
       await writeJobState(payload, { status: "starting-codex", branch, worktreePath, warnings });
@@ -1545,7 +1550,10 @@ async function main() {
       warnings,
       finishedAt: new Date().toISOString(),
     });
-    notify("Auto Start completed", formatCompletionNotificationMessage(branch, sessionTitle, branchGenerationWarning));
+    // Claude は onSessionStarted callback 内で通知済みのため、ここでは Codex のみ通知する
+    if (payload.provider !== "cc") {
+      notify("Auto Start completed", formatCompletionNotificationMessage(branch, sessionTitle, branchGenerationWarning));
+    }
   } catch (error) {
     const message = extractErrorMessage(error);
     const patch = {
