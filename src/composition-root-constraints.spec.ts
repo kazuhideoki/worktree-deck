@@ -44,11 +44,7 @@ function isUiSourceFile(filePath: string): boolean {
   if (filePath.endsWith(".spec.ts") || filePath.endsWith(".spec.tsx")) {
     return false;
   }
-  return (
-    filePath.endsWith("/worktree-deck.tsx") ||
-    filePath.endsWith("/worktree-status-menu-bar.tsx") ||
-    filePath.includes("/components/")
-  );
+  return filePath.endsWith("/worktree-deck.tsx") || filePath.includes("/components/");
 }
 
 describe("composition root constraints", () => {

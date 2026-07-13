@@ -50,7 +50,7 @@
 
 - ユースケース呼び出し、状態管理、表示制御を行う。
 - `resolveWorktreeDeckCompositionRoot()` から解決済み依存を取得してよいが、依存組み立て関数や `infrastructure` は直接呼ばない。
-- 例: `worktree-deck.tsx`, `worktree-status-menu-bar.tsx`, `components/*`。
+- 例: `worktree-deck.tsx`, `components/*`。
 
 ## 4. 設定・保存先の境界
 

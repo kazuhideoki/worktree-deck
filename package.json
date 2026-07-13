@@ -28,13 +28,6 @@
       "subtitle": "Git & Codex",
       "description": "Manage git worktrees, related Codex sessions, and repository actions",
       "mode": "view"
-    },
-    {
-      "name": "worktree-status-menu-bar",
-      "title": "Worktree Status",
-      "description": "Monitor worktree session status counts in the menu bar",
-      "mode": "menu-bar",
-      "interval": "10s"
     }
   ],
   "preferences": [

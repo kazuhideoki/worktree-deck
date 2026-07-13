@@ -7,7 +7,6 @@ It is designed for local development workflows that use `git worktree`, Codex CL
 ## Commands
 
 - `Worktree Deck`: Browse worktrees, inspect related Codex sessions, open repositories, create pull requests, and run common worktree actions.
-- `Worktree Status`: Show working and done session counts in the Raycast menu bar.
 
 ## First Setup
 
@@ -26,8 +25,6 @@ On first launch, add a repository mapping when prompted:
 5. Save the mapping and return to the main list.
 
 After this, Worktree Deck can show worktrees for that repository and connect them with related Codex sessions.
-
-To enable the menu bar command, run `Worktree Status` once from Raycast.
 
 ## Configuration
 

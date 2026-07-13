@@ -9,8 +9,8 @@
 
 ## 2. 用語
 
-- **ca** = Codex。セッションの読み込み・一覧・詳細・メニューバー集計に対応済み。
-- **cc** = Claude Code。一覧・状態・メニューバー集計まで対応済み。詳細メッセージは未対応。
+- **ca** = Codex。セッションの読み込み・一覧・詳細に対応済み。
+- **cc** = Claude Code。一覧・状態に対応済み。詳細メッセージは未対応。
 
 どちらも、ローカルのセッションログファイルから Session を復元し、worktree に紐づけて表示する対象である。
 
@@ -21,11 +21,10 @@
 | セッション収集 | 対応済み | 対応済み |
 | 一覧タイトル/状態 | 対応済み | 対応済み |
 | 詳細メッセージ | 対応済み | 未対応 |
-| メニューバー集計 | 対応済み | 対応済み |
 | Auto Start(自動起動) | 対応済み | 対応済み(本対応で追加。§10) |
 | 起動・App 連携 | 対応済み | Auto Start のみ対応。手動 open-app 連携は範囲外 |
 
-cc は一覧表示・状態判定・メニューバー集計までは実装済み。残作業は、詳細メッセージ表示の provider 別ローダー化、subagent 判別、共通型の整理が中心。
+cc は一覧表示・状態判定までは実装済み。残作業は、詳細メッセージ表示の provider 別ローダー化、subagent 判別、共通型の整理が中心。
 
 ## 4. ca（Codex）の現状
 
@@ -48,11 +47,10 @@ cc は一覧表示・状態判定・メニューバー集計までは実装済�
 
 - パースで得た cwd を worktree path に前方一致でマッチ（`matchPath`）。
 
-### 4.4 一覧・詳細・メニューバーへの流れ
+### 4.4 一覧・詳細への流れ
 
 - 一覧: `loadTitlesForPaths` → `attachWorktreeTitles` で `Worktree.titleEntries`（`WorktreeTitle[]`）を付与。`application/worktree-deck-snapshot.usecase.ts` 経由で表示 snapshot に載る。
 - 詳細: `findLatestSessionFileByPath` / `findFirstSessionFileByPath`、`loadSessionMessages` / `loadLatestSessionMessages`（`worktreeSessionFileDependencies` 経由）。`loadLatestSessionAnswer` は別経路（`worktree-store.ts` 由来）。
-- メニューバー: `worktree-status-menu-bar.tsx` が状態件数を集計。
 
 ### 4.5 共通型と接続点（種別への結合箇所）
 
@@ -93,11 +91,10 @@ cc は一覧表示・状態判定・メニューバー集計までは実装済�
 - mtime 経過（`WORKTREE_DECK_DONE_THRESHOLD_DAYS`）で working→done に倒すのは ca と共通。
 - review の概念は無いため、sessionKind は main / subagent のみに簡素化（ca の review 重複除外ロジックは不要）。ただし現状は subagent 判別未実装。
 
-### 5.4 一覧・メニューバー接続（対応済み）
+### 5.4 一覧接続（対応済み）
 
 - `composition-root.ts` の `loadMergedTitlesForPaths` で ca の `loadTitlesForPaths` と cc の `loadClaudeTitlesForPaths` を並列取得し、同じ `Worktree.titleEntries` に混在させる。
 - `WorktreeTitle.provider` に `"cc"` を付与し、UI 側で provider に応じたアイコン表示ができる。
-- メニューバー集計は merged titles を使うため、cc の working / done / waiting も集計対象になる。
 
 ### 5.5 詳細メッセージ（未対応）
 
@@ -109,7 +106,7 @@ cc は一覧表示・状態判定・メニューバー集計までは実装済�
 
 - **一覧表示**: ca と cc を混在表示する（worktree ごとに両方のセッションが並ぶ）。`WorktreeTitle` に provider 種別を持たせ、UI で区別する。
 - **status 精度**: cc も ca と同等まで作り込む（末尾を精密解析）。
-- **抽象化**: 収集とパースは provider ごとに別実装、出力（`ParsedSessionLog` / `WorktreeTitle`）を共通契約にする。`matchPath`・キャッシュ骨格・snapshot / 詳細 / メニューバーは provider 非依存に保つ。
+- **抽象化**: 収集とパースは provider ごとに別実装、出力（`ParsedSessionLog` / `WorktreeTitle`）を共通契約にする。`matchPath`・キャッシュ骨格・snapshot / 詳細は provider 非依存に保つ。
 
 ## 7. cc 追加で触る範囲（スコープ）
 
@@ -117,7 +114,7 @@ cc は一覧表示・状態判定・メニューバー集計までは実装済�
 - 完了: `infrastructure/claude-session-file-store.ts` — projects 収集 + キャッシュ + 紐付け + live waiting 反映。
 - 一部完了: `WorktreeTitle` に provider 種別を追加。表示キャッシュも provider を保持する。
 - 完了: `loadTitlesForPaths` 相当を ca/cc マージにし、`composition-root.ts` で両 provider を束ねる。
-- 完了: 一覧 / メニューバーで provider を区別して扱う。最新 assistant メッセージは provider アイコンで表示する。
+- 完了: 一覧で provider を区別して扱う。最新 assistant メッセージは provider アイコンで表示する。
 - 未完了: 詳細メッセージの provider 別 loader。
 - 未完了: 共通型を provider 非依存へ整理（`worktree-types.ts` の re-export と `application/worktree-title.entity.ts` の `WorktreeTitle` 二重定義の両方を解消）。
 - 未完了: cc subagent 判別。
