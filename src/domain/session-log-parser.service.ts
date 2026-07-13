@@ -973,7 +973,10 @@ function applyNormalSessionStatus(args: {
   if (responseItemType === "function_call_output" && responseItemCallId) {
     state.waitingForUserCallIds.delete(responseItemCallId);
   }
-  if (eventType === "turn_aborted") {
+  if (eventType === "task_started") {
+    state.latestStatus = "working";
+    state.waitingForUserCallIds.clear();
+  } else if (eventType === "task_complete" || eventType === "turn_aborted") {
     state.latestStatus = "done";
     state.waitingForUserCallIds.clear();
   }

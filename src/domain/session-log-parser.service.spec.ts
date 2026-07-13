@@ -242,6 +242,52 @@ describe("sessionLogParserService", () => {
     });
   });
 
+  it("task_started 直後の context compaction 中も working にする", () => {
+    const result = parseLines([
+      {
+        type: "event_msg",
+        payload: { type: "user_message", message: "Investigate status" },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Done" }],
+          phase: "final_answer",
+        },
+      },
+      { type: "event_msg", payload: { type: "task_complete" } },
+      { type: "event_msg", payload: { type: "task_started" } },
+      { type: "compacted" },
+      { type: "event_msg", payload: { type: "token_count" } },
+      { type: "event_msg", payload: { type: "context_compacted" } },
+    ]);
+
+    expect(result.status).toBe("working");
+  });
+
+  it("task_complete で通常セッションを done にする", () => {
+    const result = parseLines([
+      {
+        type: "event_msg",
+        payload: { type: "user_message", message: "Run task" },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Still working" }],
+          phase: "commentary",
+        },
+      },
+      { type: "event_msg", payload: { type: "task_complete" } },
+    ]);
+
+    expect(result.status).toBe("done");
+  });
+
   it("承認待ち function_call と output による待機解除を解析する", () => {
     const state = sessionLogParserService.createParseState();
 
