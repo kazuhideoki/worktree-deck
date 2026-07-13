@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildBaseBranchOptions,
+  CODEX_MODEL_OPTIONS,
   buildCreateWorktreeFormItemOrder,
   CREATE_WORKTREE_FORM_DRAFT_STORAGE_KEYS,
   DEFAULT_CREATE_WORKTREE_AUTO_START,
@@ -16,6 +17,7 @@ import {
   resetCreateWorktreeFormDraftStorage,
   resolveDefaultBaseBranchValue,
   resolveDropdownValue,
+  resolveCodexModel,
 } from "./worktree-create-form";
 
 describe("buildCreateWorktreeFormItemOrder", () => {
@@ -99,6 +101,20 @@ describe("buildCreateWorktreeFormItemOrder", () => {
 describe("DEFAULT_CREATE_WORKTREE_AUTO_START", () => {
   it("設定未保存の場合は Auto Start を既定にする", () => {
     expect(DEFAULT_CREATE_WORKTREE_AUTO_START).toBe(true);
+  });
+});
+
+describe("CODEX_MODEL_OPTIONS", () => {
+  it("gpt-5.6 系モデルを Codex モデル選択肢に含める", () => {
+    expect(CODEX_MODEL_OPTIONS).toEqual(expect.arrayContaining(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]));
+  });
+});
+
+describe("resolveCodexModel", () => {
+  it("gpt-5.6 系モデルを有効な Codex モデルとして扱う", () => {
+    expect(resolveCodexModel(" gpt-5.6-sol ")).toBe("gpt-5.6-sol");
+    expect(resolveCodexModel("gpt-5.6-terra")).toBe("gpt-5.6-terra");
+    expect(resolveCodexModel("gpt-5.6-luna")).toBe("gpt-5.6-luna");
   });
 });
 

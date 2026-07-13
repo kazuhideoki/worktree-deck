@@ -39,8 +39,10 @@ import {
 } from "../application/start-claude-initial-session.usecase";
 import { startWorktreeAutoStartJobUsecase } from "../application/start-worktree-auto-start-job.usecase";
 import {
+  normalizeCodexReasoningEffort,
   resolveCodexPermissionMetadata,
   resolveCodexPermissionMode,
+  resolveCodexReasoningEffortOptions,
   startCodexInitialSessionUsecase,
   type CodexInitialSessionMetadata,
   type CodexPermissionMode,
@@ -158,7 +160,17 @@ const DEFAULT_CODEX_INITIAL_SESSION_METADATA: CodexInitialSessionMetadata = {
 /**
  * Codex モデル選択肢
  */
-const CODEX_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2"];
+export const CODEX_MODEL_OPTIONS = [
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.3-codex",
+  "gpt-5.3-codex-spark",
+  "gpt-5.2",
+];
 
 /**
  * worktree 作成ユースケースで使う既定依存
@@ -1099,14 +1111,15 @@ export function CreateWorktreeForm({
                   id="reasoningEffort"
                   ref={reasoningEffortRef}
                   title="Reasoning Effort"
-                  value={reasoningEffortDraft}
-                  onChange={(value) => setReasoningEffortDraft(resolveReasoningEffort(value))}
+                  value={normalizeCodexReasoningEffort(resolveCodexModel(modelDraft), reasoningEffortDraft)}
+                  onChange={(value) =>
+                    setReasoningEffortDraft(normalizeCodexReasoningEffort(resolveCodexModel(modelDraft), value))
+                  }
                   onFocus={() => recordFocusedFormItem(CREATE_WORKTREE_FORM_ITEM_IDS.reasoningEffort)}
                 >
-                  <Form.Dropdown.Item value="low" title="low" />
-                  <Form.Dropdown.Item value="medium" title="medium" />
-                  <Form.Dropdown.Item value="high" title="high" />
-                  <Form.Dropdown.Item value="xhigh" title="xhigh" />
+                  {resolveCodexReasoningEffortOptions(resolveCodexModel(modelDraft)).map((effort) => (
+                    <Form.Dropdown.Item key={effort} value={effort} title={effort} />
+                  ))}
                 </Form.Dropdown>
               );
             }
@@ -1739,7 +1752,7 @@ function buildCodexInitialSessionMetadata(
   return {
     model: resolveCodexModel(values.model),
     serviceTier: resolveServiceTier(values.serviceTier),
-    reasoningEffort: resolveReasoningEffort(values.reasoningEffort),
+    reasoningEffort: normalizeCodexReasoningEffort(resolveCodexModel(values.model), values.reasoningEffort),
     ...permissionMetadata,
   };
 }
@@ -1765,7 +1778,7 @@ function resolveProvider(value: string | undefined): SessionProvider {
 /**
  * model のフォーム値を正規化する
  */
-function resolveCodexModel(value: string): string {
+export function resolveCodexModel(value: string): string {
   const trimmed = value.trim();
   return CODEX_MODEL_OPTIONS.includes(trimmed) ? trimmed : DEFAULT_CODEX_INITIAL_SESSION_METADATA.model;
 }
@@ -1775,16 +1788,6 @@ function resolveCodexModel(value: string): string {
  */
 function resolveServiceTier(value: string): CodexServiceTier {
   return value === "fast" ? "fast" : "default";
-}
-
-/**
- * reasoning effort のフォーム値を正規化する
- */
-function resolveReasoningEffort(value: string): CodexReasoningEffort {
-  if (value === "low" || value === "high" || value === "xhigh") {
-    return value;
-  }
-  return "medium";
 }
 
 /**

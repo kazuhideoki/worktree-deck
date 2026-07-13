@@ -1,7 +1,22 @@
 /**
  * Codex reasoning effort の選択値
  */
-export type CodexReasoningEffort = "low" | "medium" | "high" | "xhigh";
+export type CodexReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+
+/**
+ * 従来の Codex モデルで利用できる reasoning effort
+ */
+const BASE_CODEX_REASONING_EFFORT_OPTIONS = ["low", "medium", "high", "xhigh"] as const;
+
+/**
+ * max 対応モデルで利用できる reasoning effort
+ */
+const MAX_CODEX_REASONING_EFFORT_OPTIONS = [...BASE_CODEX_REASONING_EFFORT_OPTIONS, "max"] as const;
+
+/**
+ * ultra 対応モデルで利用できる reasoning effort
+ */
+const ULTRA_CODEX_REASONING_EFFORT_OPTIONS = [...MAX_CODEX_REASONING_EFFORT_OPTIONS, "ultra"] as const;
 
 /**
  * Codex approval policy の選択値
@@ -126,10 +141,11 @@ async function start(args: {
  * UI 由来のメタ情報をセッション開始に使う値へ正規化する
  */
 function normalizeMetadata(metadata: CodexInitialSessionMetadata): CodexInitialSessionMetadata {
+  const model = metadata.model.trim();
   return {
-    model: metadata.model.trim(),
+    model,
     serviceTier: normalizeServiceTier(metadata.serviceTier),
-    reasoningEffort: normalizeReasoningEffort(metadata.reasoningEffort),
+    reasoningEffort: normalizeCodexReasoningEffort(model, metadata.reasoningEffort),
     approvalPolicy: normalizeApprovalPolicy(metadata.approvalPolicy),
     sandboxMode: normalizeSandboxMode(metadata.sandboxMode),
     approvalsReviewer: normalizeApprovalsReviewer(metadata.approvalsReviewer),
@@ -221,13 +237,25 @@ function normalizeServiceTier(value: string): CodexServiceTier {
 }
 
 /**
- * reasoning effort を有効値へ正規化する
+ * モデルで利用できる reasoning effort を返す
  */
-function normalizeReasoningEffort(value: string): CodexReasoningEffort {
-  if (value === "low" || value === "medium" || value === "high") {
-    return value;
+export function resolveCodexReasoningEffortOptions(model: string): readonly CodexReasoningEffort[] {
+  const normalizedModel = model.trim();
+  if (normalizedModel === "gpt-5.6-sol" || normalizedModel === "gpt-5.6-terra") {
+    return ULTRA_CODEX_REASONING_EFFORT_OPTIONS;
   }
-  return value === "xhigh" ? "xhigh" : "medium";
+  if (normalizedModel === "gpt-5.6-luna") {
+    return MAX_CODEX_REASONING_EFFORT_OPTIONS;
+  }
+  return BASE_CODEX_REASONING_EFFORT_OPTIONS;
+}
+
+/**
+ * reasoning effort をモデルで利用できる値へ正規化する
+ */
+export function normalizeCodexReasoningEffort(model: string, value: string): CodexReasoningEffort {
+  const options = resolveCodexReasoningEffortOptions(model);
+  return options.includes(value as CodexReasoningEffort) ? (value as CodexReasoningEffort) : "medium";
 }
 
 /**

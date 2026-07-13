@@ -651,7 +651,7 @@ function resolveAppServerServiceTier(value: CodexServiceTier): CodexServiceTier 
  */
 function readReasoningEffort(value: unknown): CodexReasoningEffort {
   const raw = readString(value);
-  if (raw === "low" || raw === "high" || raw === "xhigh") {
+  if (raw === "low" || raw === "high" || raw === "xhigh" || raw === "max" || raw === "ultra") {
     return raw;
   }
   return "medium";

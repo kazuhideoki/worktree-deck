@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  normalizeCodexReasoningEffort,
   resolveCodexPermissionMetadata,
   resolveCodexPermissionMode,
+  resolveCodexReasoningEffortOptions,
   startCodexInitialSessionUsecase,
   type CodexInitialSessionMetadata,
   type StartCodexInitialSessionDependencies,
@@ -75,6 +77,40 @@ describe("start", () => {
         dependencies,
       }),
     ).rejects.toThrow("Worktree path is required.");
+  });
+});
+
+describe("resolveCodexReasoningEffortOptions", () => {
+  it("Sol と Terra では max と ultra を利用できる", () => {
+    expect(resolveCodexReasoningEffortOptions("gpt-5.6-sol")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ]);
+    expect(resolveCodexReasoningEffortOptions("gpt-5.6-terra")).toContain("ultra");
+  });
+
+  it("Luna では max までを利用できる", () => {
+    expect(resolveCodexReasoningEffortOptions("gpt-5.6-luna")).toEqual(["low", "medium", "high", "xhigh", "max"]);
+  });
+
+  it("従来モデルでは xhigh までを利用できる", () => {
+    expect(resolveCodexReasoningEffortOptions("gpt-5.5")).toEqual(["low", "medium", "high", "xhigh"]);
+  });
+});
+
+describe("normalizeCodexReasoningEffort", () => {
+  it("モデルで利用できる値はそのまま返す", () => {
+    expect(normalizeCodexReasoningEffort("gpt-5.6-sol", "ultra")).toBe("ultra");
+    expect(normalizeCodexReasoningEffort("gpt-5.6-luna", "max")).toBe("max");
+  });
+
+  it("モデルで利用できない値は medium へ丸める", () => {
+    expect(normalizeCodexReasoningEffort("gpt-5.6-luna", "ultra")).toBe("medium");
+    expect(normalizeCodexReasoningEffort("gpt-5.5", "max")).toBe("medium");
   });
 });
 

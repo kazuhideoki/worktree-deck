@@ -69,6 +69,22 @@ describe("loadCodexInitialSessionDefaultsFromGlobalConfig", () => {
 
     expect(result.serviceTier).toBe("default");
   });
+
+  it("config.toml の ultra を reasoning effort として読む", async () => {
+    await writeCodexConfigForTest('model_reasoning_effort = "ultra"\n');
+
+    const result = await loadCodexInitialSessionDefaultsFromGlobalConfig({ repoRoot: "/repos/app" });
+
+    expect(result.reasoningEffort).toBe("ultra");
+  });
+
+  it("config.toml の max を reasoning effort として読む", async () => {
+    await writeCodexConfigForTest('model_reasoning_effort = "max"\n');
+
+    const result = await loadCodexInitialSessionDefaultsFromGlobalConfig({ repoRoot: "/repos/app" });
+
+    expect(result.reasoningEffort).toBe("max");
+  });
 });
 
 describe("extractCodexVersionFromText", () => {
@@ -132,6 +148,18 @@ describe("buildCodexThreadStartParams", () => {
 });
 
 describe("buildCodexTurnStartParams", () => {
+  it("turn/start payload に ultra reasoning effort を渡す", () => {
+    expect(
+      buildCodexTurnStartParams({
+        threadId: "thread-1",
+        initialPrompt: "Fix focus",
+        metadata: { ...DEFAULT_METADATA, model: "gpt-5.6-sol", reasoningEffort: "ultra" },
+      }),
+    ).toMatchObject({
+      effort: "ultra",
+    });
+  });
+
   it("turn/start payload に serviceTier fast を渡す", () => {
     expect(
       buildCodexTurnStartParams({
