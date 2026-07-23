@@ -42,6 +42,7 @@ type CodexThreadTitleEntry = {
   threadId: string;
   worktreePath: string;
   sessionPath: string | null;
+  threadSource: string | null;
   title: string;
   updatedAt: number;
   startedAt: number | null;
@@ -211,14 +212,23 @@ function normalizeCodexThreadTitleEntry(value: unknown): CodexThreadTitleEntry |
     return null;
   }
   const sessionPath = typeof raw.rollout_path === "string" && raw.rollout_path.trim() ? raw.rollout_path.trim() : null;
+  const threadSource = typeof raw.thread_source === "string" ? raw.thread_source.trim().toLowerCase() || null : null;
   return {
     threadId,
     worktreePath,
     sessionPath,
+    threadSource,
     title,
     updatedAt,
     startedAt: normalizeFiniteNumber(raw.created_at_ms) ?? normalizeFiniteNumber(raw.created_at),
   };
+}
+
+/**
+ * session file で分類できない Codex thread を一覧へ補完してよいか判定する
+ */
+function isStoredOnlyTitleEntry(entry: CodexThreadTitleEntry): boolean {
+  return entry.threadSource !== "subagent";
 }
 
 /**
@@ -278,7 +288,7 @@ async function loadCodexThreadTitlesForWorktreePaths(args: {
     })
     .join(" or ");
   const sql = [
-    "select id, title, cwd, rollout_path, updated_at_ms, created_at_ms",
+    "select id, title, cwd, rollout_path, thread_source, updated_at_ms, created_at_ms",
     "from threads",
     `where ${whereClause}`,
     "order by updated_at_ms desc, id desc",
@@ -950,24 +960,26 @@ function buildStoredOnlyTitles(args: {
   const titles = new Map<string, WorktreeTitle[]>();
   for (const path of args.paths) {
     const matchedThreadIds = new Set<string>();
-    const codexEntries = (args.codexThreadTitles.byWorktreePath.get(path) ?? []).map((entry) => {
-      matchedThreadIds.add(entry.threadId);
-      return {
-        title: entry.title,
-        status: resolveExplicitOnlyStatus({
+    const codexEntries = (args.codexThreadTitles.byWorktreePath.get(path) ?? [])
+      .filter(isStoredOnlyTitleEntry)
+      .map((entry) => {
+        matchedThreadIds.add(entry.threadId);
+        return {
+          title: entry.title,
+          status: resolveExplicitOnlyStatus({
+            updatedAt: entry.updatedAt,
+            nowMs: args.nowMs,
+            doneThresholdMs: args.doneThresholdMs,
+          }),
+          latestMessage: null,
           updatedAt: entry.updatedAt,
-          nowMs: args.nowMs,
-          doneThresholdMs: args.doneThresholdMs,
-        }),
-        latestMessage: null,
-        updatedAt: entry.updatedAt,
-        startedAt: entry.startedAt,
-        sessionPath: entry.sessionPath ?? undefined,
-        sessionKind: "main" as const,
-        isWaitingForUser: false,
-        skillUsages: [],
-      };
-    });
+          startedAt: entry.startedAt,
+          sessionPath: entry.sessionPath ?? undefined,
+          sessionKind: "main" as const,
+          isWaitingForUser: false,
+          skillUsages: [],
+        };
+      });
     const explicitEntries = (args.explicitTitles.byWorktreePath.get(path) ?? [])
       .filter((entry) => !matchedThreadIds.has(entry.threadId))
       .map((entry) => {
@@ -1245,7 +1257,7 @@ export async function loadTitlesForPaths(args: {
         }
         const codexEntries = codexThreadTitles.byWorktreePath.get(path) ?? [];
         for (const codexThreadTitle of codexEntries) {
-          if (matchedExplicitThreadIds.has(codexThreadTitle.threadId)) {
+          if (matchedExplicitThreadIds.has(codexThreadTitle.threadId) || !isStoredOnlyTitleEntry(codexThreadTitle)) {
             continue;
           }
           const titleEntry: SessionTitleEntry = {

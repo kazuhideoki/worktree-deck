@@ -173,6 +173,7 @@ async function writeCodexStateThreads(
     title: string;
     cwd: string;
     rolloutPath: string;
+    threadSource?: string;
     updatedAtMs: number;
     createdAtMs: number;
   }[],
@@ -181,14 +182,15 @@ async function writeCodexStateThreads(
   await execFileAsync("sqlite3", [
     dbPath,
     [
-      "create table threads (id text primary key, title text not null, cwd text not null, rollout_path text not null, updated_at_ms integer not null, created_at_ms integer not null);",
+      "create table threads (id text primary key, title text not null, cwd text not null, rollout_path text not null, thread_source text not null, updated_at_ms integer not null, created_at_ms integer not null);",
       ...rows.map(
         (row) =>
-          `insert into threads (id, title, cwd, rollout_path, updated_at_ms, created_at_ms) values (${[
+          `insert into threads (id, title, cwd, rollout_path, thread_source, updated_at_ms, created_at_ms) values (${[
             quoteSqlString(row.id),
             quoteSqlString(row.title),
             quoteSqlString(row.cwd),
             quoteSqlString(row.rolloutPath),
+            quoteSqlString(row.threadSource ?? "user"),
             row.updatedAtMs.toString(),
             row.createdAtMs.toString(),
           ].join(",")});`,
@@ -497,6 +499,77 @@ describe("loadTitlesForPaths", () => {
       updatedAt: updatedAtMs,
       sessionKind: "main",
     });
+  });
+
+  it("session file が未作成の subagent title は表示しない", async () => {
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16f";
+    const updatedAtMs = Date.now();
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "Stored-only subagent title",
+        cwd: worktreePath,
+        rolloutPath: join(codexHome, "sessions", "missing-subagent.jsonl"),
+        threadSource: "subagent",
+        updatedAtMs,
+        createdAtMs: updatedAtMs - 1_000,
+      },
+    ]);
+
+    const titlesByPath = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(titlesByPath.has(worktreePath)).toBe(false);
+  });
+
+  it("Codex state にある guardian subagent title を main として補完しない", async () => {
+    const mainThreadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16d";
+    const guardianThreadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16e";
+    const sessionDir = await createSessionDir(codexHome, new Date());
+    const mainSessionPath = await writeSessionFile(
+      sessionDir,
+      [
+        buildSessionMetaLine("vscode", mainThreadId),
+        buildTurnContextLine(worktreePath),
+        buildEventMessageLine("user_message", "Main session title"),
+      ],
+      "rollout-main.jsonl",
+    );
+    const guardianSessionPath = await writeSessionFile(
+      sessionDir,
+      [
+        buildSessionMetaLine({ subagent: { other: "guardian" } }, guardianThreadId),
+        buildTurnContextLine(worktreePath),
+        buildEventMessageLine(
+          "user_message",
+          "The following is the Codex agent history whose request action you are assessing.",
+        ),
+      ],
+      "rollout-guardian.jsonl",
+    );
+    const nowMs = Date.now();
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: mainThreadId,
+        title: "Main session title",
+        cwd: worktreePath,
+        rolloutPath: mainSessionPath,
+        updatedAtMs: nowMs,
+        createdAtMs: nowMs - 1_000,
+      },
+      {
+        id: guardianThreadId,
+        title: "The following is the Codex agent history whose request action you are assessing.",
+        cwd: worktreePath,
+        rolloutPath: guardianSessionPath,
+        threadSource: "subagent",
+        updatedAtMs: nowMs - 100,
+        createdAtMs: nowMs - 2_000,
+      },
+    ]);
+
+    const titlesByPath = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(titlesByPath.get(worktreePath)?.map((entry) => entry.title)).toEqual(["Main session title"]);
   });
 
   it("古い explicit-only title は done として表示する", async () => {
