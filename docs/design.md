@@ -37,7 +37,8 @@ Codex と Claude Code のローカルセッションを探索し、タイトル�
 ### Repository 操作の仲介
 
 worktree の作成、pull、merge、Pull Request 作成、branch 名変更、削除と復元を、対象と結果を確認できる Raycast の操作として提供する。
-実行そのものは Git、GitHub CLI、ローカルファイルシステムなどの外部機能へ委譲する。
+対象 worktree の状態から操作内容を組み立て、必要な確認を経て Git、GitHub CLI、ローカルファイルシステムなどへ実行を委譲する。
+一覧上の整理を目的とする Archive と Git worktree の削除は区別し、branch を残して削除した場合は復元できるようにする。
 
 ### 作業開始の支援
 
@@ -48,28 +49,7 @@ worktree 作成時には、手動で開始するか、Codex または Claude Cod
 
 前回表示できた情報を先に復元し、worktree、セッション、Git metadata、Pull Request を段階的に更新する。
 外部情報の取得に時間がかかる場合でも、利用可能な一覧と操作を先に提示する。
-
-## 主要な処理の流れ
-
-### 一覧を開く
-
-1. Raycast Preferences とアプリ内設定を読み込む。
-2. worktree の探索結果または再利用可能なキャッシュを取得する。
-3. repository mapping を適用して表示対象を決める。
-4. Codex と Claude Code のセッション情報を関連付ける。
-5. Git metadata、base ref、Pull Request、起動アプリを追加して表示を更新する。
-
-### Worktree を作成する
-
-1. repository、branch、base ref、開始方法、起動アプリを利用者が指定する。
-2. Git worktree を作成し、必要な関連設定を保存する。
-3. Auto Start の場合は、選択したエージェントで初回セッションを開始する。
-4. 作成結果を一覧へ反映し、選択したアプリで開く。
-
-### 既存の Worktree を操作する
-
-対象 worktree の現在状態から実行計画を組み立て、必要な確認を経て Git や GitHub CLI を実行する。
-削除時に branch を残す場合は、一定期間、復元候補として扱う。
+キャッシュは応答性のために利用するが、更新後の情報で置き換えられる一時的な表示として扱う。
 
 ## 外部システムとの境界
 
@@ -95,19 +75,7 @@ repository、branch、セッション、Pull Request を別々の一覧にせず
 worktree、Git metadata、エージェントセッション、アプリ設定はローカルから取得する。
 外部サービスが利用できない場合も、ローカルで確認できる範囲の一覧と操作を残す。
 
-### 重い情報は段階的に更新する
-
-初期表示に必要な情報と、セッション・Git・Pull Request の詳細取得を分ける。
-キャッシュは応答性のために利用するが、更新後の情報で置き換えられる一時的な表示として扱う。
-
-### 非表示と削除を区別する
-
-Archive は一覧上の整理だけを行い、Git worktree を変更しない。
-削除は Git worktree を対象とし、branch を残した場合だけ復元候補を保持する。
-
 ## 現在の制約
 
 - repository mapping が表示対象と worktree の配置を結び付けるため、初回利用時に mapping の登録が必要である。
 - Codex と Claude Code は一覧・状態表示に対応しているが、アプリ内のセッション本文解析は Codex 形式のみを扱う。Claude Code のセッションファイルは IDE や既定アプリで開いて確認する。
-- GitHub CLI、Codex、Claude Code、IDE が未導入または未認証の場合、その外部機能を使う操作は実行できない。
-- キャッシュを先に表示するため、更新完了までは古い情報が一時的に見える場合がある。

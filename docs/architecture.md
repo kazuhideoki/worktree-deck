@@ -52,7 +52,7 @@ interface-adapters と infrastructure の分離、および Composition Root へ
 変更時には、外部処理を infrastructure、ポートへの変換を interface-adapters、全体の組み立てを Composition Root へ寄せられるかを判断する。
 
 この移行状態では、層をまたぐ既存依存を経由して責務が再び混ざることと、現在の層制約テストだけではすべての逆向き依存を検出できないことが残余リスクとなる。
-interface-adapters を独立した層として徹底するか、単純な接続を Composition Root と infrastructure へ集約するかは未決であり、大きな依存整理を行うときに決定する。
+interface-adapters と infrastructure の最終的な責務境界は未確定であり、大きな依存整理を行うときに決定する。
 
 ## 一覧データの構成
 
@@ -67,29 +67,22 @@ UI はこの段階を個別の外部処理として実装せず、application �
 
 ## 設定とデータの所有境界
 
-| データ | 所有先 | 扱い |
+| データ区分 | 所有先 | 扱い |
 |---|---|---|
-| worktree 基準ディレクトリ、Codex home、セッション探索期間、完了判定期間、Claude OAuth token | Raycast Preferences | command 起動時に実行環境へ反映する |
-| repository mapping、General Settings、worktree ごとの起動アプリ、明示的なセッションタイトル、削除履歴、job state | `~/.worktree-deck/storage` | Worktree Deck が所有する永続データ |
-| worktree 一覧、セッション解析結果、表示 snapshot、選択、Archive、フォーム下書き | Raycast LocalStorage | 再生成可能なキャッシュまたは UI 状態 |
-| base ref | Git branch config を優先し、worktree 単位の保存値を補助に使う | branch と比較基準の関係を保持する |
-| Codex セッション | 設定された Codex home | 読み取り対象であり、Worktree Deck は所有しない |
-| Claude Code セッション | `CLAUDE_CONFIG_DIR` または既定の Claude ディレクトリ | 読み取り対象であり、Worktree Deck は所有しない |
-
-Claude Auto Start の OAuth token は worker へ環境変数で渡し、job state へ保存しない。
-ファイル保存領域の場所は Raycast Preferences から変更しない。
+| 実行環境ごとの設定と秘密情報 | Raycast Preferences | 起動時に実行環境へ反映し、秘密情報は job state へ保存しない |
+| Worktree Deck が所有する永続データ | `~/.worktree-deck/storage` | 画面と background worker で共有し、保存場所は設定から変更しない |
+| 再生成可能な表示情報と UI 状態 | Raycast LocalStorage | 取得失敗時も主要処理を止めないキャッシュとして扱う |
+| branch と比較基準の関係 | Git branch config と補助的なアプリ保存値 | Git の設定を優先する |
+| エージェントのセッションログ | 各エージェントの保存領域 | 外部所有の読み取り対象として扱う |
 
 ## Agent セッション境界
 
 Codex と Claude Code は保存形式と状態判定が異なるため、ログ探索と一覧解析を provider ごとに分ける。
 一覧へ渡すタイトル、状態、更新日時、ユーザー入力待ち、provider は共通の表示情報として扱う。
 
-現在、共通のセッション型の一部は Codex 用パーサーの型を再利用しており、application と infrastructure に類似した表示型が残っている。
-また、セッション本文ローダーは Codex 形式だけを解析するため、Claude Code の本文表示は provider 別の実装へ分離できていない。
+現在は provider 固有の型と共通表示情報の分離が完了しておらず、セッション本文ローダーも Codex 形式だけを解析する。
 provider 追加や本文表示を変更するときは、探索、一覧解析、本文解析の3つを別の境界として扱う。
-
-共通のセッション型を置く場所と、本文ローダーへ provider を渡す方法は未決である。
-Claude Code の本文表示へ着手するときに、一覧型の重複解消と合わせて決定する。
+provider 固有処理と共通表示契約の最終的な境界は未確定であり、Claude Code の本文表示へ着手するときに決定する。
 
 ## 境界を表す命名
 
