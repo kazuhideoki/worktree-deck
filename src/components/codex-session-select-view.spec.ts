@@ -138,8 +138,8 @@ describe("buildCodexSessionEntries", () => {
 
     expect(new Map(entries.map((entry) => [entry.title, entry.icon]))).toEqual(
       new Map([
-        ["Working", { source: Icon.Message, tintColor: Color.Green }],
-        ["Done", { source: Icon.Message, tintColor: Color.Blue }],
+        ["Working", { source: Icon.Message, tintColor: Color.Blue }],
+        ["Done", { source: Icon.Message, tintColor: Color.Green }],
         ["Waiting", { source: Icon.Message, tintColor: Color.Yellow }],
       ]),
     );

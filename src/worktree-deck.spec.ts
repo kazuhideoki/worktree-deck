@@ -111,6 +111,11 @@ function buildWorktree(args: {
 }
 
 describe("buildDetailMarkdown", () => {
+  it("working は青、done は緑にする", () => {
+    expect(resolveStatusTint({ status: "working", titles: [] })).toBe("blue");
+    expect(resolveStatusTint({ status: "done", titles: [] })).toBe("green");
+  });
+
   it("いずれかのセッションがユーザー指示待ちならアイコン色を黄色にする", () => {
     const tint = resolveStatusTint({
       status: "working",

@@ -50,12 +50,12 @@ function buildSession(args: {
 }
 
 describe("resolveSessionStatusTint", () => {
-  it("working は緑", () => {
-    expect(resolveSessionStatusTint("working")).toBe(Color.Green);
+  it("working は青", () => {
+    expect(resolveSessionStatusTint("working")).toBe(Color.Blue);
   });
 
-  it("done は青", () => {
-    expect(resolveSessionStatusTint("done")).toBe(Color.Blue);
+  it("done は緑", () => {
+    expect(resolveSessionStatusTint("done")).toBe(Color.Green);
   });
 
   it("status が null のときは未指定", () => {
@@ -73,8 +73,8 @@ describe("buildSessionEntries", () => {
 
     const entries = buildSessionEntries(sessions);
 
-    expect(entries[0]?.icon).toEqual({ source: "message", tintColor: Color.Green });
-    expect(entries[1]?.icon).toEqual({ source: "message", tintColor: Color.Blue });
+    expect(entries[0]?.icon).toEqual({ source: "message", tintColor: Color.Blue });
+    expect(entries[1]?.icon).toEqual({ source: "message", tintColor: Color.Green });
     expect(entries[2]?.icon).toEqual({ source: "message", tintColor: undefined });
   });
 

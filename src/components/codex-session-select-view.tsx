@@ -2,6 +2,7 @@ import { Action, ActionPanel, Color, Icon, List, Toast, type Keyboard, showToast
 import { useCallback, useState } from "react";
 import type { WorktreeTitle } from "../composition-root";
 import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
+import { resolvePulsingSessionStatusTint, useSessionStatusPulse } from "./session-status-pulse";
 
 /**
  * Codex App セッション選択アクションのタイトル
@@ -29,7 +30,7 @@ type CodexSessionEntry = {
   threadId: string;
   sessionPath: string;
   updatedAt: number;
-  icon: { source: Icon; tintColor?: Color };
+  icon: { source: Icon; tintColor?: Color.ColorLike };
   isArchived: boolean;
 };
 
@@ -251,6 +252,10 @@ export function CodexSessionSelectView({
   const { pop } = useNavigation();
   const [visibleEntries, setVisibleEntries] = useState(entries);
   const [restorableEntries, setRestorableEntries] = useState(archivedEntries);
+  const hasWorkingStatus = [...visibleEntries, ...restorableEntries].some(
+    (entry) => entry.icon.tintColor === Color.Blue,
+  );
+  const isWorkingStatusPulseBright = useSessionStatusPulse(hasWorkingStatus);
   const handleOpenSession = useCallback(
     async (threadId: string): Promise<void> => {
       try {
@@ -348,6 +353,7 @@ export function CodexSessionSelectView({
             onArchiveSession={handleArchiveSession}
             onUnarchiveSession={handleUnarchiveSession}
             onBack={pop}
+            isWorkingStatusPulseBright={isWorkingStatusPulseBright}
           />
         ))}
       </List.Section>
@@ -364,6 +370,7 @@ export function CodexSessionSelectView({
               onArchiveSession={handleArchiveSession}
               onUnarchiveSession={handleUnarchiveSession}
               onBack={pop}
+              isWorkingStatusPulseBright={isWorkingStatusPulseBright}
             />
           ))}
         </List.Section>
@@ -391,6 +398,7 @@ type CodexSessionListItemProps = {
   onArchiveSession: (threadId: string) => Promise<void>;
   onUnarchiveSession: (threadId: string) => Promise<void>;
   onBack: () => void;
+  isWorkingStatusPulseBright: boolean;
 };
 
 /**
@@ -405,13 +413,17 @@ function CodexSessionListItem({
   onArchiveSession,
   onUnarchiveSession,
   onBack,
+  isWorkingStatusPulseBright,
 }: CodexSessionListItemProps) {
   return (
     <List.Item
       key={entry.id}
       id={entry.id}
       title={entry.title}
-      icon={entry.icon}
+      icon={{
+        ...entry.icon,
+        tintColor: resolvePulsingSessionStatusTint(entry.icon.tintColor, isWorkingStatusPulseBright),
+      }}
       accessories={buildSessionAccessories(entry)}
       actions={
         <ActionPanel>
@@ -459,10 +471,10 @@ function resolveCodexSessionIconTintColor(session: WorktreeTitle): Color | undef
     return Color.Yellow;
   }
   if (session.status === "working") {
-    return Color.Green;
+    return Color.Blue;
   }
   if (session.status === "done") {
-    return Color.Blue;
+    return Color.Green;
   }
   return undefined;
 }

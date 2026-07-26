@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveWorktreeDeckCompositionRoot, type SessionMessage, type WorktreeTitle } from "../composition-root";
 import { sessionDetailUsecase } from "../application/session-detail.usecase";
 import { worktreeSessionFileUsecase } from "../application/worktree-session-file.usecase";
+import { resolvePulsingSessionStatusTint, useSessionStatusPulse } from "./session-status-pulse";
 
 const WORKTREE_DECK_COMPOSITION_ROOT = resolveWorktreeDeckCompositionRoot();
 
@@ -29,7 +30,7 @@ type SessionEntry = {
   id: string;
   title: string;
   sessionPath: string | null;
-  icon: { source: Icon; tintColor?: Color };
+  icon: { source: Icon; tintColor?: Color.ColorLike };
   skillUsages: NonNullable<WorktreeTitle["skillUsages"]>;
 };
 
@@ -74,9 +75,9 @@ export function buildSessionEntries(sessions: WorktreeTitle[]): SessionEntry[] {
 export function resolveSessionStatusTint(status: WorktreeTitle["status"]): Color | undefined {
   switch (status) {
     case "working":
-      return Color.Green;
-    case "done":
       return Color.Blue;
+    case "done":
+      return Color.Green;
     default:
       return undefined;
   }
@@ -104,6 +105,8 @@ export function resolveSessionOpenTargets(
 export function SessionDetailView({ title, sessions, homeDir }: SessionDetailViewProps) {
   const { pop } = useNavigation();
   const entries = useMemo(() => buildSessionEntries(sessions), [sessions]);
+  const hasWorkingStatus = entries.some((entry) => entry.icon.tintColor === Color.Blue);
+  const isWorkingStatusPulseBright = useSessionStatusPulse(hasWorkingStatus);
   const [selectedId, setSelectedId] = useState<string | null>(entries[0]?.id ?? null);
   const [messagesByPath, setMessagesByPath] = useState<Record<string, SessionMessage[] | null>>({});
   const [loadingPath, setLoadingPath] = useState<string | null>(null);
@@ -199,7 +202,10 @@ export function SessionDetailView({ title, sessions, homeDir }: SessionDetailVie
             key={entry.id}
             id={entry.id}
             title={entry.title}
-            icon={entry.icon}
+            icon={{
+              ...entry.icon,
+              tintColor: resolvePulsingSessionStatusTint(entry.icon.tintColor, isWorkingStatusPulseBright),
+            }}
             detail={
               <List.Item.Detail
                 markdown={detailMarkdown}

@@ -46,6 +46,7 @@ import {
   normalizeWorktreeBranchName,
 } from "./components/worktree-ui-utils";
 import { buildOpenAppAccessory, resolveOpenAppIcon } from "./components/worktree-open-app-icon";
+import { resolvePulsingSessionStatusTint, useSessionStatusPulse } from "./components/session-status-pulse";
 import { worktreeIdeAppService, type WorktreeIdeApp } from "./domain/worktree-ide-app.service";
 import { worktreeDeckDataStore } from "./components/worktree-deck-data-store";
 import {
@@ -613,6 +614,13 @@ export default function Command() {
       },
     ];
   }, [archivedWorktreeEntries, shouldApplyWorktreeArchive, visibleSections]);
+  const hasWorkingStatus = renderSections.some(({ entries }) =>
+    entries.some((entry) => {
+      const titles = entry.kind === "origin" ? entry.titles : (entry.item.titleEntries ?? []);
+      return resolveWorktreeStatus(titles) === "working" && !hasAnySessionWaitingForUser(titles);
+    }),
+  );
+  const isWorkingStatusPulseBright = useSessionStatusPulse(hasWorkingStatus);
   const selectionIndex = useMemo(() => buildSelectionIndex(renderSections), [renderSections]);
   /**
    * 表示中の選択 ID を保持し、起動復元完了後だけ永続化する
@@ -1927,7 +1935,11 @@ export default function Command() {
                   const openApp = resolveOpenAppForPath(entry.originPath);
                   const threadId = resolveThreadIdForPath(entry.originPath);
                   const status = resolveWorktreeStatus(entry.titles);
-                  const statusTint = resolveStatusTint({ status, titles: entry.titles });
+                  const statusTint = resolveStatusTint({
+                    status,
+                    titles: entry.titles,
+                    isWorkingStatusPulseBright,
+                  });
                   const originBranch = formatBranchTitle({ branch: entry.branch ?? "origin", titles: entry.titles });
                   const rawDetailMarkdown = buildDetailMarkdown({
                     title: originBranch,
@@ -2057,7 +2069,7 @@ export default function Command() {
                 const canCreatePullRequest = Boolean(item.branch?.trim());
                 const canPullWorktree = canPullBranch(item.branch);
                 const status = resolveWorktreeStatus(titles);
-                const statusTint = resolveStatusTint({ status, titles });
+                const statusTint = resolveStatusTint({ status, titles, isWorkingStatusPulseBright });
                 return (
                   <List.Item
                     key={itemId}
@@ -2298,14 +2310,15 @@ export function shouldShowRepositoryMappingOnboardingEmptyState(args: {
 export function resolveStatusTint(args: {
   status: WorktreeTitle["status"];
   titles: WorktreeTitle[];
-}): Color | undefined {
+  isWorkingStatusPulseBright?: boolean;
+}): Color.ColorLike | undefined {
   if (hasAnySessionWaitingForUser(args.titles)) {
     return Color.Yellow;
   }
   if (!args.status) {
     return undefined;
   }
-  return resolveStatusColor(args.status);
+  return resolvePulsingSessionStatusTint(resolveStatusColor(args.status), args.isWorkingStatusPulseBright ?? true);
 }
 
 /**
@@ -2314,9 +2327,9 @@ export function resolveStatusTint(args: {
 function resolveStatusColor(status: string): Color {
   switch (status) {
     case "working":
-      return Color.Green;
-    case "done":
       return Color.Blue;
+    case "done":
+      return Color.Green;
     default:
       return Color.SecondaryText;
   }
