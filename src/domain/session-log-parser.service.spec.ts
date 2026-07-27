@@ -590,6 +590,54 @@ describe("sessionLogParserService", () => {
     expect(result.parentThreadId).toBe(parentThreadId);
   });
 
+  it("fork ログに継承された session_meta があっても先頭のセッション識別情報を維持する", () => {
+    const result = parseLines([
+      {
+        type: "session_meta",
+        payload: {
+          id: "current-thread",
+          cwd: "/tmp/current-worktree",
+          source: "cli",
+        },
+      },
+      {
+        type: "session_meta",
+        payload: {
+          id: "inherited-parent-thread",
+          cwd: "/tmp/inherited-worktree",
+          source: {
+            subagent: {
+              thread_spawn: {
+                parent_thread_id: "inherited-grandparent-thread",
+              },
+            },
+          },
+        },
+      },
+      {
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: "Finish forked session",
+        },
+      },
+      {
+        type: "event_msg",
+        payload: {
+          type: "task_complete",
+        },
+      },
+    ]);
+
+    expect(result).toMatchObject({
+      cwds: ["/tmp/current-worktree"],
+      status: "done",
+      sessionKind: "main",
+      sessionThreadId: "current-thread",
+      parentThreadId: null,
+    });
+  });
+
   it("turn_context の codex-auto-review model を autoReview として解析する", () => {
     const result = parseLines([
       {

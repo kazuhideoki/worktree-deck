@@ -54,6 +54,7 @@ export type SessionParseState = {
   latestStatus: SessionStatus | null;
   isInReviewMode: boolean;
   sessionKind: SessionKind;
+  hasSessionMeta: boolean;
   sessionThreadId: string | null;
   parentThreadId: string | null;
   reviewTurnIds: Set<string>;
@@ -209,6 +210,7 @@ function createParseState(): SessionParseState {
     latestStatus: null,
     isInReviewMode: false,
     sessionKind: "main",
+    hasSessionMeta: false,
     sessionThreadId: null,
     parentThreadId: null,
     reviewTurnIds: new Set<string>(),
@@ -1183,23 +1185,25 @@ function updateParseState(args: {
     const eventType = extractEventType(parsed);
     const sessionSource = extractSessionSource(parsed);
     const sessionThreadId = extractSessionThreadId(parsed);
-    if (sessionThreadId) {
-      state.sessionThreadId = sessionThreadId;
-    }
-    const sourceSessionKind = sessionSource !== null ? resolveSessionKindFromSource(sessionSource) : null;
-    if (sourceSessionKind !== null) {
-      applySessionKind(state, sourceSessionKind);
-    }
-    const parentThreadId = sessionSource !== null ? extractParentThreadIdFromSource(sessionSource) : null;
-    if (parentThreadId) {
-      state.parentThreadId = parentThreadId;
+    const isFirstSessionMeta = parsed.type === "session_meta" && !state.hasSessionMeta;
+    if (isFirstSessionMeta) {
+      state.hasSessionMeta = true;
+      if (sessionThreadId) {
+        state.sessionThreadId = sessionThreadId;
+      }
+      const sourceSessionKind = sessionSource !== null ? resolveSessionKindFromSource(sessionSource) : null;
+      if (sourceSessionKind !== null) {
+        applySessionKind(state, sourceSessionKind);
+      }
+      state.parentThreadId = sessionSource !== null ? extractParentThreadIdFromSource(sessionSource) : null;
     }
     if (extractTurnContextModel(parsed) === "codex-auto-review") {
       applySessionKind(state, "autoReview");
     }
     const cwds = extractCwdsFromLog(parsed, homeDir);
-    if (state.cwds.size === 0 || parsed.type === "turn_context" || parsed.type === "session_meta") {
-      if (cwds.length > 0 && (parsed.type === "turn_context" || parsed.type === "session_meta")) {
+    const isCwdContext = parsed.type === "turn_context" || isFirstSessionMeta;
+    if (state.cwds.size === 0 || isCwdContext) {
+      if (cwds.length > 0 && isCwdContext) {
         state.cwds.clear();
       }
       for (const cwd of cwds) {

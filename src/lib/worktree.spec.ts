@@ -476,6 +476,64 @@ describe("loadTitlesForPaths", () => {
     }
   });
 
+  it("fork ログの継承 session_meta で現在セッションを state-only working として重複させない", async () => {
+    const currentThreadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d180";
+    const inheritedThreadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d181";
+    const sessionDir = await createSessionDir(codexHome, new Date());
+    const inheritedSessionPath = await writeSessionFile(
+      sessionDir,
+      [
+        buildSessionMetaLine("cli", inheritedThreadId),
+        buildTurnContextLine(worktreePath),
+        buildEventMessageLine("user_message", "Inherited session"),
+        buildEventTypeLine("task_started"),
+        buildEventTypeLine("task_complete"),
+      ],
+      "rollout-inherited.jsonl",
+    );
+    const currentSessionPath = await writeSessionFile(
+      sessionDir,
+      [
+        buildSessionMetaLine("cli", currentThreadId),
+        buildSessionMetaLine("cli", inheritedThreadId),
+        buildTurnContextLine(worktreePath),
+        buildEventMessageLine("user_message", "Current fork session"),
+        buildEventTypeLine("task_started"),
+        buildEventTypeLine("task_complete"),
+      ],
+      "rollout-current.jsonl",
+    );
+    const nowMs = Date.now();
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: currentThreadId,
+        title: "Current state title",
+        cwd: worktreePath,
+        rolloutPath: currentSessionPath,
+        updatedAtMs: nowMs + 1000,
+        createdAtMs: nowMs - 1000,
+      },
+      {
+        id: inheritedThreadId,
+        title: "Inherited state title",
+        cwd: worktreePath,
+        rolloutPath: inheritedSessionPath,
+        updatedAtMs: nowMs,
+        createdAtMs: nowMs - 2000,
+      },
+    ]);
+
+    const titlesByPath = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+    const titles = titlesByPath.get(worktreePath) ?? [];
+
+    expect(titles[0]).toMatchObject({
+      title: "Current state title",
+      status: "done",
+      sessionPath: currentSessionPath,
+    });
+    expect(titles.filter((entry) => entry.title === "Current state title")).toHaveLength(1);
+  });
+
   it("session file が未作成でも Codex state の title を表示する", async () => {
     const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16c";
     const updatedAtMs = Date.now();
