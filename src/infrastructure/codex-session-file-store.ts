@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createReadStream, existsSync, promises as fs } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 
@@ -52,6 +52,12 @@ type CodexThreadTitleLookup = {
   byThreadId: Map<string, CodexThreadTitleEntry>;
   bySessionPath: Map<string, CodexThreadTitleEntry>;
   byWorktreePath: Map<string, CodexThreadTitleEntry[]>;
+};
+
+type SessionFileEntry = {
+  path: string;
+  updatedAt: number;
+  size: number;
 };
 
 type TitlesCacheFileEntry = {
@@ -203,8 +209,8 @@ function normalizeCodexThreadTitleEntry(value: unknown): CodexThreadTitleEntry |
   const raw = value as Record<string, unknown>;
   const threadId = typeof raw.id === "string" ? raw.id.trim() : "";
   const worktreePath = typeof raw.cwd === "string" ? raw.cwd.trim() : "";
-  const title = sessionTitleService.normalizeTitle(raw.title);
-  if (!threadId || !worktreePath || !title) {
+  const title = sessionTitleService.normalizeTitle(raw.title) ?? "";
+  if (!threadId || !worktreePath) {
     return null;
   }
   const updatedAt = normalizeFiniteNumber(raw.updated_at_ms) ?? normalizeFiniteNumber(raw.updated_at);
@@ -228,7 +234,7 @@ function normalizeCodexThreadTitleEntry(value: unknown): CodexThreadTitleEntry |
  * session file で分類できない Codex thread を一覧へ補完してよいか判定する
  */
 function isStoredOnlyTitleEntry(entry: CodexThreadTitleEntry): boolean {
-  return entry.threadSource !== "subagent";
+  return entry.threadSource !== "subagent" && Boolean(entry.title);
 }
 
 /**
@@ -315,10 +321,7 @@ async function loadCodexThreadTitlesForWorktreePaths(args: {
 /**
  * 日付フォルダを走査してセッションファイルを集める
  */
-async function collectSessionFiles(
-  codexHome: string,
-  searchDays: number,
-): Promise<{ path: string; updatedAt: number; size: number }[]> {
+async function collectSessionFiles(codexHome: string, searchDays: number): Promise<SessionFileEntry[]> {
   const startMs = Date.now();
   const sessionRoot = join(codexHome, SESSIONS_DIR_NAME);
   if (!existsSync(sessionRoot)) {
@@ -364,6 +367,61 @@ async function collectSessionFiles(
   });
   logSessionTiming("collectSessionFiles", Date.now() - startMs);
   return sorted;
+}
+
+/**
+ * 通常の日付走査から漏れた session file を、最近更新された Codex state の参照先だけから補完する
+ *
+ * 作成日の古いセッションが再開されても状態を反映しつつ、全履歴の再走査を避けるため、
+ * state の更新日時は候補の限定にだけ使い、状態判定は合流後の既存 parser と cache に委ねる。
+ */
+async function collectRecentlyUpdatedStateSessionFiles(args: {
+  codexHome: string;
+  searchDays: number;
+  nowMs: number;
+  codexThreadTitles: CodexThreadTitleLookup;
+  discoveredFiles: SessionFileEntry[];
+}): Promise<SessionFileEntry[]> {
+  const sessionRoot = normalizePathValue(join(args.codexHome, SESSIONS_DIR_NAME));
+  const sessionRootPrefix = `${sessionRoot}${sep}`;
+  const searchStart = new Date(args.nowMs);
+  searchStart.setHours(0, 0, 0, 0);
+  searchStart.setDate(searchStart.getDate() - (args.searchDays - 1));
+  const searchStartMs = searchStart.getTime();
+  const knownPaths = new Set(args.discoveredFiles.map((entry) => normalizePathValue(entry.path)));
+  const supplementalFiles: SessionFileEntry[] = [];
+
+  for (const entry of args.codexThreadTitles.byThreadId.values()) {
+    if (
+      entry.updatedAt < searchStartMs ||
+      !entry.sessionPath ||
+      entry.threadSource === "subagent" ||
+      !hasSessionFileExtension(entry.sessionPath)
+    ) {
+      continue;
+    }
+    const sessionPath = normalizePathValue(entry.sessionPath);
+    if (!sessionPath.startsWith(sessionRootPrefix) || knownPaths.has(sessionPath)) {
+      continue;
+    }
+    try {
+      const stat = await fs.stat(sessionPath);
+      if (!stat.isFile()) {
+        continue;
+      }
+      knownPaths.add(sessionPath);
+      supplementalFiles.push({ path: sessionPath, updatedAt: stat.mtimeMs, size: stat.size });
+    } catch {
+      continue;
+    }
+  }
+
+  return supplementalFiles.sort((left, right) => {
+    if (right.updatedAt !== left.updatedAt) {
+      return right.updatedAt - left.updatedAt;
+    }
+    return right.path.localeCompare(left.path);
+  });
 }
 
 type SessionTailParseResult = {
@@ -1074,9 +1132,22 @@ export async function loadTitlesForPaths(args: {
   const cachedFiles = canUseCache ? cachedStorage.files : {};
 
   const collectSessionFilesStartMs = Date.now();
-  const sessionFiles = await collectSessionFiles(codexHome, searchDays);
+  const discoveredSessionFiles = await collectSessionFiles(codexHome, searchDays);
+  const supplementalSessionFiles = await collectRecentlyUpdatedStateSessionFiles({
+    codexHome,
+    searchDays,
+    nowMs,
+    codexThreadTitles,
+    discoveredFiles: discoveredSessionFiles,
+  });
+  const sessionFiles = [...discoveredSessionFiles, ...supplementalSessionFiles].sort((left, right) => {
+    if (right.updatedAt !== left.updatedAt) {
+      return right.updatedAt - left.updatedAt;
+    }
+    return right.path.localeCompare(left.path);
+  });
   args.logTiming?.(
-    `${timingLabelPrefix}:collectSessionFiles(days=${searchDays},files=${sessionFiles.length})`,
+    `${timingLabelPrefix}:collectSessionFiles(days=${searchDays},files=${sessionFiles.length},supplemental=${supplementalSessionFiles.length})`,
     Date.now() - collectSessionFilesStartMs,
   );
   if (sessionFiles.length === 0) {
@@ -1164,7 +1235,7 @@ export async function loadTitlesForPaths(args: {
         (entry.sessionThreadId ? codexThreadTitles.byThreadId.get(entry.sessionThreadId) : null) ??
         codexThreadTitles.bySessionPath.get(sessionFile.path) ??
         null;
-      const resolvedTitle = codexThreadTitle?.title ?? explicitTitle?.title ?? entry.title;
+      const resolvedTitle = codexThreadTitle?.title || explicitTitle?.title || entry.title;
       if (!resolvedTitle || entry.cwds.length === 0) {
         continue;
       }

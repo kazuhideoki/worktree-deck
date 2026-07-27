@@ -501,6 +501,161 @@ describe("loadTitlesForPaths", () => {
     });
   });
 
+  it("検索期間外の日付フォルダで最近再開・完了した session file を解析して cache する", async () => {
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d170";
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 2);
+    const sessionDir = await createSessionDir(codexHome, oldDate);
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildSessionMetaLine("cli", threadId),
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Resumed old completed session"),
+      buildEventTypeLine("task_started"),
+      buildEventTypeLine("task_complete"),
+    ]);
+    const nowMs = Date.now();
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "Resumed old completed session",
+        cwd: worktreePath,
+        rolloutPath: sessionPath,
+        updatedAtMs: nowMs,
+        createdAtMs: oldDate.getTime(),
+      },
+    ]);
+    const storage = new Map<string, string>();
+    mockedLocalStorage.getItem.mockImplementation(async (key: string) => storage.get(key) ?? null);
+    mockedLocalStorage.setItem.mockImplementation(async (key: string, value: unknown) => {
+      storage.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    });
+
+    const first = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    const second = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(first.get(worktreePath)).toEqual([
+      expect.objectContaining({
+        title: "Resumed old completed session",
+        status: "done",
+        sessionPath,
+      }),
+    ]);
+    expect(second.get(worktreePath)).toEqual([
+      expect.objectContaining({
+        title: "Resumed old completed session",
+        status: "done",
+        sessionPath,
+      }),
+    ]);
+    expect(mockedLocalStorage.setItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("検索期間外の日付フォルダで最近再開・未完了の session file を working として解析する", async () => {
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d171";
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 2);
+    const sessionDir = await createSessionDir(codexHome, oldDate);
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildSessionMetaLine("cli", threadId),
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Resumed old working session"),
+      buildEventTypeLine("task_started"),
+    ]);
+    const nowMs = Date.now();
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "Resumed old working session",
+        cwd: worktreePath,
+        rolloutPath: sessionPath,
+        updatedAtMs: nowMs,
+        createdAtMs: oldDate.getTime(),
+      },
+    ]);
+
+    const titlesByPath = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(titlesByPath.get(worktreePath)).toEqual([
+      expect.objectContaining({
+        title: "Resumed old working session",
+        status: "working",
+        sessionPath,
+      }),
+    ]);
+  });
+
+  it("Codex state の title が空でも検索期間外の最近再開した session file を解析する", async () => {
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d173";
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 2);
+    const sessionDir = await createSessionDir(codexHome, oldDate);
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildSessionMetaLine("cli", threadId),
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Resumed session with log title"),
+      buildEventTypeLine("task_started"),
+      buildEventTypeLine("task_complete"),
+    ]);
+    const nowMs = Date.now();
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "",
+        cwd: worktreePath,
+        rolloutPath: sessionPath,
+        updatedAtMs: nowMs,
+        createdAtMs: oldDate.getTime(),
+      },
+    ]);
+
+    const titlesByPath = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(titlesByPath.get(worktreePath)).toEqual([
+      expect.objectContaining({
+        title: "Resumed session with log title",
+        status: "done",
+        sessionPath,
+      }),
+    ]);
+  });
+
+  it("検索期間外の日付フォルダにあり Codex state の更新も古い session file は補足解析しない", async () => {
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d172";
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 2);
+    const sessionDir = await createSessionDir(codexHome, oldDate);
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildSessionMetaLine("cli", threadId),
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Old state session"),
+      buildEventTypeLine("task_started"),
+    ]);
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "Old state session",
+        cwd: worktreePath,
+        rolloutPath: sessionPath,
+        updatedAtMs: oldDate.getTime(),
+        createdAtMs: oldDate.getTime(),
+      },
+    ]);
+
+    const titlesByPath = await loadTitlesForPaths(buildLoadArgs(codexHome, worktreePath));
+
+    expect(titlesByPath.get(worktreePath)).toEqual([
+      expect.objectContaining({
+        title: "Old state session",
+        status: "done",
+        latestMessage: null,
+        sessionPath,
+      }),
+    ]);
+  });
+
   it("session file が未作成の subagent title は表示しない", async () => {
     const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16f";
     const updatedAtMs = Date.now();
