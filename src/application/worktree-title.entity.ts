@@ -13,12 +13,31 @@ export type WorktreeTitle = {
   sessionPath?: string;
   sessionKind: SessionKind;
   isWaitingForUser?: boolean;
+  waitingForUserUpdatedAt?: number;
   skillUsages?: SessionSkillUsage[];
   /**
    * セッション供給元（未指定は ca 相当として扱う）
    */
   provider?: SessionProvider;
 };
+
+/**
+ * JSONLの更新時刻からユーザー待ちを有効とみなす時間
+ */
+export const USER_WAIT_ACTIVE_WINDOW_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * セッションが現在ユーザー操作を待っていると推定できるか判定する
+ */
+export function isWorktreeTitleWaitingForUser(title: WorktreeTitle, nowMs = Date.now()): boolean {
+  const waitingForUserUpdatedAt = title.waitingForUserUpdatedAt ?? title.updatedAt;
+  return (
+    title.status === "working" &&
+    title.isWaitingForUser === true &&
+    Number.isFinite(waitingForUserUpdatedAt) &&
+    waitingForUserUpdatedAt >= nowMs - USER_WAIT_ACTIVE_WINDOW_MS
+  );
+}
 
 /**
  * セッションログのパスから session id（ファイル名から拡張子を除いた値）を取り出す

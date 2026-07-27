@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveClaudeResumeCommand, type WorktreeTitle } from "./worktree-title.entity";
+import {
+  isWorktreeTitleWaitingForUser,
+  resolveClaudeResumeCommand,
+  USER_WAIT_ACTIVE_WINDOW_MS,
+  type WorktreeTitle,
+} from "./worktree-title.entity";
 
 /**
  * テスト用の WorktreeTitle を作る
@@ -47,5 +52,62 @@ describe("resolveClaudeResumeCommand", () => {
     const titles = [buildTitle({ provider: "cc", updatedAt: 9 })];
 
     expect(resolveClaudeResumeCommand(titles)).toBeNull();
+  });
+});
+
+describe("isWorktreeTitleWaitingForUser", () => {
+  const nowMs = Date.parse("2026-07-27T03:00:00.000Z");
+
+  it("workingかつユーザー待ちで12時間以内に更新されていればtrueを返す", () => {
+    expect(
+      isWorktreeTitleWaitingForUser(
+        buildTitle({
+          status: "working",
+          isWaitingForUser: true,
+          updatedAt: nowMs - USER_WAIT_ACTIVE_WINDOW_MS,
+        }),
+        nowMs,
+      ),
+    ).toBe(true);
+  });
+
+  it("更新から12時間を超えたユーザー待ちはfalseを返す", () => {
+    expect(
+      isWorktreeTitleWaitingForUser(
+        buildTitle({
+          status: "working",
+          isWaitingForUser: true,
+          updatedAt: nowMs - USER_WAIT_ACTIVE_WINDOW_MS - 1,
+        }),
+        nowMs,
+      ),
+    ).toBe(false);
+  });
+
+  it("親セッションが古くても伝播された待機元の更新が12時間以内ならtrueを返す", () => {
+    expect(
+      isWorktreeTitleWaitingForUser(
+        buildTitle({
+          status: "working",
+          isWaitingForUser: true,
+          updatedAt: nowMs - USER_WAIT_ACTIVE_WINDOW_MS - 1,
+          waitingForUserUpdatedAt: nowMs - 60 * 60 * 1000,
+        }),
+        nowMs,
+      ),
+    ).toBe(true);
+  });
+
+  it("完了済みセッションは更新が新しくてもfalseを返す", () => {
+    expect(
+      isWorktreeTitleWaitingForUser(
+        buildTitle({
+          status: "done",
+          isWaitingForUser: true,
+          updatedAt: nowMs,
+        }),
+        nowMs,
+      ),
+    ).toBe(false);
   });
 });

@@ -20,6 +20,7 @@ export type WorktreeTitle = {
   sessionPath?: string;
   sessionKind: SessionKind;
   isWaitingForUser?: boolean;
+  waitingForUserUpdatedAt?: number;
   skillUsages?: SessionSkillUsage[];
   /**
    * セッション供給元（未指定は ca 相当として扱う）

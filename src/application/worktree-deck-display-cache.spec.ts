@@ -21,6 +21,7 @@ function buildTitle(args: {
   status?: "working" | "done" | null;
   sessionKind?: WorktreeTitle["sessionKind"];
   isWaitingForUser?: boolean;
+  waitingForUserUpdatedAt?: number;
   skillUsages?: WorktreeTitle["skillUsages"];
   provider?: WorktreeTitle["provider"];
 }): WorktreeTitle {
@@ -31,6 +32,7 @@ function buildTitle(args: {
     status: args.status ?? null,
     sessionKind: args.sessionKind ?? "main",
     isWaitingForUser: args.isWaitingForUser,
+    waitingForUserUpdatedAt: args.waitingForUserUpdatedAt,
     skillUsages: args.skillUsages,
     provider: args.provider,
   };
@@ -321,6 +323,7 @@ describe("normalizeWorktreeDeckDisplayCache", () => {
       updatedAt: 100,
       sessionKind: "reviewSubagent",
       isWaitingForUser: true,
+      waitingForUserUpdatedAt: 90,
     });
 
     const cache = normalizeWorktreeDeckDisplayCache({

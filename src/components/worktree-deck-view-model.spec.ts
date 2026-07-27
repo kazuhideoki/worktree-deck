@@ -71,24 +71,71 @@ describe("worktree-deck-view-model", () => {
   });
 
   it("いずれかのセッションがユーザー指示待ちならブランチ名の先頭に警告を付ける", () => {
+    const nowMs = Date.now();
     const title = formatBranchTitle({
       branch: "feature-a",
-      titles: [buildTitleEntry({ title: "waiting", latestMessage: null, updatedAt: 100, isWaitingForUser: true })],
+      titles: [
+        buildTitleEntry({
+          title: "waiting",
+          latestMessage: null,
+          updatedAt: nowMs,
+          status: "working",
+          isWaitingForUser: true,
+        }),
+      ],
     });
 
     expect(title).toBe("⚠️ feature-a");
   });
 
-  it("古いセッションだけがユーザー指示待ちでもブランチ名に警告を付ける", () => {
+  it("最新セッションが完了済みでも12時間以内に更新された別セッションが承認待ちなら警告を付ける", () => {
+    const nowMs = Date.now();
     const title = formatBranchTitle({
       branch: "feature-a",
       titles: [
-        buildTitleEntry({ title: "latest", latestMessage: null, updatedAt: 200, isWaitingForUser: false }),
-        buildTitleEntry({ title: "old", latestMessage: null, updatedAt: 100, isWaitingForUser: true }),
+        buildTitleEntry({
+          title: "latest",
+          latestMessage: null,
+          updatedAt: nowMs,
+          status: "done",
+          isWaitingForUser: false,
+        }),
+        buildTitleEntry({
+          title: "concurrent waiting",
+          latestMessage: null,
+          updatedAt: nowMs - 60 * 60 * 1000,
+          status: "working",
+          isWaitingForUser: true,
+        }),
       ],
     });
 
     expect(title).toBe("⚠️ feature-a");
+  });
+
+  it("12時間より古いセッションだけが承認待ちなら警告を付けない", () => {
+    const nowMs = Date.now();
+    const title = formatBranchTitle({
+      branch: "feature-a",
+      titles: [
+        buildTitleEntry({
+          title: "latest",
+          latestMessage: null,
+          updatedAt: nowMs,
+          status: "done",
+          isWaitingForUser: false,
+        }),
+        buildTitleEntry({
+          title: "stale waiting",
+          latestMessage: null,
+          updatedAt: nowMs - 12 * 60 * 60 * 1000 - 1,
+          status: "working",
+          isWaitingForUser: true,
+        }),
+      ],
+    });
+
+    expect(title).toBe("feature-a");
   });
 
   it("トップ詳細をキーバリュー表で表示する", () => {

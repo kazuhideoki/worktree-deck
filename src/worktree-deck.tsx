@@ -62,7 +62,7 @@ import {
   buildSortedSectionEntries,
   filterEntriesBySearchText,
   formatBranchTitle,
-  hasAnySessionWaitingForUser,
+  hasActiveSessionWaitingForUser,
   partitionEntriesByWorktreeArchive,
   parseDisplayMode,
   resolveEntryItemId,
@@ -617,7 +617,7 @@ export default function Command() {
   const hasWorkingStatus = renderSections.some(({ entries }) =>
     entries.some((entry) => {
       const titles = entry.kind === "origin" ? entry.titles : (entry.item.titleEntries ?? []);
-      return resolveWorktreeStatus(titles) === "working" && !hasAnySessionWaitingForUser(titles);
+      return resolveWorktreeStatus(titles) === "working" || hasActiveSessionWaitingForUser(titles);
     }),
   );
   const isWorkingStatusPulseBright = useSessionStatusPulse(hasWorkingStatus);
@@ -2311,8 +2311,9 @@ export function resolveStatusTint(args: {
   status: WorktreeTitle["status"];
   titles: WorktreeTitle[];
   isWorkingStatusPulseBright?: boolean;
+  nowMs?: number;
 }): Color.ColorLike | undefined {
-  if (hasAnySessionWaitingForUser(args.titles)) {
+  if (hasActiveSessionWaitingForUser(args.titles, args.nowMs)) {
     return Color.Yellow;
   }
   if (!args.status) {

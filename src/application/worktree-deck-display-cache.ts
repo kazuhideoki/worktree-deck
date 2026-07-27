@@ -128,6 +128,8 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
     const sessionPath = typeof entry.sessionPath === "string" || entry.sessionPath == null ? entry.sessionPath : null;
     const sessionKind = normalizeSessionKind(entry.sessionKind);
     const isWaitingForUser = typeof entry.isWaitingForUser === "boolean" ? entry.isWaitingForUser : undefined;
+    const waitingForUserUpdatedAt =
+      typeof entry.waitingForUserUpdatedAt === "number" ? entry.waitingForUserUpdatedAt : undefined;
     const skillUsages = normalizeSessionSkillUsages(entry.skillUsages);
     const provider = isSessionProvider(entry.provider) ? entry.provider : undefined;
     if (title == null || title.length === 0 || updatedAt == null || sessionKind == null) {
@@ -142,6 +144,7 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
       sessionPath: sessionPath ?? undefined,
       sessionKind,
       isWaitingForUser,
+      waitingForUserUpdatedAt,
       skillUsages,
       provider,
     });

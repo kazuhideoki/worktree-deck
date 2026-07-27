@@ -1392,22 +1392,26 @@ function isTitleSessionKind(sessionKind: SessionKind): boolean {
 }
 
 /**
- * 待機中 thread id を親方向へ伝播する
+ * 待機中 thread の更新時刻を親方向へ伝播する
  */
-function expandWaitingForUserThreadIds(args: {
-  waitingThreadIds: Set<string>;
+function expandWaitingForUserUpdatedAtByThreadId(args: {
+  waitingUpdatedAtByThreadId: Map<string, number>;
   parentThreadIdByThreadId: Map<string, string>;
-}): Set<string> {
-  const expanded = new Set(args.waitingThreadIds);
+}): Map<string, number> {
+  const expanded = new Map(args.waitingUpdatedAtByThreadId);
   let changed = true;
   while (changed) {
     changed = false;
-    for (const threadId of Array.from(expanded)) {
+    for (const [threadId, updatedAt] of Array.from(expanded)) {
       const parentThreadId = args.parentThreadIdByThreadId.get(threadId);
-      if (!parentThreadId || expanded.has(parentThreadId)) {
+      if (!parentThreadId) {
         continue;
       }
-      expanded.add(parentThreadId);
+      const parentUpdatedAt = expanded.get(parentThreadId);
+      if (parentUpdatedAt != null && parentUpdatedAt >= updatedAt) {
+        continue;
+      }
+      expanded.set(parentThreadId, updatedAt);
       changed = true;
     }
   }
@@ -1432,7 +1436,7 @@ export const sessionLogParserService = {
   containsTurnAborted,
   createParseState,
   dedupeReviewParentEntries,
-  expandWaitingForUserThreadIds,
+  expandWaitingForUserUpdatedAtByThreadId,
   extractAssistantMessageFromLogLine,
   extractEventMessage,
   extractLogTimestamp,

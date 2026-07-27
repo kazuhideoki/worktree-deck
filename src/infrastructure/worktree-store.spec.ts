@@ -1740,16 +1740,20 @@ describe("loadTitlesForPaths", () => {
       }),
     ].join("\n");
     try {
-      await createSessionFile({
+      const parentSessionPath = await createSessionFile({
         codexHome,
         fileName: "session-parent-thread.jsonl",
         body: parentBody,
       });
-      await createSessionFile({
+      const subagentSessionPath = await createSessionFile({
         codexHome,
         fileName: "session-subagent-thread.jsonl",
         body: subagentBody,
       });
+      const parentUpdatedAt = new Date(Date.now() - 13 * 60 * 60 * 1000);
+      const subagentUpdatedAt = new Date(Date.now() - 60 * 60 * 1000);
+      await utimes(parentSessionPath, parentUpdatedAt, parentUpdatedAt);
+      await utimes(subagentSessionPath, subagentUpdatedAt, subagentUpdatedAt);
 
       const result = await loadTitlesForPaths(
         buildLoadTitlesArgs({
@@ -1762,6 +1766,7 @@ describe("loadTitlesForPaths", () => {
       expect(titles).toHaveLength(1);
       expect(titles?.[0]?.title).toBe("Parent title");
       expect(titles?.[0]?.isWaitingForUser).toBe(true);
+      expect(Math.abs((titles?.[0]?.waitingForUserUpdatedAt ?? 0) - subagentUpdatedAt.getTime())).toBeLessThan(1_000);
     } finally {
       await rm(codexHome, { recursive: true, force: true });
     }

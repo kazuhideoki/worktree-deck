@@ -1,5 +1,6 @@
 import { Action, ActionPanel, Color, Icon, List, Toast, type Keyboard, showToast, useNavigation } from "@raycast/api";
 import { useCallback, useState } from "react";
+import { isWorktreeTitleWaitingForUser } from "../application/worktree-title.entity";
 import type { WorktreeTitle } from "../composition-root";
 import { worktreeOpenAppService } from "../domain/worktree-open-app.service";
 import { resolvePulsingSessionStatusTint, useSessionStatusPulse } from "./session-status-pulse";
@@ -467,7 +468,7 @@ function CodexSessionListItem({
  * Codex セッションの状態に応じたアイコン色を解決する
  */
 function resolveCodexSessionIconTintColor(session: WorktreeTitle): Color | undefined {
-  if (session.isWaitingForUser === true) {
+  if (isWorktreeTitleWaitingForUser(session)) {
     return Color.Yellow;
   }
   if (session.status === "working") {

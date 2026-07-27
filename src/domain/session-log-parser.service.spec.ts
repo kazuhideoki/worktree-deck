@@ -26,6 +26,29 @@ function parseLines(values: unknown[]) {
 }
 
 describe("sessionLogParserService", () => {
+  it("待機元の最新更新時刻を祖先スレッドまで伝播する", () => {
+    const expanded = sessionLogParserService.expandWaitingForUserUpdatedAtByThreadId({
+      waitingUpdatedAtByThreadId: new Map([
+        ["child-old", 100],
+        ["grandchild-new", 300],
+      ]),
+      parentThreadIdByThreadId: new Map([
+        ["child-old", "parent"],
+        ["grandchild-new", "child-new"],
+        ["child-new", "parent"],
+      ]),
+    });
+
+    expect(expanded).toEqual(
+      new Map([
+        ["child-old", 100],
+        ["grandchild-new", 300],
+        ["parent", 300],
+        ["child-new", 300],
+      ]),
+    );
+  });
+
   it("user message の cwd と final_answer から完了セッションを解析する", () => {
     const state = sessionLogParserService.createParseState();
     const path = "/tmp/repo-a/worktree-a";

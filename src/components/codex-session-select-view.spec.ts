@@ -132,6 +132,13 @@ describe("buildCodexSessionEntries", () => {
         title: "Waiting",
         sessionPath: "/tmp/219dd94f-27e0-7ad1-8d17-3d628ac5d16b.jsonl",
         status: "working",
+        updatedAt: Date.now(),
+        isWaitingForUser: true,
+      }),
+      buildTitle({
+        title: "Done waiting",
+        sessionPath: "/tmp/319dd94f-27e0-7ad1-8d17-3d628ac5d16b.jsonl",
+        status: "done",
         isWaitingForUser: true,
       }),
     ]);
@@ -141,6 +148,7 @@ describe("buildCodexSessionEntries", () => {
         ["Working", { source: Icon.Message, tintColor: Color.Blue }],
         ["Done", { source: Icon.Message, tintColor: Color.Green }],
         ["Waiting", { source: Icon.Message, tintColor: Color.Yellow }],
+        ["Done waiting", { source: Icon.Message, tintColor: Color.Green }],
       ]),
     );
   });

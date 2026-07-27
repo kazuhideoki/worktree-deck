@@ -117,12 +117,67 @@ describe("buildDetailMarkdown", () => {
   });
 
   it("いずれかのセッションがユーザー指示待ちならアイコン色を黄色にする", () => {
+    const nowMs = Date.now();
     const tint = resolveStatusTint({
       status: "working",
-      titles: [buildTitleEntry({ title: "waiting", latestMessage: null, updatedAt: 100, isWaitingForUser: true })],
+      nowMs,
+      titles: [
+        buildTitleEntry({
+          title: "waiting",
+          latestMessage: null,
+          updatedAt: nowMs,
+          status: "working",
+          isWaitingForUser: true,
+        }),
+      ],
     });
 
     expect(tint).toBe("yellow");
+  });
+
+  it("最新セッションが完了済みでも12時間以内に更新された別セッションが承認待ちなら黄色にする", () => {
+    const nowMs = Date.now();
+    const tint = resolveStatusTint({
+      status: "done",
+      nowMs,
+      titles: [
+        buildTitleEntry({
+          title: "latest done",
+          latestMessage: null,
+          updatedAt: nowMs,
+          status: "done",
+          isWaitingForUser: false,
+        }),
+        buildTitleEntry({
+          title: "concurrent waiting",
+          latestMessage: null,
+          updatedAt: nowMs - 60 * 60 * 1000,
+          status: "working",
+          isWaitingForUser: true,
+        }),
+      ],
+    });
+
+    expect(tint).toBe("yellow");
+  });
+
+  it("12時間より古いセッションだけが承認待ちなら現在のステータス色を使う", () => {
+    const nowMs = Date.now();
+    const tint = resolveStatusTint({
+      status: "done",
+      nowMs,
+      titles: [
+        buildTitleEntry({
+          title: "stale waiting",
+          latestMessage: null,
+          updatedAt: nowMs - 12 * 60 * 60 * 1000 - 1,
+          status: "working",
+          isWaitingForUser: true,
+        }),
+      ],
+    });
+
+    expect(tint).toBe("green");
   });
 
   it("レビューセッションを除いた最新セッションの内容を初回タイトルで表示する", () => {

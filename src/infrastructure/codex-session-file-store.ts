@@ -28,6 +28,7 @@ type SessionStatus = ParserSessionStatus;
 type SessionTitleEntry = WorktreeTitle &
   ReviewParentDedupeEntry & {
     isWaitingForUser: boolean;
+    waitingForUserUpdatedAt?: number;
     sessionThreadId: string | null;
   };
 
@@ -197,6 +198,20 @@ function resolveCodexStateDbPath(codexHome: string): string {
  */
 function normalizeFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * thread ごとの待機元更新時刻を最新値へ更新する
+ */
+function updateWaitingForUserUpdatedAt(
+  waitingUpdatedAtByThreadId: Map<string, number>,
+  threadId: string,
+  updatedAt: number,
+): void {
+  const currentUpdatedAt = waitingUpdatedAtByThreadId.get(threadId);
+  if (currentUpdatedAt == null || currentUpdatedAt < updatedAt) {
+    waitingUpdatedAtByThreadId.set(threadId, updatedAt);
+  }
 }
 
 /**
@@ -1162,7 +1177,7 @@ export async function loadTitlesForPaths(args: {
   const pathEntries = sessionLogParserService.buildPathEntries(args.paths);
   const titleEntries = new Map<string, Map<string, SessionTitleEntry>>();
   const matchedExplicitThreadIds = new Set<string>();
-  const waitingForUserThreadIds = new Set<string>();
+  const waitingForUserUpdatedAtByThreadId = new Map<string, number>();
   const parentThreadIdByThreadId = new Map<string, string>();
   const nextCacheFiles: Record<string, TitlesCacheFileEntry> = {};
   const processSessionFilesStartMs = Date.now();
@@ -1220,10 +1235,10 @@ export async function loadTitlesForPaths(args: {
       }
       if (entry.isWaitingForUser) {
         if (entry.sessionThreadId) {
-          waitingForUserThreadIds.add(entry.sessionThreadId);
+          updateWaitingForUserUpdatedAt(waitingForUserUpdatedAtByThreadId, entry.sessionThreadId, entry.updatedAt);
         }
         if (entry.parentThreadId) {
-          waitingForUserThreadIds.add(entry.parentThreadId);
+          updateWaitingForUserUpdatedAt(waitingForUserUpdatedAtByThreadId, entry.parentThreadId, entry.updatedAt);
         }
       }
 
@@ -1269,6 +1284,7 @@ export async function loadTitlesForPaths(args: {
           sessionKind: entry.sessionKind,
           reviewTurnIds: entry.reviewTurnIds,
           isWaitingForUser: entry.isWaitingForUser,
+          waitingForUserUpdatedAt: entry.isWaitingForUser ? entry.updatedAt : undefined,
           sessionThreadId: entry.sessionThreadId,
           skillUsages: entry.skillUsages,
         };
@@ -1359,10 +1375,12 @@ export async function loadTitlesForPaths(args: {
         }
       }
 
-      const expandedWaitingForUserThreadIds = sessionLogParserService.expandWaitingForUserThreadIds({
-        waitingThreadIds: waitingForUserThreadIds,
-        parentThreadIdByThreadId,
-      });
+      const expandedWaitingForUserUpdatedAtByThreadId = sessionLogParserService.expandWaitingForUserUpdatedAtByThreadId(
+        {
+          waitingUpdatedAtByThreadId: waitingForUserUpdatedAtByThreadId,
+          parentThreadIdByThreadId,
+        },
+      );
       const nextTitles = new Map<string, WorktreeTitle[]>();
       for (const [path, entries] of titleEntries) {
         const dedupedEntries = sessionLogParserService.dedupeReviewParentEntries(Array.from(entries.values()));
@@ -1375,19 +1393,24 @@ export async function loadTitlesForPaths(args: {
               }
               return right.title.localeCompare(left.title);
             })
-            .map((entry) => ({
-              title: entry.title,
-              status: entry.status,
-              latestMessage: entry.latestMessage,
-              updatedAt: entry.updatedAt,
-              startedAt: entry.startedAt,
-              sessionPath: entry.sessionPath,
-              sessionKind: entry.sessionKind,
-              isWaitingForUser:
-                entry.isWaitingForUser ||
-                (entry.sessionThreadId ? expandedWaitingForUserThreadIds.has(entry.sessionThreadId) : false),
-              skillUsages: entry.skillUsages,
-            })),
+            .map((entry) => {
+              const propagatedWaitingUpdatedAt = entry.sessionThreadId
+                ? expandedWaitingForUserUpdatedAtByThreadId.get(entry.sessionThreadId)
+                : undefined;
+              const waitingForUserUpdatedAt = propagatedWaitingUpdatedAt ?? entry.waitingForUserUpdatedAt ?? undefined;
+              return {
+                title: entry.title,
+                status: entry.status,
+                latestMessage: entry.latestMessage,
+                updatedAt: entry.updatedAt,
+                startedAt: entry.startedAt,
+                sessionPath: entry.sessionPath,
+                sessionKind: entry.sessionKind,
+                isWaitingForUser: waitingForUserUpdatedAt != null,
+                waitingForUserUpdatedAt,
+                skillUsages: entry.skillUsages,
+              };
+            }),
         );
       }
       return nextTitles;

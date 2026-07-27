@@ -1,6 +1,7 @@
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { isWorktreeTitleWaitingForUser } from "../application/worktree-title.entity";
 import {
   type Worktree,
   type WorktreeMergeStatus,
@@ -93,10 +94,10 @@ const SESSION_PROVIDER_ICON_ASSETS: Record<NonNullable<WorktreeTitle["provider"]
 };
 
 /**
- * タイトル一覧にユーザー指示待ちが含まれるか判定する
+ * 12時間以内に更新されたセッションにユーザー指示待ちが含まれるか判定する
  */
-export function hasAnySessionWaitingForUser(titles: WorktreeTitle[]): boolean {
-  return titles.some((entry) => entry.isWaitingForUser === true);
+export function hasActiveSessionWaitingForUser(titles: WorktreeTitle[], nowMs = Date.now()): boolean {
+  return titles.some((title) => isWorktreeTitleWaitingForUser(title, nowMs));
 }
 
 /**
@@ -104,7 +105,7 @@ export function hasAnySessionWaitingForUser(titles: WorktreeTitle[]): boolean {
  */
 export function formatBranchTitle(args: { branch?: string | null; titles: WorktreeTitle[] }): string {
   const branchTitle = args.branch ?? "root";
-  return hasAnySessionWaitingForUser(args.titles) ? `⚠️ ${branchTitle}` : branchTitle;
+  return hasActiveSessionWaitingForUser(args.titles) ? `⚠️ ${branchTitle}` : branchTitle;
 }
 
 /**
