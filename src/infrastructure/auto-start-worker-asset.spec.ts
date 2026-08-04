@@ -22,6 +22,7 @@ describe("auto_start_worker.js", () => {
   it("Claude セッション開始時は既定モデル opus を --model で明示する", async () => {
     const source = await readAutoStartWorkerAsset();
 
+    expect(source).toContain('const CLAUDE_MODEL_ALIASES = ["fable", "opus", "sonnet", "haiku"]');
     expect(source).toContain('const CLAUDE_DEFAULT_MODEL = "opus"');
     expect(source).toContain('args.push("--model", model)');
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CLAUDE_MODEL_OPTIONS,
   DEFAULT_CLAUDE_INITIAL_SESSION_METADATA,
   normalizeClaudeMetadata,
   normalizeClaudeModel,
@@ -8,10 +9,17 @@ import {
   normalizeClaudeReasoningEffort,
 } from "./start-claude-initial-session.usecase";
 
+describe("CLAUDE_MODEL_OPTIONS", () => {
+  it("fable を先頭に表示する", () => {
+    expect(CLAUDE_MODEL_OPTIONS).toEqual(["fable", "opus", "sonnet", "haiku"]);
+  });
+});
+
 describe("normalizeClaudeModel", () => {
   it("有効な alias はそのまま返す", () => {
     expect(normalizeClaudeModel("opus")).toBe("opus");
     expect(normalizeClaudeModel(" sonnet ")).toBe("sonnet");
+    expect(normalizeClaudeModel("fable")).toBe("fable");
   });
 
   it("default は選択肢として扱わず既定モデルへ丸める", () => {

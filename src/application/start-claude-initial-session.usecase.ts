@@ -1,7 +1,7 @@
 /**
  * Claude モデル alias の選択値
  */
-export type ClaudeModelAlias = "opus" | "sonnet" | "haiku";
+export type ClaudeModelAlias = "opus" | "sonnet" | "haiku" | "fable";
 
 /**
  * Claude reasoning effort の選択値（`claude --effort` に対応）
@@ -30,7 +30,7 @@ export type ClaudeInitialSessionMetadata = {
 /**
  * Claude モデル選択肢
  */
-export const CLAUDE_MODEL_OPTIONS: readonly ClaudeModelAlias[] = ["opus", "sonnet", "haiku"];
+export const CLAUDE_MODEL_OPTIONS: readonly ClaudeModelAlias[] = ["fable", "opus", "sonnet", "haiku"];
 
 /**
  * Claude reasoning effort 選択肢
