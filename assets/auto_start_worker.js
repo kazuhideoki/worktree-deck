@@ -13,6 +13,7 @@ const AUTO_START_METADATA_GENERATION_PROMPT_HEADER = [
   'Output only JSON with string fields "branch" and "sessionTitle".',
   "branch must be a valid Git branch name.",
   "sessionTitle must be a concise human-readable title.",
+  "If a corresponding issue is specified and its URL is available, include it in sessionTitle as a Markdown link in the form [Issue #number](URL).",
 ].join(" ");
 const BRANCH_NAME_CODEX_MODEL = "gpt-5.3-codex-spark";
 const BRANCH_NAME_REASONING_EFFORT = "xhigh";
