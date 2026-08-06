@@ -15,8 +15,6 @@ export type ExplicitSessionTitle = {
  */
 export type ExplicitSessionTitleStorage = Record<string, ExplicitSessionTitle>;
 
-const SESSION_TITLE_MAX_LENGTH_CHARS = 80;
-
 /**
  * thread id を保存用に正規化する
  */
@@ -63,8 +61,7 @@ function normalizeTitle(value: unknown): string | null {
   if (title.length === 0) {
     return null;
   }
-  const trimmed = title.slice(0, SESSION_TITLE_MAX_LENGTH_CHARS).trim();
-  return trimmed.length > 0 ? trimmed : null;
+  return title;
 }
 
 /**

@@ -370,7 +370,7 @@ describe("buildDetailMarkdown", () => {
 });
 
 describe("formatTitleEntry", () => {
-  it("タイトルは詳細テーブルで1行に収まりやすい長さへ省略する", () => {
+  it("タイトルは詳細テーブルで省略せず表示する", () => {
     const entry = buildTitleEntry({
       title: "power-mode normal で無操作時ロック時のパスワード要求を修正",
       latestMessage: "message",
@@ -379,8 +379,7 @@ describe("formatTitleEntry", () => {
 
     const result = formatTitleEntry(entry);
 
-    expect(result).toContain("| 📝 | power-mode normal で無操作時ロック時のパスワード要求... |");
-    expect(result).not.toContain("を修正");
+    expect(result).toContain("| 📝 | power-mode normal で無操作時ロック時のパスワード要求を修正 |");
   });
 
   it("重複排除後のスキルが3種類以上なら2種類と残り件数で1行に畳む", () => {

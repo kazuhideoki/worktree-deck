@@ -1126,7 +1126,7 @@ describe("loadTitlesForPaths", () => {
     const now = new Date();
     const sessionDir = await createSessionDir(codexHome, now);
     const title = "Review the current code changes (staged, unstaged, and untracked files)";
-    const expectedTitle = title.slice(0, 60);
+    const expectedTitle = title;
 
     const firstFile = await writeSessionFile(
       sessionDir,
@@ -1158,7 +1158,7 @@ describe("loadTitlesForPaths", () => {
     const now = new Date();
     const sessionDir = await createSessionDir(codexHome, now);
     const title = "Review the code changes again and list issues";
-    const expectedTitle = title.slice(0, 60);
+    const expectedTitle = title;
 
     const parentFirst = await writeSessionFile(
       sessionDir,

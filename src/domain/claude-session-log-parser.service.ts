@@ -34,11 +34,6 @@ export type ClaudeSessionParseState = {
 };
 
 /**
- * タイトルとして表示する最大文字数
- */
-const TITLE_MAX_LENGTH_CHARS = 60;
-
-/**
  * 一覧解析で読み飛ばす付随イベントの .type 値
  */
 const NOISE_ENTRY_TYPES = new Set<string>([
@@ -284,10 +279,7 @@ function extractTitleFromMessage(message: string): string | null {
     return null;
   }
   const newlineIndex = trimmed.search(/\r?\n/);
-  const cutoff =
-    newlineIndex === -1
-      ? Math.min(trimmed.length, TITLE_MAX_LENGTH_CHARS)
-      : Math.min(newlineIndex, TITLE_MAX_LENGTH_CHARS);
+  const cutoff = newlineIndex === -1 ? trimmed.length : newlineIndex;
   const preview = trimmed.slice(0, cutoff).trim();
   return preview || null;
 }

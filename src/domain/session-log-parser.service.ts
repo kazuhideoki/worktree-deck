@@ -106,11 +106,6 @@ export type ReviewParentDedupeEntry = {
 const CWD_PATTERN = /<cwd>([^<]+)<\/cwd>/g;
 
 /**
- * タイトルとして表示する最大文字数
- */
-const TITLE_MAX_LENGTH_CHARS = 60;
-
-/**
  * parse 前に破棄する巨大ログ行の目安
  */
 const HEAVY_LOG_LINE_SKIP_CHARS = 128 * 1024;
@@ -1142,10 +1137,7 @@ function extractTitleFromMessage(message: string): string | null {
     return null;
   }
   const newlineIndex = trimmed.search(/\r?\n/);
-  const cutoff =
-    newlineIndex === -1
-      ? Math.min(trimmed.length, TITLE_MAX_LENGTH_CHARS)
-      : Math.min(newlineIndex, TITLE_MAX_LENGTH_CHARS);
+  const cutoff = newlineIndex === -1 ? trimmed.length : newlineIndex;
   const preview = trimmed.slice(0, cutoff).trim();
   return preview || null;
 }

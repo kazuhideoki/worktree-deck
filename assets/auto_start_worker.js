@@ -12,7 +12,7 @@ const AUTO_START_METADATA_GENERATION_PROMPT_HEADER = [
   "Generate concise metadata for this task.",
   'Output only JSON with string fields "branch" and "sessionTitle".',
   "branch must be a valid Git branch name.",
-  "sessionTitle must be a concise human-readable title.",
+  "sessionTitle must be a concise human-readable title, generally within 60 characters excluding Markdown link destination URLs.",
   "If a corresponding issue is specified and its URL is available, include it in sessionTitle as a Markdown link in the form [Issue #number](URL).",
 ].join(" ");
 const BRANCH_NAME_CODEX_MODEL = "gpt-5.3-codex-spark";
@@ -27,7 +27,6 @@ const DEFAULT_COMMAND_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"
 const INVALID_BRANCH_NAME_PATTERN = /[\s~^:?*[\]\\]/;
 const REPOSITORY_MAPPING_STORAGE_FILE = "repository-mappings.json";
 const UNSAFE_WORKTREE_PATH_SEGMENT_PATTERN = /[<>:"\\|?*\u0000-\u001f]+/g;
-const SESSION_TITLE_MAX_LENGTH_CHARS = 80;
 const CLAUDE_MODEL_ALIASES = ["fable", "opus", "sonnet", "haiku"];
 const CLAUDE_DEFAULT_MODEL = "opus";
 const CLAUDE_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
@@ -534,7 +533,7 @@ function normalizeSessionTitle(value) {
     })
     .join("")
     .trim();
-  return title ? title.slice(0, SESSION_TITLE_MAX_LENGTH_CHARS).trim() || null : null;
+  return title || null;
 }
 
 /**

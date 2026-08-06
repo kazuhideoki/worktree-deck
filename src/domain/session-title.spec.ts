@@ -7,13 +7,6 @@ describe("sessionTitleService", () => {
     expect(sessionTitleService.normalizeTitle("\n セッションタイトル生成 \nsecond")).toBe("セッションタイトル生成");
   });
 
-  it("制御文字を除去して最大長に丸める", () => {
-    const title = sessionTitleService.normalizeTitle(`abc\u0000${"x".repeat(100)}`);
-
-    expect(title).toHaveLength(80);
-    expect(title?.startsWith("abc")).toBe(true);
-  });
-
   it("保存エントリを既存 createdAt を保って組み立てる", () => {
     const result = sessionTitleService.buildEntry({
       threadId: "thread-1",

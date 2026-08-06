@@ -71,11 +71,6 @@ type SkillUsageSummary = {
 };
 
 /**
- * 詳細テーブルでタイトルが折り返されにくい最大表示幅
- */
-const TITLE_DETAIL_MAX_COLUMNS = 56;
-
-/**
  * 詳細テーブルでスキル名が折り返されにくい最大表示幅
  */
 const SKILL_DETAIL_MAX_COLUMNS = 28;
@@ -485,9 +480,8 @@ export function formatTitleEntry(
 ): string {
   const latestMessage = entry.latestMessage ?? "最新メッセージなし";
   const gitStatusWithPullRequests = formatGitStatusWithPullRequests(gitStatus ?? "No git status", pullRequests);
-  const truncatedTitle = truncateDisplayText(entry.title, TITLE_DETAIL_MAX_COLUMNS);
   const rows = [
-    ["📝", truncatedTitle],
+    ["📝", entry.title.trim()],
     ["🌿", gitStatusWithPullRequests],
     ["🧰", formatSkillUsageSummary(entry.skillUsages ?? []) ?? "None"],
   ];
