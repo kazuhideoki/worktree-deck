@@ -15,7 +15,7 @@ const AUTO_START_METADATA_GENERATION_PROMPT_HEADER = [
   "sessionTitle must be a concise human-readable title, generally within 60 characters excluding Markdown link destination URLs.",
   "If a corresponding issue is specified and its URL is available, include it in sessionTitle as a Markdown link in the form [Issue #number](URL).",
 ].join(" ");
-const BRANCH_NAME_CODEX_MODEL = "gpt-5.3-codex-spark";
+const BRANCH_NAME_CODEX_MODEL = "gpt-5.6-luna";
 const BRANCH_NAME_REASONING_EFFORT = "xhigh";
 const BRANCH_NAME_GENERATION_MAX_ATTEMPTS = 3;
 const CODEX_EXEC_TIMEOUT_MS = 60_000;

@@ -9,7 +9,7 @@ import { normalizeExternalCommandError } from "./external-command-error";
 /**
  * branch 名生成で使う Codex モデル
  */
-const BRANCH_NAME_CODEX_MODEL = "gpt-5.3-codex-spark";
+const BRANCH_NAME_CODEX_MODEL = "gpt-5.6-luna";
 
 /**
  * branch 名生成で使う reasoning effort

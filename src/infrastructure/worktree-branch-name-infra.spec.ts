@@ -29,7 +29,7 @@ describe("generateBranchNameWithCodexExec", () => {
         "read-only",
         "--ephemeral",
         "-m",
-        "gpt-5.3-codex-spark",
+        "gpt-5.6-luna",
         "-c",
         'approval_policy="never"',
         "-c",
