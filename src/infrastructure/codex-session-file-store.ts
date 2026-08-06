@@ -329,25 +329,6 @@ async function loadCodexSessionIndexTitles(args: {
 }
 
 /**
- * Codexタイトルを現在名、生成名、初回メッセージの順で解決する
- *
- * state DB の threads.title は初回ユーザー入力のまま残る場合があるため、現在名としては扱わない。
- * session index が無い場合も、Auto Start が保存した生成名を初回メッセージより優先する。
- */
-function resolveCodexDisplayTitle(args: {
-  codexThreadTitle: CodexThreadTitleEntry | null;
-  explicitTitle: ExplicitSessionTitle | null;
-  fallbackTitle: string | null;
-}): string | null {
-  return (
-    args.codexThreadTitle?.sessionIndexTitle ||
-    args.explicitTitle?.title ||
-    args.codexThreadTitle?.title ||
-    args.fallbackTitle
-  );
-}
-
-/**
  * Codex state DB の title 行一覧を lookup へ変換する
  */
 function buildCodexThreadTitleLookup(entries: CodexThreadTitleEntry[]): CodexThreadTitleLookup {
@@ -370,12 +351,7 @@ function buildCodexThreadTitleLookup(entries: CodexThreadTitleEntry[]): CodexThr
     }
   }
   for (const pathEntries of byWorktreePath.values()) {
-    pathEntries.sort((left, right) => {
-      if (right.updatedAt !== left.updatedAt) {
-        return right.updatedAt - left.updatedAt;
-      }
-      return right.title.localeCompare(left.title);
-    });
+    pathEntries.sort(sessionTitleService.compareByRecency);
   }
   return { byThreadId, bySessionPath, byWorktreePath };
 }
@@ -1083,46 +1059,83 @@ function resolveExplicitOnlyStatus(args: {
 }
 
 /**
- * 明示タイトルだけから一覧表示用タイトルを組み立てる
+ * Auto Start が保存したタイトルを一覧表示形式へ変換する
  */
-function buildExplicitOnlyTitles(args: {
-  paths: string[];
-  explicitTitles: ExplicitSessionTitleLookup;
+function buildExplicitTitleEntry(args: {
+  entry: ExplicitSessionTitle;
   nowMs: number;
   doneThresholdMs: number | null;
-}): Map<string, WorktreeTitle[]> {
-  const titles = new Map<string, WorktreeTitle[]>();
-  for (const path of args.paths) {
-    const entries = args.explicitTitles.byWorktreePath.get(path) ?? [];
-    if (entries.length === 0) {
-      continue;
-    }
-    titles.set(
-      path,
-      entries
-        .map((entry) => {
-          const updatedAt = parseExplicitTitleTimestamp(entry.updatedAt) ?? args.nowMs;
-          return {
-            title: entry.title,
-            status: resolveExplicitOnlyStatus({ updatedAt, nowMs: args.nowMs, doneThresholdMs: args.doneThresholdMs }),
-            latestMessage: null,
-            updatedAt,
-            startedAt: parseExplicitTitleTimestamp(entry.createdAt),
-            sessionThreadId: entry.threadId,
-            sessionKind: "main" as const,
-            isWaitingForUser: false,
-            skillUsages: [],
-          };
-        })
-        .sort((left, right) => {
-          if (right.updatedAt !== left.updatedAt) {
-            return right.updatedAt - left.updatedAt;
-          }
-          return right.title.localeCompare(left.title);
-        }),
-    );
+}): SessionTitleEntry {
+  const updatedAt = parseExplicitTitleTimestamp(args.entry.updatedAt) ?? args.nowMs;
+  return {
+    title: args.entry.title,
+    status: resolveExplicitOnlyStatus({ updatedAt, nowMs: args.nowMs, doneThresholdMs: args.doneThresholdMs }),
+    latestMessage: null,
+    updatedAt,
+    startedAt: parseExplicitTitleTimestamp(args.entry.createdAt),
+    sessionPath: undefined,
+    sessionThreadId: args.entry.threadId,
+    sessionKind: "main",
+    isWaitingForUser: false,
+    titleTurnId: null,
+    reviewTurnIds: [],
+    skillUsages: [],
+  };
+}
+
+/**
+ * Codex 保存情報を現在名優先で一覧表示形式へ変換する
+ */
+function buildCodexStoredTitleEntry(args: {
+  entry: CodexThreadTitleEntry;
+  explicitTitle: ExplicitSessionTitle | null;
+  nowMs: number;
+  doneThresholdMs: number | null;
+}): SessionTitleEntry | null {
+  // session index、Auto Start 生成名、state DB の初回メッセージの順で採用する
+  const title = sessionTitleService.resolveDisplayTitle(
+    args.entry.sessionIndexTitle,
+    args.explicitTitle?.title,
+    args.entry.title,
+  );
+  if (!title) {
+    return null;
   }
-  return titles;
+  return {
+    title,
+    status: resolveExplicitOnlyStatus({
+      updatedAt: args.entry.updatedAt,
+      nowMs: args.nowMs,
+      doneThresholdMs: args.doneThresholdMs,
+    }),
+    latestMessage: null,
+    updatedAt: args.entry.updatedAt,
+    startedAt: args.entry.startedAt,
+    sessionPath: args.entry.sessionPath ?? undefined,
+    sessionThreadId: args.entry.threadId,
+    sessionKind: "main",
+    isWaitingForUser: false,
+    titleTurnId: null,
+    reviewTurnIds: [],
+    skillUsages: [],
+  };
+}
+
+/**
+ * パス別タイトル辞書へエントリを追加する
+ */
+function setTitleEntry(
+  titlesByPath: Map<string, Map<string, SessionTitleEntry>>,
+  path: string,
+  key: string,
+  entry: SessionTitleEntry,
+): void {
+  const entries = titlesByPath.get(path);
+  if (entries) {
+    entries.set(key, entry);
+  } else {
+    titlesByPath.set(path, new Map([[key, entry]]));
+  }
 }
 
 /**
@@ -1131,65 +1144,33 @@ function buildExplicitOnlyTitles(args: {
 function buildStoredOnlyTitles(args: {
   paths: string[];
   explicitTitles: ExplicitSessionTitleLookup;
-  codexThreadTitles: CodexThreadTitleLookup;
+  codexThreadTitles?: CodexThreadTitleLookup;
   nowMs: number;
   doneThresholdMs: number | null;
 }): Map<string, WorktreeTitle[]> {
   const titles = new Map<string, WorktreeTitle[]>();
   for (const path of args.paths) {
     const matchedThreadIds = new Set<string>();
-    const codexEntries = (args.codexThreadTitles.byWorktreePath.get(path) ?? [])
+    const codexEntries = (args.codexThreadTitles?.byWorktreePath.get(path) ?? [])
       .filter(isStoredOnlyTitleEntry)
       .map((entry) => {
         matchedThreadIds.add(entry.threadId);
-        const explicitTitle = args.explicitTitles.byThreadId.get(entry.threadId) ?? null;
-        return {
-          title:
-            resolveCodexDisplayTitle({ codexThreadTitle: entry, explicitTitle, fallbackTitle: null }) ?? entry.title,
-          status: resolveExplicitOnlyStatus({
-            updatedAt: entry.updatedAt,
-            nowMs: args.nowMs,
-            doneThresholdMs: args.doneThresholdMs,
-          }),
-          latestMessage: null,
-          updatedAt: entry.updatedAt,
-          startedAt: entry.startedAt,
-          sessionPath: entry.sessionPath ?? undefined,
-          sessionThreadId: entry.threadId,
-          sessionKind: "main" as const,
-          isWaitingForUser: false,
-          skillUsages: [],
-        };
-      });
+        return buildCodexStoredTitleEntry({
+          entry,
+          explicitTitle: args.explicitTitles.byThreadId.get(entry.threadId) ?? null,
+          nowMs: args.nowMs,
+          doneThresholdMs: args.doneThresholdMs,
+        });
+      })
+      .filter((entry): entry is SessionTitleEntry => entry !== null);
     const explicitEntries = (args.explicitTitles.byWorktreePath.get(path) ?? [])
       .filter((entry) => !matchedThreadIds.has(entry.threadId))
-      .map((entry) => {
-        const updatedAt = parseExplicitTitleTimestamp(entry.updatedAt) ?? args.nowMs;
-        return {
-          title: entry.title,
-          status: resolveExplicitOnlyStatus({ updatedAt, nowMs: args.nowMs, doneThresholdMs: args.doneThresholdMs }),
-          latestMessage: null,
-          updatedAt,
-          startedAt: parseExplicitTitleTimestamp(entry.createdAt),
-          sessionThreadId: entry.threadId,
-          sessionKind: "main" as const,
-          isWaitingForUser: false,
-          skillUsages: [],
-        };
-      });
+      .map((entry) => buildExplicitTitleEntry({ entry, nowMs: args.nowMs, doneThresholdMs: args.doneThresholdMs }));
     const entries = [...codexEntries, ...explicitEntries];
     if (entries.length === 0) {
       continue;
     }
-    titles.set(
-      path,
-      entries.sort((left, right) => {
-        if (right.updatedAt !== left.updatedAt) {
-          return right.updatedAt - left.updatedAt;
-        }
-        return right.title.localeCompare(left.title);
-      }),
-    );
+    titles.set(path, entries.sort(sessionTitleService.compareByRecency));
   }
   return titles;
 }
@@ -1235,9 +1216,9 @@ export async function loadTitlesForPaths(args: {
   const doneThresholdMs = doneThresholdDays != null ? doneThresholdDays * 24 * 60 * 60 * 1000 : null;
   if (!codexHome) {
     return measureTitleSyncStep({
-      label: `${timingLabelPrefix}:buildExplicitOnlyTitles(paths=${args.paths.length})`,
+      label: `${timingLabelPrefix}:buildStoredOnlyTitles(paths=${args.paths.length})`,
       logTiming: args.logTiming,
-      task: () => buildExplicitOnlyTitles({ paths: args.paths, explicitTitles, nowMs, doneThresholdMs }),
+      task: () => buildStoredOnlyTitles({ paths: args.paths, explicitTitles, nowMs, doneThresholdMs }),
     });
   }
 
@@ -1359,11 +1340,13 @@ export async function loadTitlesForPaths(args: {
         (entry.sessionThreadId ? codexThreadTitles.byThreadId.get(entry.sessionThreadId) : null) ??
         codexThreadTitles.bySessionPath.get(sessionFile.path) ??
         null;
-      const resolvedTitle = resolveCodexDisplayTitle({
-        codexThreadTitle,
-        explicitTitle: explicitTitle ?? null,
-        fallbackTitle: entry.title,
-      });
+      // session index、Auto Start 生成名、state DB、ログの初回メッセージの順で採用する
+      const resolvedTitle = sessionTitleService.resolveDisplayTitle(
+        codexThreadTitle?.sessionIndexTitle,
+        explicitTitle?.title,
+        codexThreadTitle?.title,
+        entry.title,
+      );
       if (!resolvedTitle || entry.cwds.length === 0) {
         continue;
       }
@@ -1402,13 +1385,9 @@ export async function loadTitlesForPaths(args: {
           skillUsages: entry.skillUsages,
         };
         const titleKey = `${entry.sessionThreadId ?? resolvedTitle}::${sessionFile.path}`;
-        if (existing) {
-          const current = existing.get(titleKey);
-          if (!current || current.updatedAt < titleEntry.updatedAt) {
-            existing.set(titleKey, titleEntry);
-          }
-        } else {
-          titleEntries.set(matched, new Map([[titleKey, titleEntry]]));
+        const current = existing?.get(titleKey);
+        if (!current || current.updatedAt < titleEntry.updatedAt) {
+          setTitleEntry(titleEntries, matched, titleKey, titleEntry);
         }
       }
     } catch {
@@ -1431,65 +1410,24 @@ export async function loadTitlesForPaths(args: {
           if (matchedExplicitThreadIds.has(explicitTitle.threadId)) {
             continue;
           }
-          const updatedAt = parseExplicitTitleTimestamp(explicitTitle.updatedAt);
-          const startedAt = parseExplicitTitleTimestamp(explicitTitle.createdAt);
-          const titleEntry: SessionTitleEntry = {
-            title: explicitTitle.title,
-            status: resolveExplicitOnlyStatus({ updatedAt: updatedAt ?? nowMs, nowMs, doneThresholdMs }),
-            latestMessage: null,
-            updatedAt: updatedAt ?? nowMs,
-            startedAt,
-            sessionKind: "main",
-            isWaitingForUser: false,
-            sessionThreadId: explicitTitle.threadId,
-            titleTurnId: null,
-            reviewTurnIds: [],
-            sessionPath: undefined,
-            skillUsages: [],
-          };
-          const existing = titleEntries.get(path);
-          const titleKey = `${explicitTitle.threadId}::explicit`;
-          if (existing) {
-            existing.set(titleKey, titleEntry);
-          } else {
-            titleEntries.set(path, new Map([[titleKey, titleEntry]]));
-          }
+          const titleEntry = buildExplicitTitleEntry({ entry: explicitTitle, nowMs, doneThresholdMs });
+          setTitleEntry(titleEntries, path, `${explicitTitle.threadId}::explicit`, titleEntry);
         }
         const codexEntries = codexThreadTitles.byWorktreePath.get(path) ?? [];
         for (const codexThreadTitle of codexEntries) {
           if (matchedExplicitThreadIds.has(codexThreadTitle.threadId) || !isStoredOnlyTitleEntry(codexThreadTitle)) {
             continue;
           }
-          const explicitTitle = explicitTitles.byThreadId.get(codexThreadTitle.threadId) ?? null;
-          const resolvedTitle = resolveCodexDisplayTitle({ codexThreadTitle, explicitTitle, fallbackTitle: null });
-          if (!resolvedTitle) {
+          const titleEntry = buildCodexStoredTitleEntry({
+            entry: codexThreadTitle,
+            explicitTitle: explicitTitles.byThreadId.get(codexThreadTitle.threadId) ?? null,
+            nowMs,
+            doneThresholdMs,
+          });
+          if (!titleEntry) {
             continue;
           }
-          const titleEntry: SessionTitleEntry = {
-            title: resolvedTitle,
-            status: resolveExplicitOnlyStatus({
-              updatedAt: codexThreadTitle.updatedAt,
-              nowMs,
-              doneThresholdMs,
-            }),
-            latestMessage: null,
-            updatedAt: codexThreadTitle.updatedAt,
-            startedAt: codexThreadTitle.startedAt,
-            sessionKind: "main",
-            isWaitingForUser: false,
-            sessionThreadId: codexThreadTitle.threadId,
-            titleTurnId: null,
-            reviewTurnIds: [],
-            sessionPath: codexThreadTitle.sessionPath ?? undefined,
-            skillUsages: [],
-          };
-          const existing = titleEntries.get(path);
-          const titleKey = `${codexThreadTitle.threadId}::codex-state`;
-          if (existing) {
-            existing.set(titleKey, titleEntry);
-          } else {
-            titleEntries.set(path, new Map([[titleKey, titleEntry]]));
-          }
+          setTitleEntry(titleEntries, path, `${codexThreadTitle.threadId}::codex-state`, titleEntry);
         }
       }
 
@@ -1504,32 +1442,25 @@ export async function loadTitlesForPaths(args: {
         const dedupedEntries = sessionLogParserService.dedupeReviewParentEntries(Array.from(entries.values()));
         nextTitles.set(
           path,
-          dedupedEntries
-            .sort((left, right) => {
-              if (right.updatedAt !== left.updatedAt) {
-                return right.updatedAt - left.updatedAt;
-              }
-              return right.title.localeCompare(left.title);
-            })
-            .map((entry) => {
-              const propagatedWaitingUpdatedAt = entry.sessionThreadId
-                ? expandedWaitingForUserUpdatedAtByThreadId.get(entry.sessionThreadId)
-                : undefined;
-              const waitingForUserUpdatedAt = propagatedWaitingUpdatedAt ?? entry.waitingForUserUpdatedAt ?? undefined;
-              return {
-                title: entry.title,
-                status: entry.status,
-                latestMessage: entry.latestMessage,
-                updatedAt: entry.updatedAt,
-                startedAt: entry.startedAt,
-                sessionPath: entry.sessionPath,
-                sessionThreadId: entry.sessionThreadId,
-                sessionKind: entry.sessionKind,
-                isWaitingForUser: waitingForUserUpdatedAt != null,
-                waitingForUserUpdatedAt,
-                skillUsages: entry.skillUsages,
-              };
-            }),
+          dedupedEntries.sort(sessionTitleService.compareByRecency).map((entry) => {
+            const propagatedWaitingUpdatedAt = entry.sessionThreadId
+              ? expandedWaitingForUserUpdatedAtByThreadId.get(entry.sessionThreadId)
+              : undefined;
+            const waitingForUserUpdatedAt = propagatedWaitingUpdatedAt ?? entry.waitingForUserUpdatedAt ?? undefined;
+            return {
+              title: entry.title,
+              status: entry.status,
+              latestMessage: entry.latestMessage,
+              updatedAt: entry.updatedAt,
+              startedAt: entry.startedAt,
+              sessionPath: entry.sessionPath,
+              sessionThreadId: entry.sessionThreadId,
+              sessionKind: entry.sessionKind,
+              isWaitingForUser: waitingForUserUpdatedAt != null,
+              waitingForUserUpdatedAt,
+              skillUsages: entry.skillUsages,
+            };
+          }),
         );
       }
       return nextTitles;

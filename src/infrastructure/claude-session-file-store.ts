@@ -9,6 +9,7 @@ import {
   type ParsedClaudeSessionLog,
 } from "../domain/claude-session-log-parser.service";
 import { sessionLogParserService, type SessionStatus } from "../domain/session-log-parser.service";
+import { sessionTitleService } from "../domain/session-title.service";
 import { expandHomePath, normalizePathValue } from "../domain/path-utils";
 import { loadEnvValue } from "./env/env-store";
 import type { WorktreeTitle } from "./worktree-types";
@@ -39,19 +40,6 @@ type ClaudeTitlesCacheStorage = {
   cachedAt: number;
   files: Record<string, ClaudeTitlesCacheFileEntry>;
 };
-
-/**
- * Claudeタイトルをエージェント更新名、生成名、初回メッセージの順で解決する
- *
- * ai-title は Claude Code がセッション内で更新した名前を表すため、Auto Start の生成名より優先する。
- */
-function resolveClaudeDisplayTitle(args: {
-  parsedTitle: string | null;
-  hasAiTitle: boolean;
-  explicitTitle: string | null;
-}): string | null {
-  return args.hasAiTitle ? args.parsedTitle : (args.explicitTitle ?? args.parsedTitle);
-}
 
 const ENV_CLAUDE_CONFIG_DIR = "CLAUDE_CONFIG_DIR";
 const ENV_DONE_THRESHOLD_DAYS = "WORKTREE_DECK_DONE_THRESHOLD_DAYS";
@@ -552,11 +540,12 @@ export async function loadClaudeTitlesForPaths(args: {
 
         const sessionThreadId = resolveSessionIdFromLogPath(sessionFile.path);
         const explicitTitle = explicitTitles.byThreadId.get(sessionThreadId);
-        const resolvedTitle = resolveClaudeDisplayTitle({
-          parsedTitle: entry.title,
-          hasAiTitle: entry.hasAiTitle,
-          explicitTitle: explicitTitle?.title ?? null,
-        });
+        // Claude Code の更新名、Auto Start の生成名、初回メッセージの順で採用する
+        const resolvedTitle = sessionTitleService.resolveDisplayTitle(
+          entry.hasAiTitle ? entry.title : null,
+          explicitTitle?.title,
+          entry.title,
+        );
         if (!resolvedTitle || entry.cwds.length === 0) {
           continue;
         }
@@ -617,15 +606,7 @@ export async function loadClaudeTitlesForPaths(args: {
 
   const result = new Map<string, WorktreeTitle[]>();
   for (const [path, entries] of titlesByPath) {
-    result.set(
-      path,
-      Array.from(entries.values()).sort((left, right) => {
-        if (right.updatedAt !== left.updatedAt) {
-          return right.updatedAt - left.updatedAt;
-        }
-        return right.title.localeCompare(left.title);
-      }),
-    );
+    result.set(path, Array.from(entries.values()).sort(sessionTitleService.compareByRecency));
   }
   return result;
 }

@@ -29,6 +29,7 @@ import type {
 import type { WorktreeSessionFileDependencies } from "./application/worktree-session-file.usecase";
 import type { OpenWorktreeInPreferredAppDependencies } from "./application/worktree-open-app.usecase";
 import type { SessionMessage } from "./domain/session-detail.service";
+import { sessionTitleService } from "./domain/session-title.service";
 import type { Worktree, WorktreePullRequestInfo } from "./application/worktree.entity";
 import type { WorktreeTitle } from "./application/worktree-title.entity";
 import { createDefaultWorktreeDependencies } from "./interface-adapters/create-worktree-dependencies";
@@ -206,12 +207,7 @@ export function mergeTitlesByPath(...maps: Map<string, WorktreeTitle[]>[]): Map<
       }
     }
     const deduplicated = [...entriesByThreadId.values(), ...entriesWithoutThreadId];
-    deduplicated.sort((left, right) => {
-      if (right.updatedAt !== left.updatedAt) {
-        return right.updatedAt - left.updatedAt;
-      }
-      return right.title.localeCompare(left.title);
-    });
+    deduplicated.sort(sessionTitleService.compareByRecency);
     merged.set(path, deduplicated);
   }
   return merged;

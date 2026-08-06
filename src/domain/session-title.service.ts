@@ -65,6 +65,23 @@ function normalizeTitle(value: unknown): string | null {
 }
 
 /**
+ * 優先順に並べた候補から最初の有効な表示タイトルを選ぶ
+ */
+function resolveDisplayTitle(...candidates: (string | null | undefined)[]): string | null {
+  return candidates.find((candidate): candidate is string => Boolean(candidate)) ?? null;
+}
+
+/**
+ * タイトルを更新日時の降順、同時刻なら文字列の降順で比較する
+ */
+function compareByRecency(
+  left: { title: string; updatedAt: number },
+  right: { title: string; updatedAt: number },
+): number {
+  return right.updatedAt - left.updatedAt || right.title.localeCompare(left.title);
+}
+
+/**
  * ISO timestamp 文字列として扱える値へ正規化する
  */
 function normalizeTimestamp(value: unknown, fallback: string): string {
@@ -149,8 +166,10 @@ function buildEntry(args: {
  */
 export const sessionTitleService = {
   buildEntry,
+  compareByRecency,
   normalizeStorage,
   normalizeThreadId,
   normalizeTitle,
   normalizeWorktreePath,
+  resolveDisplayTitle,
 } as const;

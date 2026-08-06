@@ -7,6 +7,10 @@ describe("sessionTitleService", () => {
     expect(sessionTitleService.normalizeTitle("\n セッションタイトル生成 \nsecond")).toBe("セッションタイトル生成");
   });
 
+  it("表示タイトルは先に指定された有効な候補を採用する", () => {
+    expect(sessionTitleService.resolveDisplayTitle(null, "生成タイトル", "初回メッセージ")).toBe("生成タイトル");
+  });
+
   it("保存エントリを既存 createdAt を保って組み立てる", () => {
     const result = sessionTitleService.buildEntry({
       threadId: "thread-1",
