@@ -200,6 +200,19 @@ async function writeCodexStateThreads(
 }
 
 /**
+ * テスト用 Codex session index を作成する
+ */
+async function writeCodexSessionIndexTitles(
+  codexHome: string,
+  rows: { id: string; threadName: string; updatedAt: string }[],
+): Promise<void> {
+  const content = rows
+    .map((row) => JSON.stringify({ id: row.id, thread_name: row.threadName, updated_at: row.updatedAt }))
+    .join("\n");
+  await writeFile(join(codexHome, "session_index.jsonl"), `${content}\n`, "utf8");
+}
+
+/**
  * テスト用の CODEX_HOME と worktree を作成する
  */
 async function setupTestPaths(): Promise<{ codexHome: string; worktreePath: string }> {
@@ -422,7 +435,7 @@ describe("loadTitlesForPaths", () => {
     }
   });
 
-  it("Codex state に同じ thread id の title がある場合は明示セッションタイトルより優先する", async () => {
+  it("Codex state の初回メッセージより明示セッションタイトルを優先する", async () => {
     const storageHome = await mkdtemp(join(tmpdir(), "worktree-session-title-home-"));
     const storageDir = join(storageHome, ".worktree-deck", "storage");
     await mkdir(storageDir, { recursive: true });
@@ -451,7 +464,7 @@ describe("loadTitlesForPaths", () => {
     await writeCodexStateThreads(codexHome, [
       {
         id: threadId,
-        title: "Codex renamed title",
+        title: "Initial prompt title",
         cwd: worktreePath,
         rolloutPath: sessionPath,
         updatedAtMs: Date.now(),
@@ -470,7 +483,82 @@ describe("loadTitlesForPaths", () => {
         } as NodeJS.ProcessEnv,
       });
 
-      expect(titlesByPath.get(worktreePath)?.[0]?.title).toBe("Codex renamed title");
+      expect(titlesByPath.get(worktreePath)?.[0]?.title).toBe("Auto Start title");
+    } finally {
+      await rm(storageHome, { recursive: true, force: true });
+    }
+  });
+
+  it("Codex session index の更新をセッションログのキャッシュ利用時も表示へ反映する", async () => {
+    const storageHome = await mkdtemp(join(tmpdir(), "worktree-session-title-home-"));
+    const storageDir = join(storageHome, ".worktree-deck", "storage");
+    const cacheStorage = new Map<string, string>();
+    mockedLocalStorage.getItem.mockImplementation(async (key: string) => cacheStorage.get(key) ?? null);
+    mockedLocalStorage.setItem.mockImplementation(async (key: string, value: unknown) => {
+      cacheStorage.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    });
+    await mkdir(storageDir, { recursive: true });
+    const threadId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16b";
+    await writeFile(
+      join(storageDir, "worktree-session-titles.json"),
+      JSON.stringify({
+        [threadId]: {
+          threadId,
+          worktreePath,
+          title: "Auto Start title",
+          source: "auto-start",
+          createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-20T00:00:01.000Z",
+        },
+      }),
+      "utf8",
+    );
+    const sessionDir = await createSessionDir(codexHome, new Date());
+    const sessionPath = await writeSessionFile(sessionDir, [
+      buildSessionMetaLine("cli", threadId),
+      buildTurnContextLine(worktreePath),
+      buildEventMessageLine("user_message", "Initial prompt title"),
+      buildEventMessageLine("agent_message", "Latest message"),
+    ]);
+    await writeCodexStateThreads(codexHome, [
+      {
+        id: threadId,
+        title: "Initial prompt title",
+        cwd: worktreePath,
+        rolloutPath: sessionPath,
+        updatedAtMs: Date.now(),
+        createdAtMs: Date.now() - 1000,
+      },
+    ]);
+    await writeCodexSessionIndexTitles(codexHome, [
+      { id: threadId, threadName: "Auto Start title", updatedAt: "2026-05-20T00:00:02.000Z" },
+    ]);
+
+    try {
+      const loadArgs = {
+        ...buildLoadArgs(codexHome, worktreePath),
+        homeDir: storageHome,
+        env: {
+          ...process.env,
+          CODEX_HOME: codexHome,
+          WORKTREE_DECK_SEARCH_DAYS: "1",
+        } as NodeJS.ProcessEnv,
+      };
+      const beforeRename = await loadTitlesForPaths(loadArgs);
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+      await writeCodexSessionIndexTitles(codexHome, [
+        { id: threadId, threadName: "Auto Start title", updatedAt: "2026-05-20T00:00:02.000Z" },
+        { id: threadId, threadName: "Codex renamed title", updatedAt: "2026-05-20T00:00:03.000Z" },
+      ]);
+      const afterRename = await loadTitlesForPaths(loadArgs);
+
+      expect(beforeRename.get(worktreePath)?.[0]?.title).toBe("Auto Start title");
+      expect(afterRename.get(worktreePath)?.[0]).toMatchObject({
+        title: "Codex renamed title",
+        sessionThreadId: threadId,
+      });
     } finally {
       await rm(storageHome, { recursive: true, force: true });
     }

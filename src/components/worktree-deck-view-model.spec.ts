@@ -341,7 +341,7 @@ describe("worktree-deck-view-model", () => {
     );
   });
 
-  it("複数通常セッションがある場合も詳細タイトルは初回タイトルを維持する", () => {
+  it("複数通常セッションがある場合は最新セッションのタイトルと内容を表示する", () => {
     const markdown = buildDetailMarkdown({
       title: "feature-a",
       isTitlesLoading: false,
@@ -365,7 +365,7 @@ describe("worktree-deck-view-model", () => {
 
     expect(markdown).toBe(
       [
-        "| 📝 | First session title |",
+        "| 📝 | Second session title |",
         "| --- | --- |",
         "| 🌿 | No git status |",
         "| 🧰 | `imagegen` |",

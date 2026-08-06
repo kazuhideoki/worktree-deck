@@ -43,6 +43,7 @@ describe("claudeSessionLogParserService", () => {
       assistantLine([{ type: "text", text: "完了しました" }], "end_turn"),
     ]);
     expect(result.title).toBe("AIが付けたタイトル");
+    expect(result.hasAiTitle).toBe(true);
     expect(result.cwds).toEqual([CWD]);
     expect(result.startedAt).toBe(Date.parse("2026-06-17T04:04:51.000Z"));
   });
@@ -53,6 +54,7 @@ describe("claudeSessionLogParserService", () => {
       assistantLine([{ type: "text", text: "ok" }], "end_turn"),
     ]);
     expect(result.title).toBe("これはユーザーの最初の発話");
+    expect(result.hasAiTitle).toBe(false);
   });
 
   it("末尾 assistant が end_turn なら done", () => {

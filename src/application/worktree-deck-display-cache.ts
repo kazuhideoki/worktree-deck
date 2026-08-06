@@ -126,6 +126,8 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
     const status = entry.status === "working" || entry.status === "done" ? entry.status : null;
     const startedAt = typeof entry.startedAt === "number" || entry.startedAt == null ? entry.startedAt : null;
     const sessionPath = typeof entry.sessionPath === "string" || entry.sessionPath == null ? entry.sessionPath : null;
+    const sessionThreadId =
+      typeof entry.sessionThreadId === "string" || entry.sessionThreadId == null ? entry.sessionThreadId : null;
     const sessionKind = normalizeSessionKind(entry.sessionKind);
     const isWaitingForUser = typeof entry.isWaitingForUser === "boolean" ? entry.isWaitingForUser : undefined;
     const waitingForUserUpdatedAt =
@@ -142,6 +144,7 @@ function normalizeTitleEntries(value: unknown): WorktreeTitle[] | null {
       status,
       startedAt,
       sessionPath: sessionPath ?? undefined,
+      sessionThreadId,
       sessionKind,
       isWaitingForUser,
       waitingForUserUpdatedAt,

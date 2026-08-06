@@ -180,7 +180,7 @@ describe("buildDetailMarkdown", () => {
     expect(tint).toBe("green");
   });
 
-  it("レビューセッションを除いた最新セッションの内容を初回タイトルで表示する", () => {
+  it("レビューセッションを除いた最新セッションのタイトルと内容を表示する", () => {
     const latestReview = buildTitleEntry({
       title: "Review: tighten lint rules",
       latestMessage: "review result",
@@ -204,12 +204,12 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("| 📝 | ESLintのルールを強化したい。 |");
+    expect(result).toContain("| 📝 | 途中の作業タイトル |");
     expect(result).toContain("middle progress");
     expect(result).not.toContain("| 📝 | Review: tighten lint rules |");
   });
 
-  it("最新セッションがレビューでなければ最新内容を初回タイトルで表示する", () => {
+  it("最新セッションがレビューでなければ最新タイトルと内容を表示する", () => {
     const latest = buildTitleEntry({
       title: "Latest Session",
       latestMessage: "Latest message",
@@ -227,9 +227,9 @@ describe("buildDetailMarkdown", () => {
       isTitlesLoading: false,
     });
 
-    expect(result).toContain("| 📝 | Older Session |");
+    expect(result).toContain("| 📝 | Latest Session |");
     expect(result).toContain("Latest message");
-    expect(result).not.toContain("| 📝 | Latest Session |");
+    expect(result).not.toContain("| 📝 | Older Session |");
   });
 
   it("レビュー以外が存在しないときは最新セッションを表示する", () => {

@@ -54,6 +54,82 @@ describe("toProjectFolderName", () => {
 });
 
 describe("loadClaudeTitlesForPaths", () => {
+  it("ai-title が無ければ同じ session ID の Auto Start 生成タイトルを使う", async () => {
+    const worktreePath = "/Users/me/work/repo";
+    const sessionId = "019dd94f-27e0-7ad1-8d17-3d628ac5d16b";
+    const storageDir = join(root, ".worktree-deck", "storage");
+    await mkdir(storageDir, { recursive: true });
+    await writeFile(
+      join(storageDir, "worktree-session-titles.json"),
+      JSON.stringify({
+        [sessionId]: {
+          threadId: sessionId,
+          worktreePath,
+          title: "生成されたタイトル",
+          source: "auto-start",
+          createdAt: "2026-06-17T00:00:00.000Z",
+          updatedAt: "2026-06-17T00:00:01.000Z",
+        },
+      }),
+      "utf8",
+    );
+    await writeSession(toProjectFolderName(worktreePath), `${sessionId}.jsonl`, [
+      {
+        type: "user",
+        cwd: worktreePath,
+        message: { role: "user", content: "最初の一文" },
+        timestamp: "2026-06-17T00:00:00.000Z",
+      },
+      {
+        type: "assistant",
+        cwd: worktreePath,
+        message: { role: "assistant", content: [{ type: "text", text: "完了" }], stop_reason: "end_turn" },
+      },
+    ]);
+
+    const result = await loadClaudeTitlesForPaths({ paths: [worktreePath], env: {}, homeDir: root });
+
+    expect(result.get(worktreePath)?.[0]).toMatchObject({
+      title: "生成されたタイトル",
+      sessionThreadId: sessionId,
+      provider: "cc",
+    });
+  });
+
+  it("ai-title があれば Auto Start 生成タイトルより優先する", async () => {
+    const worktreePath = "/Users/me/work/repo";
+    const sessionId = "119dd94f-27e0-7ad1-8d17-3d628ac5d16b";
+    const storageDir = join(root, ".worktree-deck", "storage");
+    await mkdir(storageDir, { recursive: true });
+    await writeFile(
+      join(storageDir, "worktree-session-titles.json"),
+      JSON.stringify({
+        [sessionId]: {
+          threadId: sessionId,
+          worktreePath,
+          title: "生成されたタイトル",
+          source: "auto-start",
+          createdAt: "2026-06-17T00:00:00.000Z",
+          updatedAt: "2026-06-17T00:00:01.000Z",
+        },
+      }),
+      "utf8",
+    );
+    await writeSession(toProjectFolderName(worktreePath), `${sessionId}.jsonl`, [
+      {
+        type: "user",
+        cwd: worktreePath,
+        message: { role: "user", content: "最初の一文" },
+        timestamp: "2026-06-17T00:00:00.000Z",
+      },
+      { type: "ai-title", aiTitle: "エージェントが更新したタイトル" },
+    ]);
+
+    const result = await loadClaudeTitlesForPaths({ paths: [worktreePath], env: {}, homeDir: root });
+
+    expect(result.get(worktreePath)?.[0]?.title).toBe("エージェントが更新したタイトル");
+  });
+
   it("worktree パスに対応するフォルダの cc セッションを provider:cc で返す", async () => {
     const worktreePath = "/Users/me/work/repo";
     const cwd = worktreePath;

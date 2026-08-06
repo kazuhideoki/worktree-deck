@@ -12,6 +12,10 @@ import { sessionLogParserService, type SessionStatus } from "../domain/session-l
 import { expandHomePath, normalizePathValue } from "../domain/path-utils";
 import { loadEnvValue } from "./env/env-store";
 import type { WorktreeTitle } from "./worktree-types";
+import {
+  loadExplicitSessionTitlesForWorktreePaths,
+  type ExplicitSessionTitleLookup,
+} from "./worktree-session-title-store";
 
 type EnvValueContext = {
   env: NodeJS.ProcessEnv;
@@ -24,6 +28,7 @@ type ClaudeTitlesCacheFileEntry = {
   updatedAt: number;
   startedAt: number | null;
   title: string | null;
+  hasAiTitle: boolean;
   latestMessage: string | null;
   status: SessionStatus | null;
   cwds: string[];
@@ -34,6 +39,19 @@ type ClaudeTitlesCacheStorage = {
   cachedAt: number;
   files: Record<string, ClaudeTitlesCacheFileEntry>;
 };
+
+/**
+ * Claudeタイトルをエージェント更新名、生成名、初回メッセージの順で解決する
+ *
+ * ai-title は Claude Code がセッション内で更新した名前を表すため、Auto Start の生成名より優先する。
+ */
+function resolveClaudeDisplayTitle(args: {
+  parsedTitle: string | null;
+  hasAiTitle: boolean;
+  explicitTitle: string | null;
+}): string | null {
+  return args.hasAiTitle ? args.parsedTitle : (args.explicitTitle ?? args.parsedTitle);
+}
 
 const ENV_CLAUDE_CONFIG_DIR = "CLAUDE_CONFIG_DIR";
 const ENV_DONE_THRESHOLD_DAYS = "WORKTREE_DECK_DONE_THRESHOLD_DAYS";
@@ -54,7 +72,7 @@ const USER_WAITING_REASONS = new Set<string>(["permission prompt", "sandbox requ
 /**
  * Claude タイトルキャッシュのキー接頭辞
  */
-const TITLES_CACHE_KEY_PREFIX = "worktree-deck.claude-titles-cache.v2";
+const TITLES_CACHE_KEY_PREFIX = "worktree-deck.claude-titles-cache.v3";
 
 /**
  * working を done 扱いにする経過日数を取得する
@@ -324,6 +342,7 @@ function normalizeTitlesCacheStorage(value: unknown): ClaudeTitlesCacheStorage |
     const updatedAt = typeof rawEntry.updatedAt === "number" ? rawEntry.updatedAt : null;
     const startedAt = typeof rawEntry.startedAt === "number" ? rawEntry.startedAt : null;
     const title = typeof rawEntry.title === "string" ? rawEntry.title : null;
+    const hasAiTitle = rawEntry.hasAiTitle === true;
     const latestMessage = typeof rawEntry.latestMessage === "string" ? rawEntry.latestMessage : null;
     const status = rawEntry.status === "working" || rawEntry.status === "done" ? rawEntry.status : null;
     const isWaitingForUser = typeof rawEntry.isWaitingForUser === "boolean" ? rawEntry.isWaitingForUser : false;
@@ -332,7 +351,18 @@ function normalizeTitlesCacheStorage(value: unknown): ClaudeTitlesCacheStorage |
       continue;
     }
     const cwds = cwdsRaw.filter((item): item is string => typeof item === "string");
-    files[filePath] = { mtimeMs, size, updatedAt, startedAt, title, latestMessage, status, cwds, isWaitingForUser };
+    files[filePath] = {
+      mtimeMs,
+      size,
+      updatedAt,
+      startedAt,
+      title,
+      hasAiTitle,
+      latestMessage,
+      status,
+      cwds,
+      isWaitingForUser,
+    };
   }
   return { cachedAt, files };
 }
@@ -463,10 +493,13 @@ export async function loadClaudeTitlesForPaths(args: {
     return new Map();
   }
   const nowMs = Date.now();
-  const [projectsRoot, sessionsRoot, doneThresholdDays] = await Promise.all([
+  const [projectsRoot, sessionsRoot, doneThresholdDays, explicitTitles] = await Promise.all([
     loadClaudeProjectsRoot(args),
     loadClaudeSessionsRoot(args),
     loadDoneThresholdDays(args),
+    loadExplicitSessionTitlesForWorktreePaths(args).catch(
+      (): ExplicitSessionTitleLookup => ({ byThreadId: new Map(), byWorktreePath: new Map() }),
+    ),
   ]);
   if (!projectsRoot) {
     return new Map();
@@ -508,6 +541,7 @@ export async function loadClaudeTitlesForPaths(args: {
             updatedAt: sessionFile.updatedAt,
             startedAt: parsed.startedAt,
             title: parsed.title,
+            hasAiTitle: parsed.hasAiTitle,
             latestMessage: parsed.latestMessage,
             status: parsed.status,
             cwds: parsed.cwds,
@@ -516,7 +550,14 @@ export async function loadClaudeTitlesForPaths(args: {
         }
         nextCacheFiles[sessionFile.path] = entry;
 
-        if (!entry.title || entry.cwds.length === 0) {
+        const sessionThreadId = resolveSessionIdFromLogPath(sessionFile.path);
+        const explicitTitle = explicitTitles.byThreadId.get(sessionThreadId);
+        const resolvedTitle = resolveClaudeDisplayTitle({
+          parsedTitle: entry.title,
+          hasAiTitle: entry.hasAiTitle,
+          explicitTitle: explicitTitle?.title ?? null,
+        });
+        if (!resolvedTitle || entry.cwds.length === 0) {
           continue;
         }
         const resolvedStatus = resolveStatusWithThreshold({
@@ -534,12 +575,13 @@ export async function loadClaudeTitlesForPaths(args: {
         }
         for (const matched of matchedPaths) {
           const titleEntry: WorktreeTitle = {
-            title: entry.title,
+            title: resolvedTitle,
             status: resolvedStatus,
             latestMessage: entry.latestMessage,
             updatedAt: entry.updatedAt,
             startedAt: entry.startedAt,
             sessionPath: sessionFile.path,
+            sessionThreadId,
             sessionKind: "main",
             isWaitingForUser: entry.isWaitingForUser,
             skillUsages: [],

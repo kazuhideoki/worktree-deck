@@ -9,6 +9,7 @@ import type { SessionKind, SessionStatus } from "./session-log-parser.service";
  */
 export type ParsedClaudeSessionLog = {
   title: string | null;
+  hasAiTitle: boolean;
   cwds: string[];
   status: SessionStatus | null;
   latestMessage: string | null;
@@ -343,6 +344,7 @@ function finalizeParseState(state: ClaudeSessionParseState): ParsedClaudeSession
   }
   return {
     title,
+    hasAiTitle: state.aiTitle !== null,
     cwds: Array.from(state.cwds),
     status: title ? resolveStatus(state) : null,
     latestMessage,

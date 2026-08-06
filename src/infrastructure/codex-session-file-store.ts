@@ -14,7 +14,7 @@ import {
   type SessionParseState,
   type SessionStatus as ParserSessionStatus,
 } from "../domain/session-log-parser.service";
-import { sessionTitleService } from "../domain/session-title.service";
+import { sessionTitleService, type ExplicitSessionTitle } from "../domain/session-title.service";
 import { expandHomePath, normalizePathValue } from "../domain/path-utils";
 import { loadEnvValue } from "./env/env-store";
 import type { SessionKind, SessionMessage, SessionMessageRole, Worktree, WorktreeTitle } from "./worktree-types";
@@ -45,8 +45,15 @@ type CodexThreadTitleEntry = {
   sessionPath: string | null;
   threadSource: string | null;
   title: string;
+  sessionIndexTitle: string | null;
   updatedAt: number;
   startedAt: number | null;
+};
+
+type CodexSessionIndexTitleEntry = {
+  threadId: string;
+  title: string;
+  updatedAt: number;
 };
 
 type CodexThreadTitleLookup = {
@@ -98,6 +105,7 @@ const TITLES_CACHE_KEY_PREFIX = "worktree-deck.titles-cache.v17";
  */
 const ENV_DONE_THRESHOLD_DAYS = "WORKTREE_DECK_DONE_THRESHOLD_DAYS";
 const SESSIONS_DIR_NAME = "sessions";
+const SESSION_INDEX_FILE_NAME = "session_index.jsonl";
 const SESSION_FILE_EXTENSIONS = [".jsonl", ".json"] as const;
 /**
  * session file 未検出の明示タイトルを working 扱いにする日数
@@ -194,6 +202,13 @@ function resolveCodexStateDbPath(codexHome: string): string {
 }
 
 /**
+ * Codex が画面表示名を保存する session index の path を解決する
+ */
+function resolveCodexSessionIndexPath(codexHome: string): string {
+  return join(codexHome, SESSION_INDEX_FILE_NAME);
+}
+
+/**
  * unknown を有限数値へ正規化する
  */
 function normalizeFiniteNumber(value: unknown): number | null {
@@ -240,6 +255,7 @@ function normalizeCodexThreadTitleEntry(value: unknown): CodexThreadTitleEntry |
     sessionPath,
     threadSource,
     title,
+    sessionIndexTitle: null,
     updatedAt,
     startedAt: normalizeFiniteNumber(raw.created_at_ms) ?? normalizeFiniteNumber(raw.created_at),
   };
@@ -249,7 +265,86 @@ function normalizeCodexThreadTitleEntry(value: unknown): CodexThreadTitleEntry |
  * session file で分類できない Codex thread を一覧へ補完してよいか判定する
  */
 function isStoredOnlyTitleEntry(entry: CodexThreadTitleEntry): boolean {
-  return entry.threadSource !== "subagent" && Boolean(entry.title);
+  return entry.threadSource !== "subagent" && Boolean(entry.sessionIndexTitle || entry.title);
+}
+
+/**
+ * session_index.jsonl の1行をタイトルへ正規化する
+ */
+function normalizeCodexSessionIndexTitleEntry(value: unknown): CodexSessionIndexTitleEntry | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const raw = value as Record<string, unknown>;
+  const threadId = sessionTitleService.normalizeThreadId(raw.id);
+  const title = sessionTitleService.normalizeTitle(raw.thread_name);
+  const updatedAt = typeof raw.updated_at === "string" ? Date.parse(raw.updated_at) : Number.NaN;
+  if (!threadId || !title || !Number.isFinite(updatedAt)) {
+    return null;
+  }
+  return { threadId, title, updatedAt };
+}
+
+/**
+ * 対象 thread の最新表示名を Codex session index から読み込む
+ *
+ * session index は同じ thread の名前変更を追記するため、updated_at が最新の行を採用する。
+ */
+async function loadCodexSessionIndexTitles(args: {
+  codexHome: string;
+  threadIds: Set<string>;
+}): Promise<Map<string, CodexSessionIndexTitleEntry>> {
+  const result = new Map<string, CodexSessionIndexTitleEntry>();
+  if (args.threadIds.size === 0) {
+    return result;
+  }
+  const indexPath = resolveCodexSessionIndexPath(args.codexHome);
+  if (!existsSync(indexPath)) {
+    return result;
+  }
+  const stream = createReadStream(indexPath, { encoding: "utf8" });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+  try {
+    for await (const line of reader) {
+      try {
+        const entry = normalizeCodexSessionIndexTitleEntry(JSON.parse(line) as unknown);
+        if (!entry || !args.threadIds.has(entry.threadId)) {
+          continue;
+        }
+        const current = result.get(entry.threadId);
+        if (!current || current.updatedAt <= entry.updatedAt) {
+          result.set(entry.threadId, entry);
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    return new Map();
+  } finally {
+    reader.close();
+    stream.destroy();
+  }
+  return result;
+}
+
+/**
+ * Codexタイトルを現在名、生成名、初回メッセージの順で解決する
+ *
+ * state DB の threads.title は初回ユーザー入力のまま残る場合があるため、現在名としては扱わない。
+ * session index が無い場合も、Auto Start が保存した生成名を初回メッセージより優先する。
+ */
+function resolveCodexDisplayTitle(args: {
+  codexThreadTitle: CodexThreadTitleEntry | null;
+  explicitTitle: ExplicitSessionTitle | null;
+  fallbackTitle: string | null;
+}): string | null {
+  return (
+    args.codexThreadTitle?.sessionIndexTitle ||
+    args.explicitTitle?.title ||
+    args.codexThreadTitle?.title ||
+    args.fallbackTitle
+  );
 }
 
 /**
@@ -327,7 +422,16 @@ async function loadCodexThreadTitlesForWorktreePaths(args: {
           return matchedPath ? [{ ...entry, worktreePath: matchedPath }] : [];
         })
       : [];
-    return buildCodexThreadTitleLookup(entries);
+    const sessionIndexTitles = await loadCodexSessionIndexTitles({
+      codexHome: args.codexHome,
+      threadIds: new Set(entries.map((entry) => entry.threadId)),
+    });
+    return buildCodexThreadTitleLookup(
+      entries.map((entry) => ({
+        ...entry,
+        sessionIndexTitle: sessionIndexTitles.get(entry.threadId)?.title ?? null,
+      })),
+    );
   } catch {
     return buildCodexThreadTitleLookup([]);
   }
@@ -1004,6 +1108,7 @@ function buildExplicitOnlyTitles(args: {
             latestMessage: null,
             updatedAt,
             startedAt: parseExplicitTitleTimestamp(entry.createdAt),
+            sessionThreadId: entry.threadId,
             sessionKind: "main" as const,
             isWaitingForUser: false,
             skillUsages: [],
@@ -1037,8 +1142,10 @@ function buildStoredOnlyTitles(args: {
       .filter(isStoredOnlyTitleEntry)
       .map((entry) => {
         matchedThreadIds.add(entry.threadId);
+        const explicitTitle = args.explicitTitles.byThreadId.get(entry.threadId) ?? null;
         return {
-          title: entry.title,
+          title:
+            resolveCodexDisplayTitle({ codexThreadTitle: entry, explicitTitle, fallbackTitle: null }) ?? entry.title,
           status: resolveExplicitOnlyStatus({
             updatedAt: entry.updatedAt,
             nowMs: args.nowMs,
@@ -1048,6 +1155,7 @@ function buildStoredOnlyTitles(args: {
           updatedAt: entry.updatedAt,
           startedAt: entry.startedAt,
           sessionPath: entry.sessionPath ?? undefined,
+          sessionThreadId: entry.threadId,
           sessionKind: "main" as const,
           isWaitingForUser: false,
           skillUsages: [],
@@ -1063,6 +1171,7 @@ function buildStoredOnlyTitles(args: {
           latestMessage: null,
           updatedAt,
           startedAt: parseExplicitTitleTimestamp(entry.createdAt),
+          sessionThreadId: entry.threadId,
           sessionKind: "main" as const,
           isWaitingForUser: false,
           skillUsages: [],
@@ -1250,7 +1359,11 @@ export async function loadTitlesForPaths(args: {
         (entry.sessionThreadId ? codexThreadTitles.byThreadId.get(entry.sessionThreadId) : null) ??
         codexThreadTitles.bySessionPath.get(sessionFile.path) ??
         null;
-      const resolvedTitle = codexThreadTitle?.title || explicitTitle?.title || entry.title;
+      const resolvedTitle = resolveCodexDisplayTitle({
+        codexThreadTitle,
+        explicitTitle: explicitTitle ?? null,
+        fallbackTitle: entry.title,
+      });
       if (!resolvedTitle || entry.cwds.length === 0) {
         continue;
       }
@@ -1347,8 +1460,13 @@ export async function loadTitlesForPaths(args: {
           if (matchedExplicitThreadIds.has(codexThreadTitle.threadId) || !isStoredOnlyTitleEntry(codexThreadTitle)) {
             continue;
           }
+          const explicitTitle = explicitTitles.byThreadId.get(codexThreadTitle.threadId) ?? null;
+          const resolvedTitle = resolveCodexDisplayTitle({ codexThreadTitle, explicitTitle, fallbackTitle: null });
+          if (!resolvedTitle) {
+            continue;
+          }
           const titleEntry: SessionTitleEntry = {
-            title: codexThreadTitle.title,
+            title: resolvedTitle,
             status: resolveExplicitOnlyStatus({
               updatedAt: codexThreadTitle.updatedAt,
               nowMs,
@@ -1405,6 +1523,7 @@ export async function loadTitlesForPaths(args: {
                 updatedAt: entry.updatedAt,
                 startedAt: entry.startedAt,
                 sessionPath: entry.sessionPath,
+                sessionThreadId: entry.sessionThreadId,
                 sessionKind: entry.sessionKind,
                 isWaitingForUser: waitingForUserUpdatedAt != null,
                 waitingForUserUpdatedAt,

@@ -173,7 +173,7 @@ type WorktreeDeckCompositionRoot = {
 /**
  * provider 別のタイトルマップをパスごとに結合する
  */
-function mergeTitlesByPath(...maps: Map<string, WorktreeTitle[]>[]): Map<string, WorktreeTitle[]> {
+export function mergeTitlesByPath(...maps: Map<string, WorktreeTitle[]>[]): Map<string, WorktreeTitle[]> {
   const merged = new Map<string, WorktreeTitle[]>();
   for (const map of maps) {
     for (const [path, entries] of map) {
@@ -185,13 +185,34 @@ function mergeTitlesByPath(...maps: Map<string, WorktreeTitle[]>[]): Map<string,
       }
     }
   }
-  for (const entries of merged.values()) {
-    entries.sort((left, right) => {
+  for (const [path, entries] of merged) {
+    const entriesByThreadId = new Map<string, WorktreeTitle>();
+    const entriesWithoutThreadId: WorktreeTitle[] = [];
+    for (const entry of entries) {
+      const threadId = entry.sessionThreadId?.trim();
+      if (!threadId) {
+        entriesWithoutThreadId.push(entry);
+        continue;
+      }
+      const existing = entriesByThreadId.get(threadId);
+      const replacesProviderlessEntry = entry.provider != null && existing?.provider == null;
+      const keepsProviderSpecificEntry = entry.provider == null && existing?.provider != null;
+      if (
+        !existing ||
+        replacesProviderlessEntry ||
+        (!keepsProviderSpecificEntry && entry.updatedAt > existing.updatedAt)
+      ) {
+        entriesByThreadId.set(threadId, entry);
+      }
+    }
+    const deduplicated = [...entriesByThreadId.values(), ...entriesWithoutThreadId];
+    deduplicated.sort((left, right) => {
       if (right.updatedAt !== left.updatedAt) {
         return right.updatedAt - left.updatedAt;
       }
       return right.title.localeCompare(left.title);
     });
+    merged.set(path, deduplicated);
   }
   return merged;
 }

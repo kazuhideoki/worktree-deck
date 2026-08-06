@@ -18,6 +18,10 @@ export type WorktreeTitle = {
   updatedAt: number;
   startedAt?: number | null;
   sessionPath?: string;
+  /**
+   * provider をまたいで同じセッションを識別する ID
+   */
+  sessionThreadId?: string | null;
   sessionKind: SessionKind;
   isWaitingForUser?: boolean;
   waitingForUserUpdatedAt?: number;
